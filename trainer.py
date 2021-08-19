@@ -11,7 +11,7 @@ class Trainer:
                  optimizer: dict(help='optimization algorithm', choices=['sgd', 'adam']) = 'adam',
                  learning_rate: dict(help='learning rate') = 0.01,
                  weight_decay: dict(help='weight decay (L2 penalty)') = 0.0,
-                 max_epochs: dict(help='maximum number of training epochs') = 500,
+                 max_epochs: dict(help='maximum number of training epochs') = 200,
                  patience: dict(help='early-stopping patience window size') = 0,
                  ):
 
