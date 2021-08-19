@@ -3,12 +3,12 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import numpy as np
 import torch
 
-from args import from_args, add_parameters_as_argument, print_args, str2bool, EnumAction
+from args import from_args, add_parameters_as_argument, print_args, str2bool
 from datasets import load_dataset
 from loggers import Logger
 from models import NodeClassifier
 from trainer import Trainer
-from utils import measure_runtime, colored_text, seed_everything, confidence_interval, Enum
+from utils import measure_runtime, colored_text, seed_everything, confidence_interval
 
 
 @measure_runtime
