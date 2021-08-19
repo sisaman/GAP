@@ -79,8 +79,8 @@ class NodeClassifier(torch.nn.Module):
 
     def training_step(self, g):
         train_mask = g.ndata['train_mask']
-        y_true = g.ndata['y_noisy'][train_mask]
-        y_pred = self.gnn(g)[train_mask]
+        y_true = g.ndata['label'][train_mask]
+        y_pred = self(g)[train_mask]
         
         loss = F.nll_loss(input=y_pred, target=y_true)
         acc = self.accuracy(input=y_pred, target=y_true)
@@ -89,7 +89,7 @@ class NodeClassifier(torch.nn.Module):
         return loss, metrics
 
     def validation_step(self, g):
-        y_pred = self.gnn(g)
+        y_pred = self(g)
         y_true = g.ndata['label']
 
         val_mask = g.ndata['val_mask']
