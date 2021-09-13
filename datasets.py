@@ -1,30 +1,32 @@
 import os
 from functools import partial
-
-import dgl
-from dgl.data import CitationGraphDataset
 import torch.nn.functional as F
-
+from torch_geometric.utils import remove_self_loops
+from torch_geometric.datasets import Planetoid, GitHub, FacebookPagePage, LastFMAsia
+from torch_geometric.transforms import RandomNodeSplit
+from args import support_args
 
 
 supported_datasets = {
-    'cora': partial(CitationGraphDataset, name='cora', verbose=False),
-    'citeseer': partial(CitationGraphDataset, name='citeseer', verbose=False),
-    'pubmed': partial(CitationGraphDataset, name='pubmed', verbose=False),
+    'cora': partial(Planetoid, name='cora', split='full'),
+    'citeseer': partial(Planetoid, name='citeseer', split='full'),
+    'pubmed': partial(Planetoid, name='pubmed', split='full'),
+    'github': partial(GitHub, transform=RandomNodeSplit(split='train_rest')),
+    'facebook': partial(FacebookPagePage, transform=RandomNodeSplit(split='train_rest')),
+    'lastfm': partial(LastFMAsia, transform=RandomNodeSplit(split='train_rest')),
 }
 
+@support_args
+class Dataset:
+    def __init__(self,
+        dataset:    dict(help='name of the dataset', choices=supported_datasets) = 'cora',
+        data_dir:   dict(help='directory to store the dataset') = './datasets',
+    ):
+        self.name = dataset
+        self.data_dir = data_dir
 
-def load_dataset(
-        dataset:        dict(help='name of the dataset', option='-d', choices=supported_datasets) = 'cora',
-        data_dir:       dict(help='directory to store the dataset') = './datasets',
-        normalize:     dict(help='whether to unit-normalize the input node features') = True,
-        ):
-    g = supported_datasets[dataset](raw_dir=os.path.join(data_dir, dataset))[0]
-    g = dgl.add_self_loop(dgl.remove_self_loop(g))
-    g.name = dataset
-    g.num_features = g.ndata['feat'].size(1)
-    g.num_classes = int(g.ndata['label'].max().item()) + 1
-
-    if normalize:
-        g.ndata['feat'] = F.normalize(input=g.ndata['feat'], p=2, dim=1)
-    return g
+    def load(self):
+        data = supported_datasets[self.name](root=os.path.join(self.data_dir, self.name))[0]
+        data.edge_index, _ = remove_self_loops(data.edge_index)
+        data.x = F.normalize(data.x, p=2., dim=-1)
+        return data

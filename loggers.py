@@ -2,7 +2,7 @@ import functools
 import os
 import uuid
 from argparse import Namespace
-
+from args import support_args
 import pandas as pd
 
 try:
@@ -46,7 +46,8 @@ class WandbLogger(LoggerBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if wandb is None:
-            raise ImportError('wandb is not installed yet, install it with `pip install wandb`.')
+            raise ImportError(
+                'wandb is not installed yet, install it with `pip install wandb`.')
 
     @property
     def experiment(self):
@@ -94,9 +95,11 @@ class CSVLogger(LoggerBase):
     def finish(self):
         os.makedirs(self.output_dir, exist_ok=True)
         df = pd.DataFrame(self.experiment, index=[0])
-        df.to_csv(os.path.join(self.output_dir, f'{self.experiment_id}.csv'), index=False)
+        df.to_csv(os.path.join(self.output_dir,
+                  f'{self.experiment_id}.csv'), index=False)
 
 
+@support_args
 class Logger:
     instance = None
 
@@ -104,15 +107,17 @@ class Logger:
     def get_instance(cls):
         return cls.instance
 
-    @classmethod
-    def create(cls,
-               logger: dict(help='select logger type', choices=['wandb', 'csv']) = 'csv',
-               project: dict(help="project name for logger") = 'DP-GRAPHNET',
-               output_dir: dict(help="directory to store the results", option='-o') = './output',
-               debug: dict(help='enable debugger logging') = False,
-               enabled=True,
-               config=Namespace()):
-
-        LoggerCls = WandbLogger if debug or logger == 'wandb' else CSVLogger
-        cls.instance = LoggerCls(project=project, output_dir=output_dir, enabled=enabled, config=config)
+    def __new__(cls, *args, **kwargs):
+        if cls.instance is None:
+            cls.__init__(cls, *args, **kwargs)
         return cls.instance
+
+    def __init__(self,
+                 logger:        dict(help='select logger type', choices=['wandb', 'csv']) = 'csv',
+                 project:       dict(help="project name for logger") = 'PrivateGNN',
+                 output_dir:    dict(help="directory to store the results", option='-o') = './output',
+                 debug:         dict(help='enable debugger logging') = False,
+                 enabled=True,
+                 config=Namespace()):
+        LoggerCls = WandbLogger if debug or logger == 'wandb' else CSVLogger
+        Logger.instance = LoggerCls(project=project, output_dir=output_dir, enabled=enabled, config=config)
