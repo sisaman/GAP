@@ -115,4 +115,6 @@ dmypy.json
 
 .DS_Store
 datasets
+wandb
+.vscode
 *.ipynb
