@@ -1,99 +1,186 @@
+from privacy import GaussianMechanism
 import torch
 import torch.nn.functional as F
-from torch.nn import Dropout, SELU
-from dgl.nn.pytorch import GraphConv, GATConv, SAGEConv
+from torch.nn import Dropout, SELU, ModuleList
+from torch_geometric.nn import BatchNorm, MessagePassing, Linear
+from utils import pairwise
+from args import support_args
 
 
-class GNN(torch.nn.Module):
-    def __init__(self, dropout):
+class Dense(Linear):
+    def forward(self, x, _):
+        return super().forward(x)
+
+
+class PrivateConv(MessagePassing):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.perturbation_mode = None
+        self.mechanism: GaussianMechanism = None
+
+    def set_privacy_mechanism(self, mechanism, perturbation_mode):
+        self.mechanism = mechanism
+        self.perturbation_mode = perturbation_mode
+
+
+class PrivSAGEConv(PrivateConv):
+    def __init__(self, in_channels, out_channels, root_weight=False, cached=False, **kwargs):
+        super().__init__(aggr='add', **kwargs)
+        
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.root_weight = root_weight
+        self.cached = cached
+        self.cached_agg = None
+        
+        self.lin_l = Linear(in_channels, out_channels, bias=True)
+        if self.root_weight:
+            self.lin_r = Linear(in_channels, out_channels, bias=False)
+
+    def private_aggregation(self, x, edge_index):
+        if self.cached_agg is None or not self.cached:
+            x = F.normalize(x, p=2., dim=-1)                            # to keep sensitivity = 1        
+
+            if self.perturbation_mode == 'feature':    
+                x = self.mechanism.perturb(x, l2_sensitivity=1)
+            
+            agg = x + self.propagate(edge_index, x=x)
+
+            if self.perturbation_mode == 'aggr':
+                agg = self.mechanism.perturb(agg, l2_sensitivity=1)
+
+            agg = F.normalize(agg, p=2, dim=-1)
+            self.cached_agg = agg
+            
+        return self.cached_agg
+
+    def forward(self, x, edge_index):
+        out = self.private_aggregation(x, edge_index)
+        out = self.lin_l(out)
+
+        if self.root_weight:
+            out += self.lin_r(x)
+
+        return out
+
+    def message(self, x_j):
+        return x_j
+
+
+class PrivateGNN(torch.nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, 
+                 num_pre_layers, num_mp_layers, num_post_layers, 
+                 dropout, use_batchnorm):
         super().__init__()
-        self.conv1 = None
-        self.conv2 = None
+        self.layers = self.init_layers(
+            input_dim, hidden_dim, output_dim, 
+            num_pre_layers, num_mp_layers, num_post_layers
+        )
         self.dropout = Dropout(p=dropout)
         self.activation = SELU(inplace=True)
+        self.use_batchnorm = use_batchnorm
+        if self.use_batchnorm:
+            self.bns = ModuleList([BatchNorm(hidden_dim) for _ in self.layers[:-1]])
 
-    def forward(self, g, x):
-        x = self.conv1(g, x)
-        x = self.activation(x)
-        x = self.dropout(x)
-        x = self.conv2(g, x)
+    def init_layers(self, input_dim, hidden_dim, output_dim, num_pre_layers, num_mp_layers, num_post_layers):
+        num_layers = num_pre_layers + num_mp_layers + num_post_layers
+        dimensions = [input_dim] + [hidden_dim] * (num_layers - 1) + [output_dim]
+
+        layers = ModuleList([Dense(in_channels, out_channels) for in_channels, out_channels in pairwise(dimensions[:num_pre_layers+1])])
+        layers.extend(self.init_message_passing_layers(dimensions[num_pre_layers: num_pre_layers+num_mp_layers+1]))
+        layers.extend([Dense(in_channels, out_channels) for in_channels, out_channels in pairwise(dimensions[num_pre_layers + num_mp_layers:])])
+
+        return layers
+
+    def init_message_passing_layers(self, dimensions) -> ModuleList:
+        raise NotImplementedError
+
+    def forward(self, x, edge_index):
+        for i, conv in enumerate(self.layers[:-1]):
+            x = conv(x, edge_index)
+            if self.use_batchnorm:
+                x = self.bns[i](x)
+            x = self.activation(x)
+            x = self.dropout(x)
+        x = self.layers[-1](x, edge_index)
         return x
 
-    def reset_parameters(self):
-        self.conv1.reset_parameters()
-        self.conv2.reset_parameters()
+    def set_privacy_mechanism(self, mechanism, perturbation_mode):
+        for layer in self.layers:
+            if isinstance(layer, PrivateConv):
+                layer.set_privacy_mechanism(mechanism, perturbation_mode)
 
 
-class GCN(GNN):
-    def __init__(self, input_dim, output_dim, hidden_dim, dropout):
-        super().__init__(dropout)
-        self.conv1 = GraphConv(input_dim, hidden_dim)
-        self.conv2 = GraphConv(hidden_dim, output_dim)
+class PrivateGraphSAGE(PrivateGNN):
+    def init_message_passing_layers(self, dimensions):
+        return [
+            PrivSAGEConv(
+                in_channels=dimensions[i], 
+                out_channels=dimensions[i+1],
+                root_weight=False,
+                cached=(i==0)
+            ) 
+            for i in range(len(dimensions) - 1)
+        ]
 
 
-class GAT(GNN):
-    def __init__(self, input_dim, output_dim, hidden_dim, dropout):
-        super().__init__(dropout)
-        heads = 4
-        self.conv1 = GATConv(input_dim, hidden_dim, num_heads=heads)
-        self.conv2 = GATConv(heads * hidden_dim, output_dim, num_heads=1)
-
-    def forward(self, g, x):
-        x = self.conv1(g, x).flatten(1)
-        x = self.activation(x)
-        x = self.dropout(x)
-        x = self.conv2(g, x).mean(1)
-        return x
+SupportedModels = {
+    'sage': PrivateGraphSAGE
+}
 
 
-class GraphSAGE(GNN):
-    def __init__(self, input_dim, output_dim, hidden_dim, dropout):
-        super().__init__(dropout)
-        self.conv1 = SAGEConv(input_dim, hidden_dim, aggregator_type='mean')
-        self.conv2 = SAGEConv(hidden_dim, output_dim, aggregator_type='mean')
-
-
-class NodeClassifier(torch.nn.Module):
+@support_args
+class PrivateNodeClassifier(torch.nn.Module):
     def __init__(self,
                  input_dim,
                  num_classes,
-                 model: dict(help='base GNN model', choices=['gcn', 'sage', 'gat']) = 'gcn',
+                 model: dict(help='base GNN model', choices=SupportedModels.keys()) = 'sage',
                  hidden_dim: dict(help='dimension of the hidden layers') = 16,
+                 num_pre_layers: dict(help='number of pre-processing layers') = 0,
+                 num_mp_layers: dict(help='number of message-passing layers') = 1,
+                 num_post_layers: dict(help='number of post-processing layers') = 1,
+                 use_batchnorm: dict(help='enables batch-normalization') = False,
                  dropout: dict(help='dropout rate (between zero and one)') = 0.0,
                  ):
 
         super().__init__()
-        self.num_classes = num_classes
-        self.gnn = {'gcn': GCN, 'sage': GraphSAGE, 'gat': GAT}[model](
+        GNN = SupportedModels[model]
+        self.gnn = GNN(
             input_dim=input_dim,
-            output_dim=num_classes,
             hidden_dim=hidden_dim,
-            dropout=dropout
+            output_dim=num_classes,
+            num_pre_layers=num_pre_layers,
+            num_mp_layers=num_mp_layers,
+            num_post_layers=num_post_layers,
+            dropout=dropout,
+            use_batchnorm=use_batchnorm,
         )
 
-    def forward(self, g):
-        x = g.ndata['feat']
-        h = self.gnn(g, x)
+    def set_privacy_mechanism(self, mechanism, perturbation_mode):
+        self.gnn.set_privacy_mechanism(mechanism, perturbation_mode)
+
+    def forward(self, data):
+        h = self.gnn(data.x, data.edge_index)
         y = F.log_softmax(h, dim=1)
         return y
 
-    def training_step(self, g):
-        train_mask = g.ndata['train_mask']
-        y_true = g.ndata['label'][train_mask]
-        y_pred = self(g)[train_mask]
+    def training_step(self, data):
+        y_true = data.y[data.train_mask]
+        y_pred = self(data)[data.train_mask]
         
         loss = F.nll_loss(input=y_pred, target=y_true)
+        # print(loss.item())
         acc = self.accuracy(input=y_pred, target=y_true)
         
         metrics = {'train/loss': loss.item(), 'train/acc': acc}
         return loss, metrics
 
-    def validation_step(self, g):
-        y_pred = self(g)
-        y_true = g.ndata['label']
+    def validation_step(self, data):
+        y_pred = self(data)
+        y_true = data.y
 
-        val_mask = g.ndata['val_mask']
-        test_mask = g.ndata['test_mask']
+        val_mask = data.val_mask
+        test_mask = data.test_mask
 
         metrics = {
             'val/loss': F.nll_loss(input=y_pred[val_mask], target=y_true[val_mask]).item(),
@@ -107,7 +194,5 @@ class NodeClassifier(torch.nn.Module):
     def accuracy(input, target):
         input = input.argmax(dim=1) if len(input.size()) > 1 else input
         target = target.argmax(dim=1) if len(target.size()) > 1 else target
-        return (input == target).float().mean().item()
+        return (input == target).float().mean().item() * 100
 
-    def reset_parameters(self):
-        self.gnn.reset_parameters()

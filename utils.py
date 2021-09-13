@@ -2,17 +2,23 @@ import random
 import time
 import enum
 import functools
-import dgl
 import numpy as np
 import torch
+from itertools import tee
 
 
 def seed_everything(seed):
-    dgl.seed(seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+
+def pairwise(iterable):
+    # pairwise('ABCDEFG') --> AB BC CD DE EF FG
+    a, b = tee(iterable)
+    next(b, None)
+    return zip(a, b)
 
 
 def bootstrap(data, func=np.mean, n_boot=10000, seed=None):
@@ -37,7 +43,7 @@ def confidence_interval(data, func=np.mean, size=1000, ci=95, seed=12345):
     return (bounds[1] - bounds[0]) / 2
 
 
-def measure_runtime(func):
+def timeit(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         start = time.time()
@@ -53,14 +59,6 @@ def colored_text(msg, color):
     if isinstance(color, str):
         color = TermColors.FG.__dict__[color]
     return color.value + msg + TermColors.Control.reset.value
-
-
-class Enum(enum.Enum):
-    def __str__(self):
-        return str(self.name)
-
-    def __repr__(self):
-        return str(self.name)
 
 
 class TermColors:
