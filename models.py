@@ -1,7 +1,7 @@
 from privacy import GaussianMechanism
 import torch
 import torch.nn.functional as F
-from torch.nn import Dropout, SELU, ModuleList
+from torch.nn import AlphaDropout, SELU, ModuleList
 from torch_geometric.nn import BatchNorm, MessagePassing, Linear
 from utils import pairwise
 from args import support_args
@@ -76,11 +76,13 @@ class PrivateGNN(torch.nn.Module):
             input_dim, hidden_dim, output_dim, 
             num_pre_layers, num_mp_layers, num_post_layers
         )
-        self.dropout = Dropout(p=dropout)
+        self.dropout = AlphaDropout(p=dropout)
         self.activation = SELU(inplace=True)
         self.use_batchnorm = use_batchnorm
         if self.use_batchnorm:
             self.bns = ModuleList([BatchNorm(hidden_dim) for _ in self.layers[:-1]])
+        
+        self.reset_parameters()
 
     def init_layers(self, input_dim, hidden_dim, output_dim, num_pre_layers, num_mp_layers, num_post_layers):
         num_layers = num_pre_layers + num_mp_layers + num_post_layers
@@ -94,6 +96,15 @@ class PrivateGNN(torch.nn.Module):
 
     def init_message_passing_layers(self, dimensions) -> ModuleList:
         raise NotImplementedError
+
+    def reset_parameters(self):
+        for param in self.layers.parameters():
+            # biases zero
+            if len(param.shape) == 1:
+                torch.nn.init.constant_(param, 0)
+            # others using lecun-normal initialization
+            else:
+                torch.nn.init.kaiming_normal_(param, mode='fan_in', nonlinearity='linear')
 
     def forward(self, x, edge_index):
         for i, conv in enumerate(self.layers[:-1]):
