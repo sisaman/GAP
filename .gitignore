@@ -116,5 +116,7 @@ dmypy.json
 .DS_Store
 datasets
 wandb
+jobs
+output
 .vscode
 *.ipynb
