@@ -37,8 +37,11 @@ def run(args):
 
         args.perturbation = args.perturbation.value
         mechanism = GaussianMechanism(noise_std=args.noise_std, delta=args.delta)
+
         model = PrivateNodeClassifier.from_args(args, input_dim=data.num_features, num_classes=num_classes)
         model.set_privacy_mechanism(mechanism=mechanism, perturbation_mode=args.perturbation)
+        logger.watch(model)
+        
         trainer = Trainer.from_args(args, privacy_accountant=mechanism.get_privacy_spent)
         best_metrics = trainer.fit(model, data)
 
@@ -48,15 +51,18 @@ def run(args):
 
         test_acc.append(best_metrics['test/acc'])
         print('\nrun: %d\ntest/acc: %.2f\naverage: %.2f\n\n' % (iteration+1, test_acc[-1], np.mean(test_acc).item()))
-        print('eps:', best_metrics['eps'])
+        # print('eps:', best_metrics['eps'])
 
     logger.enable()
     summary = {}
+    
     for metric, values in run_metrics.items():
         summary[metric + '_mean'] = np.mean(values)
         summary[metric + '_std'] = np.std(values)
         summary[metric + '_ci'] = confidence_interval(values, size=1000, ci=95, seed=args.seed)
         logger.log_summary(summary)
+
+    logger.finish()
 
 
 def main():
@@ -74,7 +80,7 @@ def main():
     group_privacy = init_parser.add_argument_group('privacy arguments')
     group_privacy.add_argument('-p', '--perturbation', type=Perturbation, action=EnumAction, default=Perturbation.Feature, help='perturbation method')
     group_privacy.add_argument('-e', '--epsilon', type=float, default=np.inf, help='DP epsilon parameter')
-    group_privacy.add_argument('-d', '--delta', type=float, default=0, help='DP delta parameter')
+    group_privacy.add_argument('-d', '--delta', type=float, default=1e-6, help='DP delta parameter')
     group_privacy.add_argument('-n', '--noise-std', type=float, default=0, help='standard deviation of the noise')
 
     # trainer arguments

@@ -1,6 +1,6 @@
 import os
 import subprocess
-
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from tqdm import tqdm
 
 
@@ -46,13 +46,13 @@ class JobManager:
                 f'#$ -N {self.name}-{begin}-{end}\n',
                 f'#$ -S /bin/bash\n',
                 f'#$ -P dusk2dawn\n',
-                f'#$ -l pytorch,sgpu,gpumem=10\n',
+                f'#$ -l pytorch,sgpu,gpumem=20\n',
                 f'#$ -t {begin}-{end}\n',
                 f'#$ -o {self.jobs_dir}\n',
                 f'#$ -e {self.jobs_dir}\n',
                 f'#$ -cwd\n',
                 f'#$ -V\n',
-                f'python experiments.py -n {self.name} exec --id $SGE_TASK_ID \n'
+                f'python jobs.py -n {self.name} exec --id $SGE_TASK_ID \n'
             ]
 
             file_name = os.path.join(self.jobs_dir, f'{self.name}-{begin}-{end}.job')
@@ -120,8 +120,8 @@ class JobManager:
 
     @staticmethod
     def register_arguments(parser, default_jobs_dir='./jobs'):
-        parser.add_argument('-n', '--name', type=str, required=True)
-        parser.add_argument('-j', '--jobs-dir', type=str, default=default_jobs_dir)
+        parser.add_argument('-n', '--name', type=str, required=True, help='experiment name')
+        parser.add_argument('-j', '--jobs-dir', type=str, default=default_jobs_dir, help='jobs directory')
         command_subparser = parser.add_subparsers(dest='command')
 
         parser_create = command_subparser.add_parser('create')
@@ -134,3 +134,16 @@ class JobManager:
         parser_exec.add_argument('--all', action='store_true')
 
         return parser, parser_create
+
+
+def main():
+    parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
+    parser, parser_create = JobManager.register_arguments(parser)
+    args = parser.parse_args()
+    print(args)
+
+    JobManager(args).run()
+
+
+if __name__ == '__main__':
+    main()

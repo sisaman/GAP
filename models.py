@@ -5,6 +5,8 @@ from torch.nn import AlphaDropout, SELU, ModuleList
 from torch_geometric.nn import BatchNorm, MessagePassing, Linear
 from utils import pairwise
 from args import support_args
+from loggers import Logger
+import wandb
 
 
 class Dense(Linear):
@@ -49,9 +51,10 @@ class PrivSAGEConv(PrivateConv):
             if self.perturbation_mode == 'aggr':
                 agg = self.mechanism.perturb(agg, l2_sensitivity=1)
 
-            agg = F.normalize(agg, p=2, dim=-1)
+            # agg = F.normalize(agg, p=2, dim=-1)
             self.cached_agg = agg
-            
+
+        Logger.get_instance().log_summary({'aggr': wandb.Histogram(torch.norm(self.cached_agg, p=2, dim=1).cpu())})
         return self.cached_agg
 
     def forward(self, x, edge_index):
@@ -68,14 +71,9 @@ class PrivSAGEConv(PrivateConv):
 
 
 class PrivateGNN(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, 
-                 num_pre_layers, num_mp_layers, num_post_layers, 
-                 dropout, use_batchnorm):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_mp_layers, num_post_layers, dropout, use_batchnorm):
         super().__init__()
-        self.layers = self.init_layers(
-            input_dim, hidden_dim, output_dim, 
-            num_pre_layers, num_mp_layers, num_post_layers
-        )
+        self.layers = self.init_layers(input_dim, hidden_dim, output_dim, num_mp_layers, num_post_layers)
         self.dropout = AlphaDropout(p=dropout)
         self.activation = SELU(inplace=True)
         self.use_batchnorm = use_batchnorm
@@ -84,13 +82,12 @@ class PrivateGNN(torch.nn.Module):
         
         self.reset_parameters()
 
-    def init_layers(self, input_dim, hidden_dim, output_dim, num_pre_layers, num_mp_layers, num_post_layers):
-        num_layers = num_pre_layers + num_mp_layers + num_post_layers
+    def init_layers(self, input_dim, hidden_dim, output_dim, num_mp_layers, num_post_layers):
+        num_layers = num_mp_layers + num_post_layers
         dimensions = [input_dim] + [hidden_dim] * (num_layers - 1) + [output_dim]
 
-        layers = ModuleList([Dense(in_channels, out_channels) for in_channels, out_channels in pairwise(dimensions[:num_pre_layers+1])])
-        layers.extend(self.init_message_passing_layers(dimensions[num_pre_layers: num_pre_layers+num_mp_layers+1]))
-        layers.extend([Dense(in_channels, out_channels) for in_channels, out_channels in pairwise(dimensions[num_pre_layers + num_mp_layers:])])
+        layers = ModuleList(self.init_message_passing_layers(dimensions[:num_mp_layers+1]))
+        layers.extend([Dense(in_channels, out_channels) for in_channels, out_channels in pairwise(dimensions[num_mp_layers:])])
 
         return layers
 
@@ -133,38 +130,35 @@ class PrivateGraphSAGE(PrivateGNN):
             ) 
             for i in range(len(dimensions) - 1)
         ]
-
-
-SupportedModels = {
-    'sage': PrivateGraphSAGE
-}
-
+    
 
 @support_args
 class PrivateNodeClassifier(torch.nn.Module):
+    SupportedModels = {
+        'sage': PrivateGraphSAGE
+    }
+
     def __init__(self,
                  input_dim,
                  num_classes,
                  model: dict(help='base GNN model', choices=SupportedModels.keys()) = 'sage',
-                 hidden_dim: dict(help='dimension of the hidden layers') = 16,
-                 num_pre_layers: dict(help='number of pre-processing layers') = 0,
-                 num_mp_layers: dict(help='number of message-passing layers') = 1,
-                 num_post_layers: dict(help='number of post-processing layers') = 1,
-                 use_batchnorm: dict(help='enables batch-normalization') = False,
+                 hidden_dim: dict(help='dimension of the hidden layers') = 32,
+                 mp_layers: dict(help='number of message-passing layers') = 1,
+                 fc_layers: dict(help='number of fully-connected layers') = 1,
+                 batchnorm: dict(help='enables batch-normalization') = False,
                  dropout: dict(help='dropout rate (between zero and one)') = 0.0,
                  ):
 
         super().__init__()
-        GNN = SupportedModels[model]
+        GNN = self.SupportedModels[model]
         self.gnn = GNN(
             input_dim=input_dim,
             hidden_dim=hidden_dim,
             output_dim=num_classes,
-            num_pre_layers=num_pre_layers,
-            num_mp_layers=num_mp_layers,
-            num_post_layers=num_post_layers,
+            num_mp_layers=mp_layers,
+            num_post_layers=fc_layers,
             dropout=dropout,
-            use_batchnorm=use_batchnorm,
+            use_batchnorm=batchnorm,
         )
 
     def set_privacy_mechanism(self, mechanism, perturbation_mode):

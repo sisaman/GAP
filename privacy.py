@@ -21,6 +21,8 @@ class GaussianMechanism:
         return data
 
     def get_privacy_spent(self):
+        if not self.sigma_list:
+            return 1e9-1
         sigma_list = np.array(self.sigma_list)
         sigma_total = np.sqrt(1/np.sum(1/sigma_list**2))
         mechanism = ExactGaussianMechanism(sigma=sigma_total)
