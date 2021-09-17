@@ -200,4 +200,3 @@ class PrivateNodeClassifier(torch.nn.Module):
         input = input.argmax(dim=1) if len(input.size()) > 1 else input
         target = target.argmax(dim=1) if len(target.size()) > 1 else target
         return (input == target).float().mean().item() * 100
-
