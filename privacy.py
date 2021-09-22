@@ -15,8 +15,6 @@ class GaussianMechanism:
             sigma = self.noise_std / l2_sensitivity
             self.sigma_list.append(sigma)
             data = torch.normal(mean=data, std=self.noise_std)
-        else:
-            self.sigma_list.append(1e-6)
 
         return data
 
@@ -36,6 +34,9 @@ class TopMFilter:
         self.eps_count = eps_count
 
     def perturb(self, data):
+        if self.eps_edges == np.inf:
+            return data
+
         data.edge_index, _ = remove_self_loops(data.edge_index)
         n = data.num_nodes
         m = data.num_edges
