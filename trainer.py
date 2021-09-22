@@ -42,6 +42,7 @@ class Trainer:
     def fit(self, model, data):
         self.model = model.to(data.x.device)
         optimizer = self.configure_optimizer()
+        self.logger.watch(self.model)
 
         num_epochs_without_improvement = 0
         self.best_metrics = None

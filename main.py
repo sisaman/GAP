@@ -29,18 +29,14 @@ def run(args):
     
     for iteration in range(args.repeats):
         data = dataset.clone().to('cpu' if args.cpu else 'cuda')
+        model = PrivateNodeClassifier.from_args(args, input_dim=data.num_features, num_classes=num_classes)
 
         if args.perturbation == Perturbation.Graph:
-            if args.epsilon < np.inf:
-                mechanism = TopMFilter(eps_edges=0.9*args.epsilon, eps_count=0.1*args.epsilon)
-                data = mechanism.perturb(data)
-
-        args.perturbation = args.perturbation.value
-        mechanism = GaussianMechanism(noise_std=args.noise_std, delta=args.delta)
-
-        model = PrivateNodeClassifier.from_args(args, input_dim=data.num_features, num_classes=num_classes)
-        model.set_privacy_mechanism(mechanism=mechanism, perturbation_mode=args.perturbation)
-        logger.watch(model)
+            mechanism = TopMFilter(eps_edges=0.9*args.epsilon, eps_count=0.1*args.epsilon)
+            data = mechanism.perturb(data)
+        else:
+            mechanism = GaussianMechanism(noise_std=args.noise_std, delta=args.delta)
+            model.set_privacy_mechanism(mechanism=mechanism, perturbation_mode=args.perturbation.value)
         
         trainer = Trainer.from_args(args, privacy_accountant=mechanism.get_privacy_spent)
         best_metrics = trainer.fit(model, data)
@@ -50,8 +46,8 @@ def run(args):
             run_metrics[metric] = run_metrics.get(metric, []) + [value]
 
         test_acc.append(best_metrics['test/acc'])
-        print('\nrun: %d\ntest/acc: %.2f\naverage: %.2f\n\n' % (iteration+1, test_acc[-1], np.mean(test_acc).item()))
-        # print('eps:', best_metrics['eps'])
+        print('\nrun: %d\ntest/acc: %.2f\t average: %.2f' % (iteration+1, test_acc[-1], np.mean(test_acc).item()))
+        print('eps:', best_metrics['eps'], '\n')
 
     logger.enable()
     summary = {}
