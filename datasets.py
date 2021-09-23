@@ -29,13 +29,20 @@ class Dataset:
     def __init__(self,
         dataset:    dict(help='name of the dataset', choices=supported_datasets) = 'cora',
         data_dir:   dict(help='directory to store the dataset') = './datasets',
+        feature:    dict(help='type of node feature ("raw" for original features, "rand" for random features)') = 'raw'
     ):
         self.name = dataset
         self.data_dir = data_dir
+        self.feature = feature
 
     def load(self):
         data = self.supported_datasets[self.name](root=os.path.join(self.data_dir, self.name))[0]
         data.edge_index, _ = remove_self_loops(data.edge_index)
-        data.x = F.normalize(data.x, p=2., dim=-1)
 
+        if self.feature == 'rand':
+            data.x = torch.randn_like(data.x)
+        elif self.feature == 'one':
+            data.x = torch.ones_like(data.x)
+
+        data.x = F.normalize(data.x, p=2., dim=-1)
         return data
