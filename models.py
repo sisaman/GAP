@@ -51,10 +51,13 @@ class PrivSAGEConv(PrivateConv):
             if self.perturbation_mode == 'aggr':
                 agg = self.mechanism.perturb(agg, l2_sensitivity=1)
 
-            # agg = F.normalize(agg, p=2, dim=-1)
             self.cached_agg = agg
+            
+        try:
+            Logger.get_instance().log_summary({'aggr': wandb.Histogram(torch.norm(self.cached_agg, p=2, dim=1).cpu())})
+        except:
+            pass
 
-        Logger.get_instance().log_summary({'aggr': wandb.Histogram(torch.norm(self.cached_agg, p=2, dim=1).cpu())})
         return self.cached_agg
 
     def forward(self, x, edge_index):
@@ -65,9 +68,6 @@ class PrivSAGEConv(PrivateConv):
             out += self.lin_r(x)
 
         return out
-
-    def message(self, x_j):
-        return x_j
 
 
 class PrivateGNN(torch.nn.Module):
@@ -174,7 +174,6 @@ class PrivateNodeClassifier(torch.nn.Module):
         y_pred = self(data)[data.train_mask]
         
         loss = F.nll_loss(input=y_pred, target=y_true)
-        # print(loss.item())
         acc = self.accuracy(input=y_pred, target=y_true)
         
         metrics = {'train/loss': loss.item(), 'train/acc': acc}
