@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.utils import remove_self_loops, subgraph
 from torch_geometric.datasets import CitationFull, GitHub, FacebookPagePage, LastFMAsia, Coauthor, Amazon, WikiCS, DeezerEurope, Twitch, Reddit2
-from torch_geometric.transforms import RandomNodeSplit
+from torch_geometric.transforms import RandomNodeSplit, Compose
 from ogb.nodeproppred import PygNodePropPredDataset
 import pandas as pd
 from scipy.io import loadmat
@@ -26,6 +26,29 @@ def load_ogb(name, **kwargs):
         data[f'{split}_mask'] = mask
 
     return [data]
+
+
+class FilterTopClass:
+    def __init__(self, num_classes):
+        self.num_classes = num_classes
+
+    def __call__(self, data):
+        y = torch.nn.functional.one_hot(data.y)
+        c = y.sum(dim=0).sort(descending=True)
+        y = y[:, c.indices[:self.num_classes]]
+        idx = y.sum(dim=1).bool()
+
+        data.x = data.x[idx]
+        data.y = y[idx].argmax(dim=1)
+        data.num_nodes = data.y.size(0)
+        data.edge_index, data.edge_attr = subgraph(idx, data.edge_index, data.edge_attr, relabel_nodes=True)
+
+        if 'train_mask' in data:
+            data.train_mask = data.train_mask[idx]
+            data.val_mask = data.val_mask[idx]
+            data.test_mask = data.test_mask[idx]
+
+        return data
 
 
 class Facebook100(InMemoryDataset):
@@ -107,22 +130,22 @@ class Facebook100(InMemoryDataset):
 @support_args
 class Dataset:
     supported_datasets = {
-        'cora': partial(CitationFull, name='cora', transform=RandomNodeSplit(split='train_rest')),
-        'citeseer': partial(CitationFull, name='citeseer', transform=RandomNodeSplit(split='train_rest')),
-        'pubmed': partial(CitationFull, name='pubmed', transform=RandomNodeSplit(split='train_rest')),
-        'github': partial(GitHub, transform=RandomNodeSplit(split='train_rest')),
         'facebook': partial(FacebookPagePage, transform=RandomNodeSplit(split='train_rest')),
         'lastfm': partial(LastFMAsia, transform=RandomNodeSplit(split='train_rest')),
-        'co-cs': partial(Coauthor, name='cs', transform=RandomNodeSplit(split='train_rest')),
         'co-ph': partial(Coauthor, name='physics', transform=RandomNodeSplit(split='train_rest')),
         'amz-comp': partial(Amazon, name='computers', transform=RandomNodeSplit(split='train_rest')),
-        'amz-photo': partial(Amazon, name='photo', transform=RandomNodeSplit(split='train_rest')),
         'wiki': partial(WikiCS, transform=RandomNodeSplit(split='train_rest')),
-        'deezer': partial(DeezerEurope, transform=RandomNodeSplit(split='train_rest')),
-        'twitch-de': partial(Twitch, name='DE', transform=RandomNodeSplit(split='train_rest')),
-        'arxiv': partial(load_ogb, name='ogbn-arxiv'),
-        'reddit': partial(Reddit2, transform=RandomNodeSplit(split='train_rest')),
-        'fb-texas': partial(Facebook100, name='Texas84', transform=RandomNodeSplit(split='train_rest'))
+        'reddit': partial(Reddit2, transform=Compose([FilterTopClass(5), RandomNodeSplit(split='train_rest')])),
+        'fb-harvard': partial(Facebook100, name='Harvard1', transform=RandomNodeSplit(split='train_rest')),
+        # 'pubmed': partial(CitationFull, name='pubmed', transform=RandomNodeSplit(split='train_rest')),
+        # 'arxiv': partial(load_ogb, name='ogbn-arxiv'),
+        # 'cora': partial(CitationFull, name='cora', transform=RandomNodeSplit(split='train_rest')),
+        # 'citeseer': partial(CitationFull, name='citeseer', transform=RandomNodeSplit(split='train_rest')),
+        # 'github': partial(GitHub, transform=RandomNodeSplit(split='train_rest')),
+        # 'co-cs': partial(Coauthor, name='cs', transform=RandomNodeSplit(split='train_rest')),
+        # 'amz-photo': partial(Amazon, name='photo', transform=RandomNodeSplit(split='train_rest')),
+        # 'deezer': partial(DeezerEurope, transform=RandomNodeSplit(split='train_rest')),
+        # 'twitch-de': partial(Twitch, name='DE', transform=RandomNodeSplit(split='train_rest')),
     }
 
     def __init__(self,
