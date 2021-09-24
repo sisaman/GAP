@@ -71,9 +71,11 @@ class PrivSAGEConv(PrivateConv):
 
 
 class PrivateGNN(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_mp_layers, num_post_layers, dropout, use_batchnorm):
+    def __init__(self, input_dim, hidden_dim, output_dim, 
+                 num_pre_layers, num_mp_layers, num_post_layers, 
+                 dropout, use_batchnorm):
         super().__init__()
-        self.layers = self.init_layers(input_dim, hidden_dim, output_dim, num_mp_layers, num_post_layers)
+        self.layers = self.init_layers(input_dim, hidden_dim, output_dim, num_pre_layers, num_mp_layers, num_post_layers)
         self.dropout = AlphaDropout(p=dropout)
         self.activation = SELU(inplace=True)
         self.use_batchnorm = use_batchnorm
@@ -82,12 +84,13 @@ class PrivateGNN(torch.nn.Module):
         
         self.reset_parameters()
 
-    def init_layers(self, input_dim, hidden_dim, output_dim, num_mp_layers, num_post_layers):
-        num_layers = num_mp_layers + num_post_layers
+    def init_layers(self, input_dim, hidden_dim, output_dim, num_pre_layers, num_mp_layers, num_post_layers):
+        num_layers = num_pre_layers + num_mp_layers + num_post_layers
         dimensions = [input_dim] + [hidden_dim] * (num_layers - 1) + [output_dim]
 
-        layers = ModuleList(self.init_message_passing_layers(dimensions[:num_mp_layers+1]))
-        layers.extend([Dense(in_channels, out_channels) for in_channels, out_channels in pairwise(dimensions[num_mp_layers:])])
+        layers = ModuleList([Dense(in_channels, out_channels) for in_channels, out_channels in pairwise(dimensions[:num_pre_layers+1])])
+        layers.extend(self.init_message_passing_layers(dimensions[num_pre_layers:num_pre_layers+num_mp_layers+1]))
+        layers.extend([Dense(in_channels, out_channels) for in_channels, out_channels in pairwise(dimensions[num_pre_layers+num_mp_layers:])])
 
         return layers
 
@@ -143,8 +146,9 @@ class PrivateNodeClassifier(torch.nn.Module):
                  num_classes,
                  model: dict(help='base GNN model', choices=SupportedModels.keys()) = 'sage',
                  hidden_dim: dict(help='dimension of the hidden layers') = 32,
+                 pre_layers: dict(help='number of pre-processing linear layers') = 0,
                  mp_layers: dict(help='number of message-passing layers') = 1,
-                 fc_layers: dict(help='number of fully-connected layers') = 1,
+                 post_layers: dict(help='number of post-processing linear layers') = 1,
                  batchnorm: dict(help='enables batch-normalization') = False,
                  dropout: dict(help='dropout rate (between zero and one)') = 0.0,
                  ):
@@ -155,8 +159,9 @@ class PrivateNodeClassifier(torch.nn.Module):
             input_dim=input_dim,
             hidden_dim=hidden_dim,
             output_dim=num_classes,
+            num_pre_layers=pre_layers,
             num_mp_layers=mp_layers,
-            num_post_layers=fc_layers,
+            num_post_layers=post_layers,
             dropout=dropout,
             use_batchnorm=batchnorm,
         )
