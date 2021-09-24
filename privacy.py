@@ -80,6 +80,9 @@ class TopMFilter:
         data.edge_index, _ = remove_self_loops(data.edge_index)
         return data
 
+    def get_privacy_spent(self):
+        return self.eps_count + self.eps_edges
+
     @staticmethod
     def to_sparse_adjacency(edge_index, num_nodes):
         return torch.sparse_coo_tensor(
