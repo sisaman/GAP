@@ -4,7 +4,7 @@ from functools import partial
 import torch
 import torch.nn.functional as F
 from torch_geometric.utils import remove_self_loops, subgraph
-from torch_geometric.datasets import CitationFull, GitHub, FacebookPagePage, LastFMAsia, Coauthor, Amazon, WikiCS, DeezerEurope, Twitch, Reddit2
+from torch_geometric.datasets import FacebookPagePage, LastFMAsia, Coauthor, Amazon, WikiCS, Reddit2, CitationFull
 from torch_geometric.transforms import RandomNodeSplit, Compose
 from ogb.nodeproppred import PygNodePropPredDataset
 import pandas as pd
