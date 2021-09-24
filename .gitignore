@@ -118,5 +118,6 @@ datasets
 wandb
 jobs
 output
+results
 .vscode
 *.ipynb
