@@ -4,6 +4,41 @@ from argparse import ArgumentTypeError, Action
 from utils import colored_text, TermColors
 
 
+class Enum(enum.Enum):
+    def __str__(self):
+        return str(self.value)
+
+    def __repr__(self):
+        return str(self.value)
+
+
+class EnumAction(Action):
+    """
+    Argparse action for handling Enums
+    """
+    def __init__(self, **kwargs):
+        # Pop off the type value
+        _enum = kwargs.pop("type", None)
+
+        # Ensure an Enum subclass is provided
+        if _enum is None:
+            raise ValueError("type must be assigned an Enum when using EnumAction")
+        if not issubclass(_enum, enum.Enum):
+            raise TypeError("type must be an Enum when using EnumAction")
+
+        # Generate choices from the Enum
+        kwargs.setdefault("choices", tuple(e.value for e in _enum))
+
+        super().__init__(**kwargs)
+
+        self._enum = _enum
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        # Convert value back into an Enum
+        enum = self._enum(values)  # noqa
+        setattr(namespace, self.dest, enum)
+
+
 def str2bool(v):
     if isinstance(v, bool):
         return v
@@ -46,6 +81,8 @@ def support_args(Cls):
                     arg_info['type'] = str2bool
                     arg_info['nargs'] = '?'
                     arg_info['const'] = True
+                elif isinstance(arg_info['type'], Enum):
+                    arg_info['action'] = EnumAction
 
                 if 'choices' in arg_info:
                     arg_info['help'] = arg_info.get('help', '') + f" (choices: {', '.join(arg_info['choices'])})"
@@ -67,38 +104,3 @@ def support_args(Cls):
 def print_args(args):
     message = [f'{name}: {colored_text(str(value), TermColors.FG.cyan)}' for name, value in vars(args).items()]
     print(', '.join(message) + '\n')
-
-
-class Enum(enum.Enum):
-    def __str__(self):
-        return str(self.value)
-
-    def __repr__(self):
-        return str(self.value)
-
-
-class EnumAction(Action):
-    """
-    Argparse action for handling Enums
-    """
-    def __init__(self, **kwargs):
-        # Pop off the type value
-        _enum = kwargs.pop("type", None)
-
-        # Ensure an Enum subclass is provided
-        if _enum is None:
-            raise ValueError("type must be assigned an Enum when using EnumAction")
-        if not issubclass(_enum, enum.Enum):
-            raise TypeError("type must be an Enum when using EnumAction")
-
-        # Generate choices from the Enum
-        kwargs.setdefault("choices", tuple(e.value for e in _enum))
-
-        super().__init__(**kwargs)
-
-        self._enum = _enum
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        # Convert value back into an Enum
-        enum = self._enum(values)  # noqa
-        setattr(namespace, self.dest, enum)
