@@ -41,15 +41,15 @@ class PrivSAGEConv(PrivateConv):
 
     def private_aggregation(self, x, edge_index):
         if self.cached_agg is None or not self.cached:
-            x = F.normalize(x, p=2., dim=-1)                            # to keep sensitivity = 1        
+            x = self.mechanism.normalize(x)                            # to keep sensitivity = 1        
 
             if self.perturbation_mode == 'feature':    
-                x = self.mechanism.perturb(x, l2_sensitivity=1)
+                x = self.mechanism.perturb(x, sensitivity=1)
             
             agg = x + self.propagate(edge_index, x=x)
 
             if self.perturbation_mode == 'aggr':
-                agg = self.mechanism.perturb(agg, l2_sensitivity=1)
+                agg = self.mechanism.perturb(agg, sensitivity=1)
 
             self.cached_agg = agg
             

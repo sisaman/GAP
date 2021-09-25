@@ -8,7 +8,7 @@ from datasets import Dataset
 from loggers import Logger
 from models import PrivateNodeClassifier
 from trainer import Trainer
-from privacy import GaussianMechanism, TopMFilter
+from privacy import GaussianMechanism, TopMFilter, LaplaceMechanism
 from utils import timeit, colored_text, seed_everything, confidence_interval
 
 
@@ -16,6 +16,11 @@ class Perturbation(Enum):
     Graph = 'graph'
     Aggregation = 'aggr'
     Feature = 'feature'
+
+
+class Mechanism(Enum):
+    Gaussian = 'gaussian'
+    Laplace = 'laplace'
 
 
 @timeit
@@ -35,7 +40,8 @@ def run(args):
             mechanism = TopMFilter(eps_edges=0.9*args.epsilon, eps_count=0.1*args.epsilon)
             data = mechanism.perturb(data)
         else:
-            mechanism = GaussianMechanism(noise_std=args.noise_std, delta=args.delta)
+            MechCls = GaussianMechanism if args.mechanism == Mechanism.Gaussian else LaplaceMechanism
+            mechanism = MechCls(noise_std=args.noise_std, delta=args.delta)
             model.set_privacy_mechanism(mechanism=mechanism, perturbation_mode=args.perturbation.value)
         
         trainer = Trainer.from_args(args, privacy_accountant=mechanism.get_privacy_spent)
@@ -78,6 +84,7 @@ def main():
     group_privacy.add_argument('-e', '--epsilon', type=float, default=np.inf, help='DP epsilon parameter')
     group_privacy.add_argument('-d', '--delta', type=float, default=1e-6, help='DP delta parameter')
     group_privacy.add_argument('-n', '--noise-std', type=float, default=0, help='standard deviation of the noise')
+    group_dataset.add_argument('-m', '--mechanism', type=Mechanism, action=EnumAction, default=Mechanism.Gaussian, help='perturbation mechanism')
 
     # trainer arguments
     group_trainer = init_parser.add_argument_group('trainer arguments')

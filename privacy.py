@@ -1,8 +1,39 @@
 import torch
 import numpy as np
-from autodp.mechanism_zoo import ExactGaussianMechanism
-from autodp.transformer_zoo import ComposeGaussian
+import torch.nn.functional as F
+from autodp.mechanism_zoo import ExactGaussianMechanism, LaplaceMechanism as ExactLaplaceMechanism
+from autodp.transformer_zoo import ComposeGaussian, Composition
 from torch_geometric.utils import remove_self_loops, add_self_loops
+
+
+class LaplaceMechanism:
+    def __init__(self, noise_std, delta):
+        self.noise_std = noise_std
+        self.delta = delta
+        self.sigma_list = []
+
+    def perturb(self, data, sensitivity):
+        if self.noise_std > 0:
+            sigma = self.noise_std / sensitivity
+            self.sigma_list.append(sigma)
+            data = torch.distributions.Laplace(loc=data, scale=self.noise_std).sample()
+
+        return data
+
+    def get_privacy_spent(self):
+        if not self.sigma_list:
+            return 1e9-1
+        
+        composed_mechanism = Composition().compose(
+            mechanism_list=[ExactLaplaceMechanism(b=sigma) for sigma in self.sigma_list],
+            coeff_list=np.ones_like(self.sigma_list)
+        )
+
+        epsilon = composed_mechanism.get_approxDP(self.delta)
+        return epsilon
+
+    def normalize(self, data):
+        return F.normalize(data, p=1, dim=-1)
 
 
 class GaussianMechanism:
@@ -11,9 +42,9 @@ class GaussianMechanism:
         self.delta = delta
         self.sigma_list = []
 
-    def perturb(self, data, l2_sensitivity):
+    def perturb(self, data, sensitivity):
         if self.noise_std > 0:
-            sigma = self.noise_std / l2_sensitivity
+            sigma = self.noise_std / sensitivity
             self.sigma_list.append(sigma)
             data = torch.normal(mean=data, std=self.noise_std)
 
@@ -30,6 +61,9 @@ class GaussianMechanism:
 
         epsilon = composed_mechanism.get_approxDP(self.delta)
         return epsilon
+
+    def normalize(self, data):
+        return F.normalize(data, p=2, dim=-1)
 
 
 class TopMFilter:
