@@ -1,69 +1,73 @@
 import torch
 import numpy as np
 import torch.nn.functional as F
-from autodp.mechanism_zoo import ExactGaussianMechanism, LaplaceMechanism as ExactLaplaceMechanism
+import autodp.mechanism_zoo as mechanisms
 from autodp.transformer_zoo import ComposeGaussian, Composition
 from torch_geometric.utils import remove_self_loops, add_self_loops
+from args import support_args
 
 
-class LaplaceMechanism:
-    def __init__(self, noise_std, delta):
-        self.noise_std = noise_std
+class GaussianMechanism(mechanisms.ExactGaussianMechanism):
+    def __init__(self, sigma):
+        super().__init__(sigma=sigma)
+
+    def perturb(self, data, sensitivity):
+        std = self.params['sigma'] * sensitivity
+        return torch.normal(mean=data, std=std)
+
+
+class LaplaceMechanism(mechanisms.LaplaceMechanism):
+    def __init__(self, sigma):
+        super().__init__(b=sigma)
+
+    def perturb(self, data, sensitivity):
+        scale = self.params['b'] * sensitivity
+        return torch.distributions.Laplace(loc=data, scale=scale).sample()
+    
+
+@support_args
+class NoisyMechanism:
+
+    supported_mechanisms = {
+        'laplace': LaplaceMechanism,
+        'gaussian': GaussianMechanism
+    }
+
+    def __init__(self, 
+                 mechanism:     dict(help='perturbation mechanism', option='-m', choices=supported_mechanisms) = 'gaussian',
+                 noise_scale :  dict(help='scale parameter of the noise', option='-n', type=float) = None, 
+                 delta:         dict(help='DP delta parameter', option='-d') = 1e-6
+    ):
+        self.mechanism = self.supported_mechanisms[mechanism]
+        self.sigma = noise_scale
         self.delta = delta
         self.sigma_list = []
 
-    def perturb(self, data, sensitivity):
-        if self.noise_std > 0:
-            sigma = self.noise_std / sensitivity
-            self.sigma_list.append(sigma)
-            data = torch.distributions.Laplace(loc=data, scale=self.noise_std).sample()
+    def perturb(self, data, sensitivity, account=True):
+        if self.sigma is not None:
+            mechanism = self.mechanism(self.sigma)
+            data = mechanism.perturb(data, sensitivity=sensitivity)
+
+            if account: 
+                self.sigma_list.append(self.sigma)
 
         return data
 
+    def normalize(self, data):
+        return F.normalize(data, p=(1 if self.mechanism is LaplaceMechanism else 2), dim=-1)
+
     def get_privacy_spent(self):
         if not self.sigma_list:
-            return 1e9-1
-        
-        composed_mechanism = Composition().compose(
-            mechanism_list=[ExactLaplaceMechanism(b=sigma) for sigma in self.sigma_list],
+            return 1e10-1
+
+        Compose = ComposeGaussian if self.mechanism is GaussianMechanism else Composition
+        composed_mechanism = Compose().compose(
+            mechanism_list=list(map(self.mechanism, self.sigma_list)),
             coeff_list=np.ones_like(self.sigma_list)
         )
 
         epsilon = composed_mechanism.get_approxDP(self.delta)
         return epsilon
-
-    def normalize(self, data):
-        return F.normalize(data, p=1, dim=-1)
-
-
-class GaussianMechanism:
-    def __init__(self, noise_std, delta):
-        self.noise_std = noise_std
-        self.delta = delta
-        self.sigma_list = []
-
-    def perturb(self, data, sensitivity):
-        if self.noise_std > 0:
-            sigma = self.noise_std / sensitivity
-            self.sigma_list.append(sigma)
-            data = torch.normal(mean=data, std=self.noise_std)
-
-        return data
-
-    def get_privacy_spent(self):
-        if not self.sigma_list:
-            return 1e9-1
-        
-        composed_mechanism = ComposeGaussian().compose(
-            mechanism_list=[ExactGaussianMechanism(sigma=sigma) for sigma in self.sigma_list],
-            coeff_list=np.ones_like(self.sigma_list)
-        )
-
-        epsilon = composed_mechanism.get_approxDP(self.delta)
-        return epsilon
-
-    def normalize(self, data):
-        return F.normalize(data, p=2, dim=-1)
 
 
 class TopMFilter:
