@@ -15,7 +15,7 @@ from torch_geometric.utils import from_scipy_sparse_matrix
 from args import support_args
 
 
-def load_ogb(name, **kwargs):
+def load_ogb(name, transform=None, **kwargs):
     dataset = PygNodePropPredDataset(name=name, **kwargs)
     data = dataset[0]
     data.y = data.y.flatten()
@@ -25,7 +25,7 @@ def load_ogb(name, **kwargs):
         split = 'val' if split == 'valid' else split
         data[f'{split}_mask'] = mask
 
-    return [data]
+    return [transform(data)]
 
 
 class FilterTopClass:
