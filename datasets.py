@@ -149,7 +149,7 @@ class Dataset:
     }
 
     def __init__(self,
-                 dataset:    dict(help='name of the dataset', choices=supported_datasets) = 'cora',
+                 dataset:    dict(help='name of the dataset', choices=supported_datasets) = 'reddit',
                  data_dir:   dict(help='directory to store the dataset') = './datasets',
                  feature:    dict(help='type of node feature ("raw" for original features, "rand" for random features)') = 'raw',
                  normalize:  dict(help='if set to true, row-normalizes features') = True
