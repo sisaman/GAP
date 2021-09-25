@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from autodp.mechanism_zoo import ExactGaussianMechanism
+from autodp.transformer_zoo import ComposeGaussian
 from torch_geometric.utils import remove_self_loops, add_self_loops
 
 
@@ -21,10 +22,13 @@ class GaussianMechanism:
     def get_privacy_spent(self):
         if not self.sigma_list:
             return 1e9-1
-        sigma_list = np.array(self.sigma_list)
-        sigma_total = np.sqrt(1/np.sum(1/sigma_list**2))
-        mechanism = ExactGaussianMechanism(sigma=sigma_total)
-        epsilon = mechanism.get_approxDP(self.delta)
+        
+        composed_mechanism = ComposeGaussian().compose(
+            mechanism_list=[ExactGaussianMechanism(sigma=sigma) for sigma in self.sigma_list],
+            coeff_list=np.ones_like(self.sigma_list)
+        )
+
+        epsilon = composed_mechanism.get_approxDP(self.delta)
         return epsilon
 
 
