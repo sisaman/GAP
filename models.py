@@ -157,7 +157,7 @@ class PrivateNodeClassifier(torch.nn.Module):
     def __init__(self,
                  input_dim,
                  num_classes,
-                 model: dict(help='base GNN model', choices=supported_models.keys()) = 'sage',
+                 model: dict(help='base GNN model', choices=supported_models) = 'sage',
                  hidden_dim: dict(help='dimension of the hidden layers') = 32,
                  pre_layers: dict(help='number of pre-processing linear layers') = 0,
                  mp_layers: dict(help='number of message-passing layers') = 1,

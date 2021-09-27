@@ -34,7 +34,7 @@ class RandomSubGraphSampler(torch.utils.data.DataLoader):
     def __len__(self):
         return self.num_steps
 
-    def __collate__(self, idx_list):
+    def __collate__(self, _):
         node_mask, edge_index = self.sampler_fn()
 
         data = self.data.__class__()
