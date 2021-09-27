@@ -1,4 +1,4 @@
-from privacy import GaussianMechanism
+from privacy import NoisyMechanism
 import torch
 import torch.nn.functional as F
 from torch.nn import AlphaDropout, SELU, ModuleList
@@ -18,7 +18,7 @@ class PrivateConv(MessagePassing):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.perturbation_mode = None
-        self.mechanism: GaussianMechanism = None
+        self.mechanism: NoisyMechanism = None
 
     def set_privacy_mechanism(self, mechanism, perturbation_mode):
         self.mechanism = mechanism
@@ -44,19 +44,18 @@ class PrivSAGEConv(PrivateConv):
             x = self.mechanism.normalize(x)                            # to keep sensitivity = 1        
 
             if self.perturbation_mode == 'feature':    
-                x = self.mechanism.perturb(x, sensitivity=1)
+                x = self.mechanism.perturb(x, sensitivity=1, account=self.training)
             
             agg = x + self.propagate(edge_index, x=x)
 
             if self.perturbation_mode == 'aggr':
-                agg = self.mechanism.perturb(agg, sensitivity=1)
+                agg = self.mechanism.perturb(agg, sensitivity=1, account=self.training)
 
             self.cached_agg = agg
-            
-        try:
-            Logger.get_instance().log_summary({'aggr': wandb.Histogram(torch.norm(self.cached_agg, p=2, dim=1).cpu())})
-        except:
-            pass
+        # try:
+        #     Logger.get_instance().log_summary({'aggr': wandb.Histogram(torch.norm(self.cached_agg, p=2, dim=1).cpu())})
+        # except:
+        #     pass
 
         return self.cached_agg
 
@@ -143,7 +142,7 @@ class PrivateGraphSAGE(PrivateGNN):
                 in_channels=in_channels, 
                 out_channels=out_channels,
                 root_weight=False,
-                cached=(self.num_pre_layers == 0 and i == 0)
+                cached=False #(self.num_pre_layers == 0 and i == 0)
             ) 
 
     
@@ -160,7 +159,7 @@ class PrivateNodeClassifier(torch.nn.Module):
                  model: dict(help='base GNN model', choices=supported_models) = 'sage',
                  hidden_dim: dict(help='dimension of the hidden layers') = 32,
                  pre_layers: dict(help='number of pre-processing linear layers') = 0,
-                 mp_layers: dict(help='number of message-passing layers') = 1,
+                 mp_layers: dict(help='number of message-passing layers') = 2,
                  post_layers: dict(help='number of post-processing linear layers') = 1,
                  batchnorm: dict(help='enables batch-normalization') = False,
                  dropout: dict(help='dropout rate (between zero and one)') = 0.0,

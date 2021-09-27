@@ -13,18 +13,18 @@ class Trainer:
                  optimizer: dict(help='optimization algorithm', choices=['sgd', 'adam']) = 'adam',
                  learning_rate: dict(help='learning rate') = 0.01,
                  weight_decay: dict(help='weight decay (L2 penalty)') = 0.0,
-                 max_epochs: dict(help='maximum number of training epochs') = 100,
                  patience: dict(help='early-stopping patience window size') = 0,
                  val_interval: dict(help='number of epochs to wait for validation') = 1,
+                 device = 'cuda'
                  ):
 
         self.privacy_accountant = privacy_accountant
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
         self.optimizer_name = optimizer
-        self.max_epochs = max_epochs
         self.patience = patience
         self.val_interval = val_interval
+        self.device = device
         self.logger = Logger.get_instance()
         self.model = None
         self.best_metrics = None
@@ -39,16 +39,18 @@ class Trainer:
         else:
             return metrics['val/loss'] < self.best_metrics['val/loss']
 
-    def fit(self, model, data):
-        self.model = model.to(data.x.device)
+    def fit(self, model, dataloader):
+        self.model = model.to(self.device)
         optimizer = self.configure_optimizer()
         self.logger.watch(self.model)
 
         num_epochs_without_improvement = 0
         self.best_metrics = None
 
-        epoch_progbar = tqdm(range(self.max_epochs), desc='Epoch: ', file=sys.stdout)
-        for epoch in epoch_progbar:
+        epoch_progbar = tqdm(enumerate(dataloader), total=len(dataloader), desc='Epoch: ', file=sys.stdout)
+        for epoch, data in epoch_progbar:
+            data = data.to(self.device)
+
             metrics = {'epoch': epoch}
             train_metrics = self._train(data, optimizer)
             metrics.update(**train_metrics)

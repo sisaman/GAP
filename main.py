@@ -7,6 +7,7 @@ from args import Enum, EnumAction, print_args, str2bool
 from datasets import Dataset
 from loggers import Logger
 from models import PrivateNodeClassifier
+from loader import RandomSubGraphSampler
 from trainer import Trainer
 from privacy import NoisyMechanism, TopMFilter
 from utils import timeit, colored_text, seed_everything, confidence_interval
@@ -20,15 +21,15 @@ class Perturbation(Enum):
 
 @timeit
 def run(args):
-    dataset = Dataset.from_args(args).load()
-    num_classes = dataset.y.max().item() + 1
+    data = Dataset.from_args(args).load()
+    num_classes = data.y.max().item() + 1
 
     test_acc = []
     run_metrics = {}
     logger = Logger.from_args(args, enabled=args.debug, config=args)
     
     for iteration in range(args.repeats):
-        data = dataset.clone().to('cpu' if args.cpu else 'cuda')
+        # data = dataset.clone().to('cpu' if args.cpu else 'cuda')
         model = PrivateNodeClassifier.from_args(args, input_dim=data.num_features, num_classes=num_classes)
 
         if args.perturbation == Perturbation.Graph:
@@ -38,8 +39,17 @@ def run(args):
             mechanism = NoisyMechanism.from_args(args)
             model.set_privacy_mechanism(mechanism=mechanism, perturbation_mode=args.perturbation.value)
         
-        trainer = Trainer.from_args(args, privacy_accountant=mechanism.get_privacy_spent)
-        best_metrics = trainer.fit(model, data)
+        dataloader = RandomSubGraphSampler.from_args(args, 
+            data=data, pin_memory=not args.cpu,
+            edge_sampler=args.perturbation==Perturbation.Feature, 
+        )
+        
+        trainer = Trainer.from_args(args, 
+            privacy_accountant=mechanism.get_privacy_spent, 
+            device=('cpu' if args.cpu else 'cuda'),
+        )
+
+        best_metrics = trainer.fit(model, dataloader)
 
         # process results
         for metric, value in best_metrics.items():
@@ -81,6 +91,7 @@ def main():
     # trainer arguments
     group_trainer = init_parser.add_argument_group('trainer arguments')
     group_trainer.add_argument('--cpu', help='train on CPU', type=str2bool, nargs='?', const=True, default=not torch.cuda.is_available())
+    RandomSubGraphSampler.add_args(group_trainer)
     Trainer.add_args(group_trainer)
 
     # experiment args

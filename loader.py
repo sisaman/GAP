@@ -1,19 +1,27 @@
 import torch
 from torch_geometric.utils import remove_isolated_nodes, subgraph
+from args import support_args
 
-
+@support_args
 class RandomSubGraphSampler(torch.utils.data.DataLoader):
 
-    def __init__(self, data, sampling_prob = 1.0, edge_sampler = False, num_steps = 1, **kwargs):
+    def __init__(self, data, 
+                 sampling_prob: dict(help='data loader sampling probability') = 1.0, 
+                 max_epochs:    dict(help='maximum number of training epochs') = 100,
+                 num_workers:   dict(help='how many subprocesses to use for data loading') = 0,
+                 pin_memory = False,
+                 edge_sampler = False,
+                 ):
+
         self.data = data
         self.sampling_prob = float(sampling_prob)
         self.edge_sampler = edge_sampler
-        self.num_steps = num_steps
+        self.num_steps = max_epochs
         self.N = data.num_nodes
         self.E = data.num_edges
         self.sampler_fn = self.sample_edges if edge_sampler else self.sample_nodes
 
-        super().__init__(self, batch_size=1, collate_fn=self.__collate__, **kwargs)
+        super().__init__(self, batch_size=1, collate_fn=self.__collate__, num_workers=num_workers, pin_memory=pin_memory)
 
     def sample_nodes(self):
         device = self.data.x.device
