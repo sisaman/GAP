@@ -50,6 +50,7 @@ def run(args):
         )
 
         best_metrics = trainer.fit(model, dataloader)
+        # best_metrics['eps'] = mechanism.get_privacy_spent()
 
         # process results
         for metric, value in best_metrics.items():

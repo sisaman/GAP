@@ -5,8 +5,6 @@ from torch.nn import AlphaDropout, SELU, ModuleList
 from torch_geometric.nn import BatchNorm, MessagePassing, Linear
 from utils import pairwise
 from args import support_args
-from loggers import Logger
-import wandb
 
 
 class Dense(Linear):
@@ -41,7 +39,8 @@ class PrivSAGEConv(PrivateConv):
 
     def private_aggregation(self, x, edge_index):
         if self.cached_agg is None or not self.cached:
-            x = self.mechanism.normalize(x)                            # to keep sensitivity = 1        
+            if self.mechanism:
+                x = self.mechanism.normalize(x)                            # todo replace with clipping
 
             if self.perturbation_mode == 'feature':    
                 x = self.mechanism.perturb(x, sensitivity=1, account=self.training)
@@ -52,10 +51,6 @@ class PrivSAGEConv(PrivateConv):
                 agg = self.mechanism.perturb(agg, sensitivity=1, account=self.training)
 
             self.cached_agg = agg
-        # try:
-        #     Logger.get_instance().log_summary({'aggr': wandb.Histogram(torch.norm(self.cached_agg, p=2, dim=1).cpu())})
-        # except:
-        #     pass
 
         return self.cached_agg
 
@@ -142,7 +137,7 @@ class PrivateGraphSAGE(PrivateGNN):
                 in_channels=in_channels, 
                 out_channels=out_channels,
                 root_weight=False,
-                cached=False #(self.num_pre_layers == 0 and i == 0)
+                cached=(self.num_pre_layers == 0 and i == 0)
             ) 
 
     
