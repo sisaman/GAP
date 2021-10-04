@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 import autodp.mechanism_zoo as mechanisms
-from autodp.transformer_zoo import ComposeGaussian, Composition
+from autodp.transformer_zoo import Composition, AmplificationBySampling
 from torch_geometric.utils import remove_self_loops, add_self_loops
 from args import support_args
 
@@ -36,20 +36,25 @@ class NoisyMechanism:
     def __init__(self, 
                  mechanism:     dict(help='perturbation mechanism', option='-m', choices=supported_mechanisms) = 'gaussian',
                  noise_scale :  dict(help='scale parameter of the noise', option='-n', type=float) = None, 
-                 delta:         dict(help='DP delta parameter', option='-d') = 1e-6
+                 delta:         dict(help='DP delta parameter', option='-d') = 1e-6,
+                 sampling_prob = 1.0
     ):
-        self.mechanism = self.supported_mechanisms[mechanism]
         self.sigma = noise_scale
         self.delta = delta
-        self.sigma_list = []
+        self.sampling_prob = sampling_prob
+        self.perturb_count = 0
+
+        subsample = AmplificationBySampling(PoissonSampling=True)
+        self.mechanism = self.supported_mechanisms[mechanism](self.sigma)
+        self.subsampled_mechanism = subsample(self.mechanism, self.sampling_prob, improved_bound_flag=True)
+        self.compose = Composition()
 
     def perturb(self, data, sensitivity, account=True):
         if self.sigma is not None:
-            mechanism = self.mechanism(self.sigma)
-            data = mechanism.perturb(data, sensitivity=sensitivity)
+            data = self.mechanism.perturb(data, sensitivity=sensitivity)
 
             if account: 
-                self.sigma_list.append(self.sigma)
+                self.perturb_count += 1
 
         return data
 
@@ -57,13 +62,12 @@ class NoisyMechanism:
         return F.normalize(data, p=(1 if self.mechanism is LaplaceMechanism else 2), dim=-1)
 
     def get_privacy_spent(self):
-        if not self.sigma_list:
+        if self.perturb_count == 0:
             return 1e10-1
 
-        Compose = ComposeGaussian if self.mechanism is GaussianMechanism else Composition
-        composed_mechanism = Compose().compose(
-            mechanism_list=list(map(self.mechanism, self.sigma_list)),
-            coeff_list=np.ones_like(self.sigma_list)
+        composed_mechanism = self.compose(
+            mechanism_list=[self.subsampled_mechanism],
+            coeff_list=[self.perturb_count]
         )
 
         epsilon = composed_mechanism.get_approxDP(self.delta)
