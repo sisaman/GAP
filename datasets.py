@@ -25,7 +25,10 @@ def load_ogb(name, transform=None, **kwargs):
         split = 'val' if split == 'valid' else split
         data[f'{split}_mask'] = mask
 
-    return [transform(data)]
+    if transform:
+        data = transform(data)
+
+    return [data]
 
 
 class FilterTopClass:
@@ -131,14 +134,14 @@ class Facebook100(InMemoryDataset):
 class Dataset:
     supported_datasets = {
         'facebook': partial(FacebookPagePage, transform=RandomNodeSplit(split='train_rest')),
-        'lastfm': partial(LastFMAsia, transform=RandomNodeSplit(split='train_rest')),
+        'lastfm': partial(LastFMAsia, transform=Compose([FilterTopClass(10), RandomNodeSplit(split='train_rest')])),
         'co-ph': partial(Coauthor, name='physics', transform=RandomNodeSplit(split='train_rest')),
         'amz-comp': partial(Amazon, name='computers', transform=RandomNodeSplit(split='train_rest')),
         'wiki': partial(WikiCS, transform=RandomNodeSplit(split='train_rest')),
         'reddit': partial(Reddit2, transform=Compose([FilterTopClass(5), RandomNodeSplit(split='train_rest')])),
         'fb-harvard': partial(Facebook100, name='Harvard1', transform=RandomNodeSplit(split='train_rest')),
         # 'pubmed': partial(CitationFull, name='pubmed', transform=RandomNodeSplit(split='train_rest')),
-        # 'arxiv': partial(load_ogb, name='ogbn-arxiv'),
+        'arxiv': partial(load_ogb, name='ogbn-arxiv'),
         # 'cora': partial(CitationFull, name='cora', transform=RandomNodeSplit(split='train_rest')),
         # 'citeseer': partial(CitationFull, name='citeseer', transform=RandomNodeSplit(split='train_rest')),
         # 'github': partial(GitHub, transform=RandomNodeSplit(split='train_rest')),
