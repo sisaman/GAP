@@ -41,7 +41,7 @@ def run(args):
         
         dataloader = RandomSubGraphSampler.from_args(args, 
             data=data, pin_memory=not args.cpu,
-            edge_sampler=args.perturbation==Perturbation.Feature, 
+            use_edge_sampling=args.perturbation!=Perturbation.Feature,
         )
         
         trainer = Trainer.from_args(args, 
