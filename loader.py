@@ -1,7 +1,6 @@
 import torch
 from torch_geometric.utils import remove_isolated_nodes, subgraph
 from args import support_args
-from datasets import Dataset
 
 @support_args
 class RandomSubGraphSampler(torch.utils.data.DataLoader):
