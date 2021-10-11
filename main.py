@@ -30,14 +30,22 @@ def run(args):
     
     for iteration in range(args.repeats):
         # data = dataset.clone().to('cpu' if args.cpu else 'cuda')
-        model = PrivateNodeClassifier.from_args(args, input_dim=data.num_features, num_classes=num_classes)
 
         if args.perturbation == Perturbation.Graph:
             mechanism = TopMFilter(eps_edges=0.9*args.epsilon, eps_count=0.1*args.epsilon)
             data = mechanism.perturb(data)
         else:
             mechanism = NoisyMechanism.from_args(args)
-            model.set_privacy_mechanism(mechanism=mechanism, perturbation_mode=args.perturbation.value)
+        
+        model = PrivateNodeClassifier.from_args(args, 
+            num_features=data.num_features, 
+            num_classes=num_classes, 
+            privacy_mechanism=mechanism,
+            perturbation_mode=args.perturbation.value,
+            inductive=args.sampling_prob<1.0,
+        )
+
+        print(model)
         
         dataloader = RandomSubGraphSampler.from_args(args, 
             data=data, pin_memory=not args.cpu,
@@ -50,7 +58,6 @@ def run(args):
         )
 
         best_metrics = trainer.fit(model, dataloader)
-        # best_metrics['eps'] = mechanism.get_privacy_spent()
 
         # process results
         for metric, value in best_metrics.items():
