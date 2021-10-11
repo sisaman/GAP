@@ -61,6 +61,10 @@ class NoisyMechanism:
     def normalize(self, data):
         return F.normalize(data, p=(1 if self.mechanism is LaplaceMechanism else 2), dim=-1)
 
+    def clip(self, data, c):
+        p = 1 if self.mechanism is LaplaceMechanism else 2
+        return (c / data.norm(p=p, dim=-1, keepdim=True)).clamp(max=1) * data
+
     def get_privacy_spent(self):
         if self.perturb_count == 0:
             return 1e10-1
