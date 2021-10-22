@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.utils import remove_self_loops, subgraph
 from torch_geometric.datasets import FacebookPagePage, LastFMAsia, Coauthor, Amazon, WikiCS, Reddit2
-from torch_geometric.transforms import RandomNodeSplit, Compose
+from torch_geometric.transforms import RandomNodeSplit, Compose, ToUndirected
 from ogb.nodeproppred import PygNodePropPredDataset
 import pandas as pd
 from scipy.io import loadmat
@@ -140,7 +140,7 @@ class Dataset:
         'wiki': partial(WikiCS, transform=RandomNodeSplit(split='train_rest')),
         'reddit': partial(Reddit2, transform=Compose([FilterTopClass(5), RandomNodeSplit(split='train_rest')])),
         'fb-harvard': partial(Facebook100, name='Harvard1', transform=RandomNodeSplit(split='train_rest')),
-        'arxiv': partial(load_ogb, name='ogbn-arxiv'),
+        'arxiv': partial(load_ogb, name='ogbn-arxiv', transform=ToUndirected()),
         # 'pubmed': partial(CitationFull, name='pubmed', transform=RandomNodeSplit(split='train_rest')),
         # 'cora': partial(CitationFull, name='cora', transform=RandomNodeSplit(split='train_rest')),
         # 'citeseer': partial(CitationFull, name='citeseer', transform=RandomNodeSplit(split='train_rest')),
