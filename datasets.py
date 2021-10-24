@@ -5,13 +5,14 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.utils import remove_self_loops, subgraph
 from torch_geometric.datasets import FacebookPagePage, LastFMAsia, Coauthor, Amazon, WikiCS, Reddit2
-from torch_geometric.transforms import RandomNodeSplit, Compose, ToUndirected
+from torch_geometric.transforms import RandomNodeSplit, Compose, ToUndirected, BaseTransform
 from ogb.nodeproppred import PygNodePropPredDataset
 import pandas as pd
 from scipy.io import loadmat
 from torch_geometric.data import Data, InMemoryDataset, download_url
 from sklearn.preprocessing import LabelEncoder
 from torch_geometric.utils import from_scipy_sparse_matrix
+from torch_geometric.nn import knn_graph
 from args import support_args
 
 
@@ -31,7 +32,7 @@ def load_ogb(name, transform=None, **kwargs):
     return [data]
 
 
-class FilterTopClass:
+class FilterTopClass(BaseTransform):
     def __init__(self, num_classes):
         self.num_classes = num_classes
 
@@ -51,6 +52,17 @@ class FilterTopClass:
             data.val_mask = data.val_mask[idx]
             data.test_mask = data.test_mask[idx]
 
+        return data
+
+
+class AddKNNGraph(BaseTransform):
+    def __init__(self, k):
+        super().__init__()
+        self.k = k
+
+    def __call__(self, data):
+        edge_index = knn_graph(x=data.x, k=self.k, num_workers=6)
+        data.edge_index = torch.cat([data.edge_index, edge_index], dim=1)
         return data
 
 
@@ -170,9 +182,9 @@ class Dataset:
             data.x = torch.randn_like(data.x)
         elif self.feature == 'one':
             data.x = torch.ones_like(data.x)
-        elif self.feature == 'pca' and data.num_features > 128:
-            _, _, V = torch.pca_lowrank(data.x, q=128)
-            data.x = torch.matmul(data.x, V[:, :128])
+        elif self.feature == 'pca' and data.num_features > 32:
+            _, _, V = torch.pca_lowrank(data.x, q=32)
+            data.x = torch.matmul(data.x, V[:, :32])
 
         if self.normalize:
             data.x = F.normalize(data.x, p=2., dim=-1)
