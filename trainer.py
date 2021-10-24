@@ -14,7 +14,7 @@ class Trainer:
                  learning_rate: dict(help='learning rate') = 0.01,
                  weight_decay: dict(help='weight decay (L2 penalty)') = 0.0,
                  patience: dict(help='early-stopping patience window size') = 0,
-                 val_interval: dict(help='number of epochs to wait for validation') = 1,
+                 val_interval: dict(help='number of epochs to wait for validation', type=int) = None,
                  device = 'cuda'
                  ):
 
@@ -47,27 +47,35 @@ class Trainer:
         num_epochs_without_improvement = 0
         self.best_metrics = None
 
-        epoch_progbar = tqdm(enumerate(dataloader), total=len(dataloader), desc='Epoch: ', file=sys.stdout)
+        epoch_progbar = tqdm(enumerate(dataloader), 
+                             total=len(dataloader), 
+                             desc='Epoch: ', 
+                             file=sys.stdout)
+                             
         for epoch, data in epoch_progbar:
             data = data.to(self.device)
 
             metrics = {'epoch': epoch}
             train_metrics = self._train(data, optimizer)
             metrics.update(**train_metrics)
+            val_metrics = self._validation(data)
+            metrics.update(**val_metrics)
 
-            if (epoch + 1) % self.val_interval == 0:
-                val_metrics = self._validation(data)
-                metrics.update(**val_metrics)
+            if self.val_interval:
+                if (epoch + 1) % self.val_interval == 0:
 
-                if self.performs_better(metrics):
-                    self.best_metrics = metrics
-                    num_epochs_without_improvement = 0
-                else:
-                    num_epochs_without_improvement += 1
-                    if num_epochs_without_improvement >= self.patience > 0:
-                        break
+                    if self.performs_better(metrics):
+                        self.best_metrics = metrics
+                        num_epochs_without_improvement = 0
+                    else:
+                        num_epochs_without_improvement += 1
+                        if num_epochs_without_improvement >= self.patience > 0:
+                            break
+            else:
+                self.best_metrics = metrics
 
-            metrics['eps'] = self.privacy_accountant()
+            if self.privacy_accountant:
+                metrics['eps'] = self.privacy_accountant(epochs=epoch+1)
             self.logger.log(metrics)
 
             # display metrics on progress bar
