@@ -1,52 +1,11 @@
+from autodp.transformer_zoo import AmplificationBySampling, ComposeGaussian, Composition
 import torch
 import torch.nn.functional as F
 from torch.nn import AlphaDropout, SELU, ModuleList, Dropout, ReLU
-from torch_geometric.nn import BatchNorm, MessagePassing, Linear
+from torch_geometric.nn import BatchNorm, MessagePassing, Linear, MessageNorm
 from utils import pairwise
 from args import support_args
-
-
-class PrivSAGEConv(MessagePassing):
-    def __init__(self, in_channels, out_channels, perturbation_mode, privacy_mechanism, root_weight=False, cached=False):
-        super().__init__(aggr='add')
-        
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.root_weight = root_weight
-        self.cached = cached
-        self.agg_cached = None
-
-        self.perturbation_mode = perturbation_mode
-        self.privacy_mechanism = privacy_mechanism
-        
-        self.lin_l = Linear(in_channels, out_channels, bias=True)
-        if self.root_weight:
-            self.lin_r = Linear(in_channels, out_channels, bias=False)
-
-    def private_aggregation(self, x, edge_index):
-        if self.agg_cached is None or not self.cached:
-            x = self.privacy_mechanism.clip(x, c=1)                            # todo replace with clipping
-
-            if self.perturbation_mode == 'feature':    
-                x = self.privacy_mechanism.perturb(x, sensitivity=1, account=self.training)
-            
-            agg = x + self.propagate(edge_index, x=x)
-
-            if self.perturbation_mode == 'aggr':
-                agg = self.privacy_mechanism.perturb(agg, sensitivity=1, account=self.training)
-
-            self.agg_cached = agg
-
-        return self.agg_cached
-
-    def forward(self, x, edge_index):
-        out = self.private_aggregation(x, edge_index)
-        out = self.lin_l(out)
-
-        if self.root_weight:
-            out += self.lin_r(x)
-
-        return out
+from privacy import GaussianMechanism, NullMechanism, PrivacyEngine, supported_mechanisms
 
 
 class MLP(torch.nn.Module):
@@ -75,6 +34,8 @@ class MLP(torch.nn.Module):
         
 
 class GNN(torch.nn.Module):
+    supported_stages = {'stack', 'skipsum', 'skipmax', 'skipcat'}
+
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, stage_type, 
                  dropout_fn, activation_fn, batchnorm, cache_first, is_pred_module):
         super().__init__()
@@ -111,19 +72,92 @@ class GNN(torch.nn.Module):
         return h_out
 
     def combine(self, input, output):
-        if self.stage_type == 'stack':
-            return output
-        elif self.stage_type == 'skipsum':
+        if self.stage_type == 'skipsum' and input.size() == output.size():
             return input + output
+        elif self.stage_type == 'skipmax' and input.size() == output.size():
+            return torch.max(input, output)
         elif self.stage_type == 'skipcat':
             return torch.cat([input, output], dim=1)
+        else:
+            return output
+
+
+class PrivSAGEConv(MessagePassing):
+    def __init__(self, in_channels, out_channels, root_weight, cached, perturbation, mechanism):
+        super().__init__(aggr='add')
+        
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.root_weight = root_weight
+        self.cached = cached
+        self.agg_cached = None
+        self.perturbation_mode = perturbation
+        self.mechanism = mechanism
+        
+        self.lin_l = Linear(in_channels, out_channels, bias=True)
+        if self.root_weight:
+            self.lin_r = Linear(in_channels, out_channels, bias=False)        
+
+        # self.mn = MessageNorm(learn_scale=True)
+
+    def private_aggregation(self, x, edge_index):
+        if self.agg_cached is None or not self.cached:
+            if self.mechanism:
+                x = self.mechanism.normalize(x)
+
+            if self.perturbation_mode == 'feature':    
+                x = self.mechanism.perturb(x, sensitivity=1)
+            
+            agg = x + self.propagate(edge_index, x=x)
+
+            if self.perturbation_mode == 'aggr':
+                agg = self.mechanism.perturb(agg, sensitivity=1)
+
+            self.agg_cached = agg
+
+        return self.agg_cached
+
+    def forward(self, x, edge_index):
+        out = self.private_aggregation(x, edge_index)
+        # out = self.mn(x, out)
+        out = self.lin_l(out)
+        if self.root_weight:
+            out += self.lin_r(x)
+
+        out = F.normalize(out, p=2, dim=-1)
+        return out
+
 
 
 class PrivateGNN(GNN):
-    def __init__(self, *args, perturbation_mode, privacy_mechanism, **kwargs):
-        self.perturbation_mode = perturbation_mode
-        self.privacy_mechanism = privacy_mechanism
+    supported_perturbations = {'feature', 'aggr'}
+    
+    def __init__(self, perturbation, mechanism, noise_sale, *args, **kwargs):
+        self.perturbation = perturbation
+        self.layer_mechanism = supported_mechanisms[mechanism](noise_sale)
         super().__init__(*args, **kwargs)
+
+    def get_privacy_engine(self, epochs, sampling_rate):
+        priv_engine = PrivacyEngine(self.layer_mechanism, epochs=epochs, sampling_rate=sampling_rate)
+        priv_engine.build = lambda: self.build_mechanism(epochs, sampling_rate)
+        return priv_engine
+
+    def build_mechanism(self, epochs, sampling_rate):
+        compose = ComposeGaussian() if isinstance(self.layer_mechanism, GaussianMechanism) else Composition()
+
+        try:
+            if sampling_rate == 1.0:
+                num_calls = int(self.cache_first) + (self.num_layers - int(self.cache_first)) * epochs
+                composed_mech = compose([self.layer_mechanism], [num_calls])
+                return composed_mech
+            else:
+                model_mech = compose([self.layer_mechanism], [self.num_layers])
+                subsample = AmplificationBySampling(PoissonSampling=True)
+                subsampled_mech = subsample(model_mech, prob=sampling_rate, improved_bound_flag=True)
+                return Composition()([subsampled_mech], [epochs])
+
+        except ZeroDivisionError:
+            return NullMechanism()
 
 
 class PrivateGraphSAGE(PrivateGNN):
@@ -139,10 +173,10 @@ class PrivateGraphSAGE(PrivateGNN):
                 conv = PrivSAGEConv(
                     in_channels=input_dim_cumulative if self.stage_type == 'skipcat' else in_channels,
                     out_channels=out_channels,
-                    perturbation_mode=self.perturbation_mode,
-                    privacy_mechanism=self.privacy_mechanism,
                     cached=(i == 0 and self.cache_first),
-                    root_weight=False,
+                    root_weight=True,
+                    perturbation=self.perturbation,
+                    mechanism=self.layer_mechanism
                 )
                 layers.append(conv)
                 input_dim_cumulative += out_channels
@@ -152,20 +186,22 @@ class PrivateGraphSAGE(PrivateGNN):
 
 @support_args
 class PrivateNodeClassifier(torch.nn.Module):
-    supported_models = {
-        'sage': PrivateGraphSAGE
-    }
+    supported_models = {'sage': PrivateGraphSAGE}
+    supported_normalizations = {'batchnorm', 'selfnorm'}
 
     def __init__(self,
-                 num_features, num_classes, privacy_mechanism, perturbation_mode,
+                 num_features, num_classes, 
+                 perturbation: dict(help='perturbation method', option='-p', choices=PrivateGNN.supported_perturbations) = 'aggr', 
+                 mechanism: dict(help='perturbation mechanism', choices=supported_mechanisms) = 'gaussian', 
+                 noise_scale: dict(help='scale parameter of the noise', option='-n') = 0.0,
                  model: dict(help='base GNN model', choices=supported_models) = 'sage',
                  hidden_dim: dict(help='dimension of the hidden layers') = 16,
                  pre_layers: dict(help='number of pre-processing linear layers') = 0,
                  mp_layers: dict(help='number of message-passing layers') = 2,
                  post_layers: dict(help='number of post-processing linear layers') = 0,
                  dropout: dict(help='dropout rate (between zero and one)') = 0.0,
-                 normalization: dict(help='type of NN normalization', choices=['batchnorm', 'selfnorm'], type=str) = None,
-                 stage: dict(help='stage type of skip connection', choices=['stack', 'skipsum', 'skipcat']) = 'stack',
+                 normalization: dict(help='type of NN normalization', choices=supported_normalizations, type=str) = None,
+                 stage: dict(help='stage type of skip connection', choices=GNN.supported_stages) = 'stack',
                  inductive=False,
                  ):
 
@@ -201,9 +237,10 @@ class PrivateNodeClassifier(torch.nn.Module):
             activation_fn=activaiton_fn, 
             batchnorm=normalization=='batchnorm', 
             cache_first=not inductive and pre_layers == 0,
-            perturbation_mode=perturbation_mode, 
-            privacy_mechanism=privacy_mechanism,
             is_pred_module=(post_layers == 0),
+            perturbation=perturbation,
+            mechanism=mechanism,
+            noise_sale=noise_scale,
         )
 
         input_dim = num_features if pre_layers + mp_layers == 0 or (pre_layers == 0 and stage == 'skipcat') else hidden_dim
@@ -238,6 +275,13 @@ class PrivateNodeClassifier(torch.nn.Module):
         h = self.post_mlp(h)
         h = F.log_softmax(h, dim=1)
         return h
+
+    @torch.no_grad()
+    def embed(self, data):
+        self.eval()
+        x = self.pre_mlp(data.x)
+        data.x = x
+        return data
 
     def training_step(self, data):
         y_true = data.y[data.train_mask]

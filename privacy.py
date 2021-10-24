@@ -1,137 +1,118 @@
+import logging
+from autodp.calibrator_zoo import eps_delta_calibrator
 import torch
 import numpy as np
 import torch.nn.functional as F
+from autodp.autodp_core import Mechanism
 import autodp.mechanism_zoo as mechanisms
-from autodp.transformer_zoo import Composition, AmplificationBySampling
+from autodp.transformer_zoo import AmplificationBySampling, Composition
 from torch_geometric.utils import remove_self_loops, add_self_loops
-from args import support_args
+
+
+class NullMechanism(Mechanism):
+    def __init__(self):
+        super().__init__()
+        self.propagate_updates((0,0), type_of_update='approxDP')
 
 
 class GaussianMechanism(mechanisms.ExactGaussianMechanism):
-    def __init__(self, sigma):
-        super().__init__(sigma=sigma)
+    def __init__(self, noise_scale):
+        super().__init__(sigma=noise_scale)
+
+    def update(self, noise_scale):
+        self.__init__(noise_scale)
 
     def perturb(self, data, sensitivity):
         std = self.params['sigma'] * sensitivity
-        return torch.normal(mean=data, std=std)
+        return torch.normal(mean=data, std=std) if std else data
+
+    def normalize(self, data):
+        return F.normalize(data, p=2, dim=-1)
+
+    def clip(self, data, c):
+        return (c / data.norm(p=2, dim=-1, keepdim=True)).clamp(max=1) * data
 
 
 class LaplaceMechanism(mechanisms.LaplaceMechanism):
-    def __init__(self, sigma):
-        super().__init__(b=sigma)
+    def __init__(self, noise_scale):
+        super().__init__(b=noise_scale)
+
+    def update(self, noise_scale):
+        self.__init__(noise_scale)
 
     def perturb(self, data, sensitivity):
         scale = self.params['b'] * sensitivity
-        return torch.distributions.Laplace(loc=data, scale=scale).sample()
-    
-
-@support_args
-class NoisyMechanism:
-
-    supported_mechanisms = {
-        'laplace': LaplaceMechanism,
-        'gaussian': GaussianMechanism
-    }
-
-    def __init__(self, 
-                 mechanism:     dict(help='perturbation mechanism', option='-m', choices=supported_mechanisms) = 'gaussian',
-                 noise_scale :  dict(help='scale parameter of the noise', option='-n', type=float) = None, 
-                 delta:         dict(help='DP delta parameter', option='-d') = 1e-6,
-                 sampling_prob = 1.0
-    ):
-        self.sigma = noise_scale
-        self.delta = delta
-        self.sampling_prob = sampling_prob
-        self.perturb_count = 0
-
-        subsample = AmplificationBySampling(PoissonSampling=True)
-        self.mechanism = self.supported_mechanisms[mechanism](self.sigma)
-        self.subsampled_mechanism = subsample(self.mechanism, self.sampling_prob, improved_bound_flag=True)
-        self.compose = Composition()
-
-    def perturb(self, data, sensitivity, account=True):
-        if self.sigma is not None:
-            data = self.mechanism.perturb(data, sensitivity=sensitivity)
-
-            if account: 
-                self.perturb_count += 1
-
-        return data
+        return torch.distributions.Laplace(loc=data, scale=scale).sample() if scale else data
 
     def normalize(self, data):
-        return F.normalize(data, p=(1 if self.mechanism is LaplaceMechanism else 2), dim=-1)
+        return F.normalize(data, p=1, dim=-1)
 
     def clip(self, data, c):
-        p = 1 if self.mechanism is LaplaceMechanism else 2
-        return (c / data.norm(p=p, dim=-1, keepdim=True)).clamp(max=1) * data
+        return (c / data.norm(p=1, dim=-1, keepdim=True)).clamp(max=1) * data
+    
 
-    def get_privacy_spent(self):
-        if self.perturb_count == 0:
-            return 1e10-1
-
-        composed_mechanism = self.compose(
-            mechanism_list=[self.subsampled_mechanism],
-            coeff_list=[self.perturb_count]
-        )
-
-        epsilon = composed_mechanism.get_approxDP(self.delta)
-        return epsilon
+supported_mechanisms = {
+    'laplace': LaplaceMechanism,
+    'gaussian': GaussianMechanism
+}
 
 
-class TopMFilter:
-    def __init__(self, eps_edges, eps_count):
-        self.eps_edges = eps_edges
-        self.eps_count = eps_count
+class TopMFilter(Mechanism):
+    def __init__(self, noise_scale):
+        super().__init__()
+        self.noise_scale = noise_scale
+        self.build()
+
+    def build(self):
+        self.mech_edges = LaplaceMechanism(self.noise_scale)         # for individual edge perturbation
+        self.mech_count = LaplaceMechanism(self.noise_scale * 9)     # for edge-count perturbation
+        composed_mech = Composition()([self.mech_edges, self.mech_count], [1,1])
+        self.set_all_representation(composed_mech)
+        return self
+
+    def update(self, noise_scale):
+        self.noise_scale = noise_scale
+        self.build()
 
     def perturb(self, data):
-        if self.eps_edges == np.inf:
+        if self.noise_scale == 0.0:
             return data
 
         data.edge_index, _ = remove_self_loops(data.edge_index)
         n = data.num_nodes
         m = data.num_edges
-        m_pert = torch.distributions.Laplace(loc=m, scale=1/self.eps_count).sample()
+        m_pert = self.mech_count.perturb(m, sensitivity=1)
         m_pert = round(m_pert.item())
-
-        theta = np.log((n * (n-1) / m_pert) - 1) / (2 * self.eps_edges) + 0.5
+        eps_edges = 1 / self.mech_edges.params['b']
+        
+        theta = np.log((n * (n-1) / m_pert) - 1) / (2 * eps_edges) + 0.5
         if theta > 1:
-            theta = np.log((n * (n-1) / (2 * m_pert)) + 0.5 *
-                           (np.exp(self.eps_edges) - 1)) / self.eps_edges
+            theta = np.log((n * (n-1) / (2 * m_pert)) + 0.5 * (np.exp(eps_edges) - 1)) / eps_edges
 
         loc = torch.ones_like(data.edge_index[0]).float()
-        sample = torch.distributions.Laplace(
-            loc, scale=1/self.eps_edges).sample()
+        sample = self.mech_edges.perturb(loc, sensitivity=1)
         edges_to_be_removed = data.edge_index[:, sample < theta]
 
-        edge_index_with_self_loops, _ = add_self_loops(
-            data.edge_index, num_nodes=data.num_nodes)
-        adjmat = self.to_sparse_adjacency(
-            edge_index_with_self_loops, num_nodes=n)
+        edge_index_with_self_loops, _ = add_self_loops(data.edge_index, num_nodes=data.num_nodes)
+        adjmat = self.to_sparse_adjacency(edge_index_with_self_loops, num_nodes=n)
         ### adjmat has m+n entries ###
 
         while True:
             adjmat = adjmat.coalesce()
             nnz = adjmat.values().size(0)
-            num_remaining_edges = m_pert + n + \
-                edges_to_be_removed.size(1) - nnz
+            num_remaining_edges = m_pert + n + edges_to_be_removed.size(1) - nnz
 
             if num_remaining_edges <= 0:
                 break
 
-            edges_to_be_added = torch.randint(
-                n, size=(2, num_remaining_edges), device=adjmat.device)
-            adjmat = adjmat + \
-                self.to_sparse_adjacency(edges_to_be_added, num_nodes=n)
+            edges_to_be_added = torch.randint(n, size=(2, num_remaining_edges), device=adjmat.device)
+            adjmat = adjmat + self.to_sparse_adjacency(edges_to_be_added, num_nodes=n)
 
-        adjmat = (adjmat.bool().int() -
-                  self.to_sparse_adjacency(edges_to_be_removed, num_nodes=n)).coalesce()
+        adjmat = (adjmat.bool().int() - self.to_sparse_adjacency(edges_to_be_removed, num_nodes=n)).coalesce()
         edge_index, values = adjmat.indices(), adjmat.values()
         data.edge_index = edge_index[:, values > 0].contiguous()
         data.edge_index, _ = remove_self_loops(data.edge_index)
         return data
-
-    def get_privacy_spent(self):
-        return self.eps_count + self.eps_edges
 
     @staticmethod
     def to_sparse_adjacency(edge_index, num_nodes):
@@ -141,3 +122,60 @@ class TopMFilter:
             size=(num_nodes, num_nodes),
             device=edge_index.device
         )
+
+
+class PrivacyEngine:
+    def __init__(self, base_mechanism, epochs, sampling_rate):
+        super().__init__()
+        self.base_mechanism = base_mechanism
+        self.epochs = epochs
+        self.sampling_rate = sampling_rate
+
+    def build(self) -> Mechanism:
+        raise NotImplementedError
+
+    def update(self, noise_scale):
+        self.base_mechanism.update(noise_scale)
+        return self.build()
+
+    def calibrate(self, eps, delta):
+        mechanism = self.update(noise_scale=1)  # just a random non-zero init
+
+        if eps == np.inf or isinstance(mechanism, NullMechanism):
+            self.base_mechanism.update(noise_scale=0.0)
+        else:
+            self.calibrate_noise_eps_delta(self.update, eps=eps, delta=delta)
+            
+        return self.base_mechanism
+
+    def get_privacy_spent(self, epochs, delta):
+        self.epochs = epochs
+        mechanism = self.build()
+        return mechanism.get_approxDP(delta)
+
+    @staticmethod
+    def calibrate_noise_eps_delta(MechanismCls, eps, delta):
+        logging.info('calibrating noise to privacy budget...')
+
+        bound = 50
+        calibrate = eps_delta_calibrator()
+        
+        while True:
+            try:
+                calibrated_mech = calibrate(MechanismCls, eps, delta, [0, bound])
+                return calibrated_mech
+            except RuntimeError:
+                logging.debug('calibrator fails to find a parameter, doubling bound and trying again...')
+                bound *= 2
+
+
+class GraphPerturbationEngine(PrivacyEngine):
+    def build(self):
+        if self.sampling_rate == 1.0:    
+            complex_mech = self.base_mechanism
+        else:
+            subsample = AmplificationBySampling(PoissonSampling=True)
+            subsampled_mech = subsample(self.base_mechanism, prob=self.sampling_rate, improved_bound_flag=True)
+            complex_mech = Composition()([subsampled_mech], [self.epochs])
+        
+        return complex_mech
