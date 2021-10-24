@@ -65,7 +65,9 @@ def support_args(Cls):
         return kwargs
 
     def from_args(args, **kwargs):
-        return Cls(**strip_unexpected_kwargs(Cls.__init__, vars(args)), **kwargs)
+        args = strip_unexpected_kwargs(Cls.__init__, vars(args))
+        args.update(kwargs)
+        return Cls(**args)
 
     def add_parameters_as_argument(parser):
         function = Cls.__init__
