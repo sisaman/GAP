@@ -2,22 +2,16 @@ import sys
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import numpy as np
 import torch
-
-from args import Enum, EnumAction, print_args, str2bool
-from datasets import Dataset
+from functools import partial
+from args import print_args, str2bool
+from datasets import Dataset, AddKNNGraph
 from loggers import Logger
-from models import PrivateNodeClassifier
+from models import PrivateGNN, PrivateNodeClassifier
 from loader import RandomSubGraphSampler
 from trainer import Trainer
-from privacy import NoisyMechanism, TopMFilter
+from privacy import TopMFilter, GraphPerturbationEngine
 from utils import timeit, colored_text, seed_everything, confidence_interval
-
-
-class Perturbation(Enum):
-    Graph = 'graph'
-    Aggregation = 'aggr'
-    Feature = 'feature'
-
+from torch_geometric.transforms import Compose
 
 @timeit
 def run(args):
@@ -29,31 +23,50 @@ def run(args):
     logger = Logger.from_args(args, enabled=args.debug, config=args)
     
     for iteration in range(args.repeats):
-        # data = dataset.clone().to('cpu' if args.cpu else 'cuda')
 
-        if args.perturbation == Perturbation.Graph:
-            mechanism = TopMFilter(eps_edges=0.9*args.epsilon, eps_count=0.1*args.epsilon)
-            data = mechanism.perturb(data)
-        else:
-            mechanism = NoisyMechanism.from_args(args)
-        
+        transforms = []
+
+        if args.pre_train:
+            logger.disable()
+            pt_model = PrivateNodeClassifier.from_args(args, 
+                num_features=data.num_features, 
+                num_classes=num_classes, 
+                inductive=args.sampling_rate<1.0,
+                pre_layers=1, mp_layers=0, post_layers=1
+            )
+            pt_trainer = Trainer.from_args(args, privacy_accountant=None, device=('cpu' if args.cpu else 'cuda'))
+            pt_dataloder = RandomSubGraphSampler.from_args(args, data=data, pin_memory=not args.cpu, use_edge_sampling=False)
+            pt_trainer.fit(pt_model, pt_dataloder)
+            transforms.append(pt_model.embed)
+            logger.enabled = args.debug
+
         model = PrivateNodeClassifier.from_args(args, 
-            num_features=data.num_features, 
+            num_features=args.hidden_dim if args.pre_train else data.num_features, 
             num_classes=num_classes, 
-            privacy_mechanism=mechanism,
-            perturbation_mode=args.perturbation.value,
-            inductive=args.sampling_prob<1.0,
+            inductive=args.sampling_rate<1.0,
         )
 
-        print(model)
-        
+        if args.perturbation == 'graph':
+            mechanism = TopMFilter(noise_scale=args.noise_scale)
+            priv_engine = GraphPerturbationEngine(mechanism, epochs=args.epochs, sampling_rate=args.sampling_rate)
+            priv_engine.calibrate(eps=args.epsilon, delta=args.delta)
+            transforms.append(mechanism.perturb)
+        else:
+            priv_engine = model.gnn.get_privacy_engine(epochs=args.epochs, sampling_rate=args.sampling_rate)
+            if args.noise_scale == 0.0:
+                priv_engine.calibrate(eps=args.epsilon, delta=args.delta)
+
+        if args.add_knn:
+            transforms.append(AddKNNGraph(args.add_knn))
+
         dataloader = RandomSubGraphSampler.from_args(args, 
             data=data, pin_memory=not args.cpu,
-            use_edge_sampling=args.perturbation!=Perturbation.Feature,
+            use_edge_sampling=args.perturbation!='feature',
+            transform=Compose(transforms)
         )
         
         trainer = Trainer.from_args(args, 
-            privacy_accountant=mechanism.get_privacy_spent, 
+            privacy_accountant=partial(priv_engine.get_privacy_spent, delta=args.delta), 
             device=('cpu' if args.cpu else 'cuda'),
         )
 
@@ -65,7 +78,6 @@ def run(args):
 
         test_acc.append(best_metrics['test/acc'])
         print('\nrun: %d\ntest/acc: %.2f\t average: %.2f' % (iteration+1, test_acc[-1], np.mean(test_acc).item()))
-        print('eps:', best_metrics['eps'], '\n')
 
     logger.enable()
     summary = {}
@@ -85,19 +97,22 @@ def main():
     # dataset args
     group_dataset = init_parser.add_argument_group('dataset arguments')
     Dataset.add_args(group_dataset)
-
-    # model args
-    group_model = init_parser.add_argument_group('model arguments')
-    PrivateNodeClassifier.add_args(group_model)
+    group_dataset.add_argument('--add-knn', type=int, default=0, help='augment graph by adding k-nn edges')
 
     # privacy args
     group_privacy = init_parser.add_argument_group('privacy arguments')
-    group_privacy.add_argument('-p', '--perturbation', type=Perturbation, action=EnumAction, default=Perturbation.Feature, help='perturbation method')
     group_privacy.add_argument('-e', '--epsilon', type=float, default=np.inf, help='DP epsilon parameter')
-    NoisyMechanism.add_args(group_privacy)
+    group_privacy.add_argument('-d', '--delta', type=float, default=1e-6, help='DP delta parameter')
+
+    # model args
+    group_model = init_parser.add_argument_group('model arguments')
+    PrivateGNN.supported_perturbations.add('graph')
+    PrivateNodeClassifier.add_args(group_model)
 
     # trainer arguments
     group_trainer = init_parser.add_argument_group('trainer arguments')
+    group_trainer.add_argument('--pre-train', help='pre-train an MLP and use its embeddings as input features', 
+                                type=str2bool, nargs='?', const=True, default=False)
     group_trainer.add_argument('--cpu', help='train on CPU', type=str2bool, nargs='?', const=True, default=not torch.cuda.is_available())
     RandomSubGraphSampler.add_args(group_trainer)
     Trainer.add_args(group_trainer)
