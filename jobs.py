@@ -1,4 +1,5 @@
 import os
+import logging
 import subprocess
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from tqdm import tqdm
@@ -61,7 +62,11 @@ class JobManager:
                 file.writelines(job_file_content)
                 file.flush()
 
-            subprocess.check_call(['qsub', file_name], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            try:
+                subprocess.check_call(['qsub', file_name], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            except subprocess.CalledProcessError as e:
+                print('\n\n', e.output, '\n\n')
+                raise e
 
         print('done')
 
