@@ -119,6 +119,7 @@ wandb
 jobs
 output
 results
+expr
 .vscode
 *.ipynb
 test
