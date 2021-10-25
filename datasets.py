@@ -84,9 +84,9 @@ class Facebook100(InMemoryDataset):
         "Texas80", "UF21", "JohnsHopkins55", "Syracuse56", "BC17", "Georgetown15", "Trinity100", "Brandeis99", "Emory27"
     ]
 
-    def __init__(self, root, name, transform=None, pre_transform=None):
+    def __init__(self, root, name, target='status', transform=None, pre_transform=None):
         self.name = name
-        self.target = 'status'
+        self.target = target
         super().__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
@@ -104,7 +104,7 @@ class Facebook100(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return 'data.pt'
+        return f'data-{self.name}-{self.target}.pt'
 
     def download(self):
         context = ssl._create_default_https_context
@@ -151,7 +151,11 @@ class Dataset:
         'amz-comp': partial(Amazon, name='computers', transform=RandomNodeSplit(split='train_rest')),
         'wiki': partial(WikiCS, transform=RandomNodeSplit(split='train_rest')),
         'reddit': partial(Reddit2, transform=Compose([FilterTopClass(5), RandomNodeSplit(split='train_rest')])),
-        'fb-harvard': partial(Facebook100, name='Harvard1', transform=RandomNodeSplit(split='train_rest')),
+        'fb-penn': partial(Facebook100, name='UPenn7', target='status', transform=RandomNodeSplit(split='train_rest')),
+        'fb-texas': partial(Facebook100, name='Texas84', target='gender', transform=RandomNodeSplit(split='train_rest')),
+        'fb-indiana': partial(Facebook100, name='Indiana69', target='major', transform=Compose([FilterTopClass(50), RandomNodeSplit(split='train_rest')])),
+        'fb-illinois': partial(Facebook100, name='UIllinois20', target='year', transform=Compose([FilterTopClass(5), RandomNodeSplit(split='train_rest')])),
+        'fb-harvard': partial(Facebook100, name='Harvard1', target='housing', transform=Compose([RandomNodeSplit(split='train_rest')])),
         'arxiv': partial(load_ogb, name='ogbn-arxiv', transform=ToUndirected()),
         # 'pubmed': partial(CitationFull, name='pubmed', transform=RandomNodeSplit(split='train_rest')),
         # 'cora': partial(CitationFull, name='cora', transform=RandomNodeSplit(split='train_rest')),
