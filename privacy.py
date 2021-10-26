@@ -17,6 +17,7 @@ class NullMechanism(Mechanism):
 
 class GaussianMechanism(mechanisms.ExactGaussianMechanism):
     def __init__(self, noise_scale):
+        self.noise_scale = noise_scale
         super().__init__(sigma=noise_scale)
 
     def update(self, noise_scale):
@@ -35,6 +36,7 @@ class GaussianMechanism(mechanisms.ExactGaussianMechanism):
 
 class LaplaceMechanism(mechanisms.LaplaceMechanism):
     def __init__(self, noise_scale):
+        self.noise_scale = noise_scale
         super().__init__(b=noise_scale)
 
     def update(self, noise_scale):
