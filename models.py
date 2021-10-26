@@ -143,21 +143,20 @@ class PrivateGNN(GNN):
         return priv_engine
 
     def build_mechanism(self, epochs, sampling_rate):
+        if self.num_layers == 0 or self.layer_mechanism.noise_scale == 0.0:
+            return NullMechanism()
+
         compose = ComposeGaussian() if isinstance(self.layer_mechanism, GaussianMechanism) else Composition()
 
-        try:
-            if sampling_rate == 1.0:
-                num_calls = int(self.cache_first) + (self.num_layers - int(self.cache_first)) * epochs
-                composed_mech = compose([self.layer_mechanism], [num_calls])
-                return composed_mech
-            else:
-                model_mech = compose([self.layer_mechanism], [self.num_layers])
-                subsample = AmplificationBySampling(PoissonSampling=True)
-                subsampled_mech = subsample(model_mech, prob=sampling_rate, improved_bound_flag=True)
-                return Composition()([subsampled_mech], [epochs])
-
-        except ZeroDivisionError:
-            return NullMechanism()
+        if sampling_rate == 1.0:
+            num_calls = int(self.cache_first) + (self.num_layers - int(self.cache_first)) * epochs
+            composed_mech = compose([self.layer_mechanism], [num_calls])
+            return composed_mech
+        else:
+            model_mech = compose([self.layer_mechanism], [self.num_layers])
+            subsample = AmplificationBySampling(PoissonSampling=True)
+            subsampled_mech = subsample(model_mech, prob=sampling_rate, improved_bound_flag=True)
+            return Composition()([subsampled_mech], [epochs])
 
 
 class PrivateGraphSAGE(PrivateGNN):
