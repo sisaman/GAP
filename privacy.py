@@ -1,5 +1,4 @@
 import logging
-from autodp.calibrator_zoo import eps_delta_calibrator
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -7,7 +6,7 @@ from autodp.autodp_core import Mechanism
 import autodp.mechanism_zoo as mechanisms
 from autodp.transformer_zoo import AmplificationBySampling, Composition
 from torch_geometric.utils import remove_self_loops, add_self_loops
-
+from scipy.optimize import minimize_scalar
 
 class NullMechanism(Mechanism):
     def __init__(self):
@@ -146,29 +145,24 @@ class PrivacyEngine:
         if eps == np.inf or isinstance(mechanism, NullMechanism):
             self.base_mechanism.update(noise_scale=0.0)
         else:
-            self.calibrate_noise_eps_delta(self.update, eps=eps, delta=delta)
+            logging.info('calibrating noise to privacy budget...')
+            noise_scale = self.eps_delta_calibrator(eps, delta)
+            logging.info(f'noise scale: {noise_scale}')
+            self.update(noise_scale)
             
-        return self.base_mechanism
-
     def get_privacy_spent(self, epochs, delta):
         self.epochs = epochs
         mechanism = self.build()
         return mechanism.get_approxDP(delta)
 
-    @staticmethod
-    def calibrate_noise_eps_delta(MechanismCls, eps, delta):
-        logging.info('calibrating noise to privacy budget...')
+    def eps_delta_calibrator(self, eps, delta):
+        fn_err = lambda x: abs(eps - self.update(x).get_approxDP(delta))
+        results = minimize_scalar(fn_err, method='bounded', bounds=[0,100], tol=1e-8, options={'maxiter': 1000000})
 
-        bound = 50
-        calibrate = eps_delta_calibrator()
-        
-        while True:
-            try:
-                calibrated_mech = calibrate(MechanismCls, eps, delta, [0, bound])
-                return calibrated_mech
-            except RuntimeError:
-                logging.debug('calibrator fails to find a parameter, doubling bound and trying again...')
-                bound *= 2
+        if results.success and results.fun < 1e-3:
+            return results.x
+        else:
+            raise RuntimeError(f"eps_delta_calibrator fails to find a parameter:\n{results}")
 
 
 class GraphPerturbationEngine(PrivacyEngine):
