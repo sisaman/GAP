@@ -14,7 +14,7 @@ class Trainer:
                  learning_rate: dict(help='learning rate') = 0.01,
                  weight_decay: dict(help='weight decay (L2 penalty)') = 0.0,
                  patience: dict(help='early-stopping patience window size') = 0,
-                 val_interval: dict(help='number of epochs to wait for validation', type=int) = None,
+                 val_interval: dict(help='number of epochs to wait for validation', type=int) = 1,
                  device = 'cuda'
                  ):
 
@@ -26,6 +26,9 @@ class Trainer:
         self.val_interval = val_interval
         self.device = device
         self.logger = Logger.get_instance()
+        self.reset()
+
+    def reset(self):
         self.model = None
         self.best_metrics = None
 
