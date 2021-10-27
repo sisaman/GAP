@@ -1,4 +1,7 @@
+from os import pread
 import sys
+import warnings
+import coloredlogs
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import numpy as np
 import torch
@@ -21,10 +24,38 @@ def run(args):
     test_acc = []
     run_metrics = {}
     logger = Logger.from_args(args, enabled=args.debug, config=args)
+
+    model = PrivateNodeClassifier.from_args(args, 
+        num_features=args.hidden_dim if args.pre_train else data.num_features, 
+        num_classes=num_classes, 
+        inductive=args.sampling_rate<1.0,
+    )
+
+    transforms = []
+
+    if args.add_knn:
+        transforms.append(AddKNNGraph(args.add_knn))
+
+    if args.perturbation == 'graph':
+        mechanism = TopMFilter(noise_scale=args.noise_scale)
+        priv_engine = GraphPerturbationEngine(mechanism, epochs=args.epochs, sampling_rate=args.sampling_rate)
+        if args.noise_scale == 0.0:
+            priv_engine.calibrate(eps=args.epsilon, delta=args.delta)
+            transforms.append(mechanism.perturb)
+    else:
+        priv_engine = model.gnn.get_privacy_engine(epochs=args.epochs, sampling_rate=args.sampling_rate)
+        if args.noise_scale == 0.0:
+            priv_engine.calibrate(eps=args.epsilon, delta=args.delta)
+
+    trainer = Trainer.from_args(args, 
+        privacy_accountant=partial(priv_engine.get_privacy_spent, delta=args.delta), 
+        device=('cpu' if args.cpu else 'cuda'),
+    )
     
     for iteration in range(args.repeats):
-
-        transforms = []
+        model.reset_parameters()
+        trainer.reset()
+        pretrain_transform = []
 
         if args.pre_train:
             logger.disable()
@@ -37,39 +68,15 @@ def run(args):
             pt_trainer = Trainer.from_args(args, privacy_accountant=None, device=('cpu' if args.cpu else 'cuda'))
             pt_dataloder = RandomSubGraphSampler.from_args(args, data=data, pin_memory=not args.cpu, use_edge_sampling=False)
             pt_trainer.fit(pt_model, pt_dataloder)
-            transforms.append(pt_model.embed)
+            pretrain_transform.append(pt_model.embed)
             logger.enabled = args.debug
-
-        model = PrivateNodeClassifier.from_args(args, 
-            num_features=args.hidden_dim if args.pre_train else data.num_features, 
-            num_classes=num_classes, 
-            inductive=args.sampling_rate<1.0,
-        )
-
-        if args.perturbation == 'graph':
-            mechanism = TopMFilter(noise_scale=args.noise_scale)
-            priv_engine = GraphPerturbationEngine(mechanism, epochs=args.epochs, sampling_rate=args.sampling_rate)
-            priv_engine.calibrate(eps=args.epsilon, delta=args.delta)
-            transforms.append(mechanism.perturb)
-        else:
-            priv_engine = model.gnn.get_privacy_engine(epochs=args.epochs, sampling_rate=args.sampling_rate)
-            if args.noise_scale == 0.0:
-                priv_engine.calibrate(eps=args.epsilon, delta=args.delta)
-
-        if args.add_knn:
-            transforms.append(AddKNNGraph(args.add_knn))
 
         dataloader = RandomSubGraphSampler.from_args(args, 
             data=data, pin_memory=not args.cpu,
             use_edge_sampling=args.perturbation!='feature',
-            transform=Compose(transforms)
+            transform=Compose(transforms+pretrain_transform)
         )
         
-        trainer = Trainer.from_args(args, 
-            privacy_accountant=partial(priv_engine.get_privacy_spent, delta=args.delta), 
-            device=('cpu' if args.cpu else 'cuda'),
-        )
-
         best_metrics = trainer.fit(model, dataloader)
 
         # process results
@@ -92,6 +99,9 @@ def run(args):
 
 
 def main():
+    warnings.filterwarnings('ignore')
+    coloredlogs.install(level='DEBUG', fmt='%(asctime)s %(module)s %(funcName)s %(levelname)s %(message)s', stream=sys.stdout)
+
     init_parser = ArgumentParser(add_help=False, conflict_handler='resolve')
 
     # dataset args

@@ -31,6 +31,12 @@ class MLP(torch.nn.Module):
             x = self.activation(x)
         
         return x
+
+    def reset_parameters(self):
+        for layer in self.layers:
+            layer.reset_parameters()
+        for bn in self.bns:
+            bn.reset_parameters()
         
 
 class GNN(torch.nn.Module):
@@ -81,6 +87,12 @@ class GNN(torch.nn.Module):
         else:
             return output
 
+    def reset_parameters(self):
+        for layer in self.layers:
+            layer.reset_parameters()
+        for bn in self.bns:
+            bn.reset_parameters()
+
 
 class PrivSAGEConv(MessagePassing):
     def __init__(self, in_channels, out_channels, root_weight, cached, perturbation, mechanism):
@@ -126,6 +138,12 @@ class PrivSAGEConv(MessagePassing):
 
         out = F.normalize(out, p=2, dim=-1)
         return out
+
+    def reset_parameters(self):
+        self.agg_cached = None
+        self.lin_l.reset_parameters()
+        if self.root_weight:
+            self.lin_r.reset_parameters()
 
 
 
@@ -206,6 +224,8 @@ class PrivateNodeClassifier(torch.nn.Module):
 
         super().__init__()
 
+        self.normalization = normalization
+
         if normalization == 'selfnorm':
             activaiton_fn = SELU(inplace=True)
             dropout_fn = AlphaDropout(dropout, inplace=True)
@@ -256,17 +276,21 @@ class PrivateNodeClassifier(torch.nn.Module):
             is_pred_module=True
         )
 
-        if normalization == 'selfnorm':
-            self.reset_parameters()
+        self.reset_parameters()
 
     def reset_parameters(self):
-        for param in self.parameters():
-            # biases zero
-            if len(param.shape) == 1:
-                torch.nn.init.constant_(param, 0)
-            # others using lecun-normal initialization
-            else:
-                torch.nn.init.kaiming_normal_(param, mode='fan_in', nonlinearity='linear')
+        if self.normalization == 'selfnorm':
+            for param in self.parameters():
+                # biases zero
+                if len(param.shape) == 1:
+                    torch.nn.init.constant_(param, 0)
+                # others using lecun-normal initialization
+                else:
+                    torch.nn.init.kaiming_normal_(param, mode='fan_in', nonlinearity='linear')
+        else:
+            self.pre_mlp.reset_parameters()
+            self.gnn.reset_parameters()
+            self.post_mlp.reset_parameters()
 
     def forward(self, data):
         h = self.pre_mlp(data.x)
