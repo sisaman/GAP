@@ -1,7 +1,8 @@
+from functools import partial
 from autodp.transformer_zoo import AmplificationBySampling, ComposeGaussian, Composition
 import torch
 import torch.nn.functional as F
-from torch.nn import AlphaDropout, SELU, ModuleList, Dropout, ReLU
+from torch.nn import SELU, ModuleList, Dropout, ReLU, PReLU
 from torch_geometric.nn import BatchNorm, MessagePassing, Linear, MessageNorm
 from utils import pairwise
 from args import support_args
@@ -17,7 +18,7 @@ class MLP(torch.nn.Module):
         self.is_pred_module = is_pred_module
         dimensions = [input_dim] + [hidden_dim] * (num_layers - 1) + [output_dim] if num_layers > 0 else []
         self.layers = ModuleList([Linear(in_channels, out_channels) for in_channels, out_channels in pairwise(dimensions)])
-        self.bns = batchnorm and ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(is_pred_module))])
+        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(is_pred_module))]) if batchnorm else []
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -56,23 +57,28 @@ class GNN(torch.nn.Module):
         self.is_pred_module = is_pred_module
         
         self.layers = self.init_layers()
-        self.bns = batchnorm and ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(is_pred_module))])
+        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(is_pred_module))]) if batchnorm else []
 
     def init_layers(self) -> ModuleList:
         raise NotImplementedError
 
+    def layer_forward(self, index, h_in, edge_index):
+        h_out = self.layers[index](h_in, edge_index)
+
+        if index == self.num_layers - 1 and self.is_pred_module:
+            return h_out
+
+        h_out = self.bns[index](h_out) if self.bns else h_out
+        h_out = self.dropout(h_out)
+        h_out = self.activation(h_out)
+        
+        return h_out
+
     def forward(self, x, edge_index):
         h_in = h_out = x
 
-        for i, conv in enumerate(self.layers):
-            h_out = conv(h_in, edge_index)
-
-            if i == self.num_layers - 1 and self.is_pred_module:
-                break
-
-            h_out = self.bns[i](h_out) if self.bns else h_out
-            h_out = self.dropout(h_out)
-            h_out = self.activation(h_out)
+        for i in range(self.num_layers):
+            h_out = self.layer_forward(i, h_in, edge_index)
             h_in = h_out = self.combine(input=h_in, output=h_out)
 
         return h_out
@@ -110,12 +116,11 @@ class PrivSAGEConv(MessagePassing):
         if self.root_weight:
             self.lin_r = Linear(in_channels, out_channels, bias=False)        
 
-        # self.mn = MessageNorm(learn_scale=True)
+        self.mn = MessageNorm(learn_scale=True)
 
     def private_aggregation(self, x, edge_index):
         if self.agg_cached is None or not self.cached:
-            if self.mechanism:
-                x = self.mechanism.normalize(x)
+            x = self.mechanism.normalize(x)
 
             if self.perturbation_mode == 'feature':    
                 x = self.mechanism.perturb(x, sensitivity=1)
@@ -131,8 +136,9 @@ class PrivSAGEConv(MessagePassing):
 
     def forward(self, x, edge_index):
         out = self.private_aggregation(x, edge_index)
-        # out = self.mn(x, out)
+        out = self.mn(x, out)
         out = self.lin_l(out)
+
         if self.root_weight:
             out += self.lin_r(x)
 
@@ -146,14 +152,17 @@ class PrivSAGEConv(MessagePassing):
             self.lin_r.reset_parameters()
 
 
-
 class PrivateGNN(GNN):
     supported_perturbations = {'feature', 'aggr'}
-    
     def __init__(self, perturbation, mechanism, noise_sale, *args, **kwargs):
         self.perturbation = perturbation
         self.layer_mechanism = supported_mechanisms[mechanism](noise_sale)
         super().__init__(*args, **kwargs)
+
+        self.activation_bias = int(isinstance(self.activation, ReLU))
+
+    def layer_forward(self, index, h_in, edge_index):
+        return super().layer_forward(index, h_in, edge_index)# + self.activation_bias
 
     def get_privacy_engine(self, epochs, sampling_rate):
         priv_engine = PrivacyEngine(self.layer_mechanism, epochs=epochs, sampling_rate=sampling_rate)
@@ -205,6 +214,7 @@ class PrivateGraphSAGE(PrivateGNN):
 class PrivateNodeClassifier(torch.nn.Module):
     supported_models = {'sage': PrivateGraphSAGE}
     supported_normalizations = {'batchnorm', 'selfnorm'}
+    supported_activations = {'relu': partial(ReLU, inplace=True), 'selu': partial(SELU, inplace=True), 'prelu': partial(PReLU)}
 
     def __init__(self,
                  num_features, num_classes, 
@@ -216,22 +226,18 @@ class PrivateNodeClassifier(torch.nn.Module):
                  pre_layers: dict(help='number of pre-processing linear layers') = 0,
                  mp_layers: dict(help='number of message-passing layers') = 2,
                  post_layers: dict(help='number of post-processing linear layers') = 0,
+                 activation: dict(help='type of activation function', choices=supported_activations) = 'relu',
                  dropout: dict(help='dropout rate (between zero and one)') = 0.0,
-                 normalization: dict(help='type of NN normalization', choices=supported_normalizations, type=str) = None,
+                 batchnorm: dict(help='if True, then model uses batch normalization') = True,
                  stage: dict(help='stage type of skip connection', choices=GNN.supported_stages) = 'stack',
                  inductive=False,
                  ):
 
         super().__init__()
 
-        self.normalization = normalization
-
-        if normalization == 'selfnorm':
-            activaiton_fn = SELU(inplace=True)
-            dropout_fn = AlphaDropout(dropout, inplace=True)
-        else:
-            activaiton_fn = ReLU(inplace=True)
-            dropout_fn = Dropout(dropout, inplace=True)
+        
+        activaiton_fn = self.supported_activations[activation]()
+        dropout_fn = Dropout(dropout, inplace=True)
 
         self.pre_mlp = MLP(
             input_dim=num_features, 
@@ -240,7 +246,7 @@ class PrivateNodeClassifier(torch.nn.Module):
             num_layers=pre_layers, 
             activation_fn=activaiton_fn, 
             dropout_fn=dropout_fn, 
-            batchnorm=normalization=='batchnorm',
+            batchnorm=batchnorm,
             is_pred_module=(mp_layers + post_layers == 0)
         )
 
@@ -254,7 +260,7 @@ class PrivateNodeClassifier(torch.nn.Module):
             stage_type=stage, 
             dropout_fn=dropout_fn, 
             activation_fn=activaiton_fn, 
-            batchnorm=normalization=='batchnorm', 
+            batchnorm=batchnorm, 
             cache_first=not inductive and pre_layers == 0,
             is_pred_module=(post_layers == 0),
             perturbation=perturbation,
@@ -272,25 +278,16 @@ class PrivateNodeClassifier(torch.nn.Module):
             num_layers=post_layers, 
             activation_fn=activaiton_fn, 
             dropout_fn=dropout_fn, 
-            batchnorm=normalization=='batchnorm',
+            batchnorm=batchnorm,
             is_pred_module=True
         )
 
         self.reset_parameters()
 
     def reset_parameters(self):
-        if self.normalization == 'selfnorm':
-            for param in self.parameters():
-                # biases zero
-                if len(param.shape) == 1:
-                    torch.nn.init.constant_(param, 0)
-                # others using lecun-normal initialization
-                else:
-                    torch.nn.init.kaiming_normal_(param, mode='fan_in', nonlinearity='linear')
-        else:
-            self.pre_mlp.reset_parameters()
-            self.gnn.reset_parameters()
-            self.post_mlp.reset_parameters()
+        self.pre_mlp.reset_parameters()
+        self.gnn.reset_parameters()
+        self.post_mlp.reset_parameters()
 
     def forward(self, data):
         h = self.pre_mlp(data.x)
