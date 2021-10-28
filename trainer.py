@@ -40,12 +40,12 @@ class Trainer:
         if self.best_metrics is None:
             return True
         else:
-            return metrics['val/loss'] < self.best_metrics['val/loss']
+            return metrics['val/acc'] > self.best_metrics['val/acc']
 
     def fit(self, model, dataloader):
         self.model = model.to(self.device)
         optimizer = self.configure_optimizer()
-        self.logger.watch(self.model)
+        # self.logger.watch(self.model)
 
         num_epochs_without_improvement = 0
         self.best_metrics = None
