@@ -4,8 +4,8 @@ from functools import partial
 import torch
 import torch.nn.functional as F
 from torch_geometric.utils import remove_self_loops, subgraph
-from torch_geometric.datasets import FacebookPagePage, LastFMAsia, Coauthor, Amazon, WikiCS, Reddit2
-from torch_geometric.transforms import RandomNodeSplit, Compose, ToUndirected, BaseTransform
+from torch_geometric.datasets import FacebookPagePage, LastFMAsia, Coauthor, Amazon, WikiCS, Reddit2, CitationFull, GitHub
+from torch_geometric.transforms import RandomNodeSplit, Compose, BaseTransform
 from ogb.nodeproppred import PygNodePropPredDataset
 import pandas as pd
 from scipy.io import loadmat
@@ -115,8 +115,7 @@ class Facebook100(InMemoryDataset):
     def process(self):
 
         mat = loadmat(os.path.join(self.raw_dir, self.raw_file_names))
-        features = pd.DataFrame(
-            mat['local_info'][:, :-1], columns=self.targets)
+        features = pd.DataFrame(mat['local_info'][:, :-1], columns=self.targets)
         y = torch.from_numpy(LabelEncoder().fit_transform(features[self.target]))
         if 0 in features[self.target].values:
             y = y - 1
@@ -145,24 +144,30 @@ class Facebook100(InMemoryDataset):
 @support_args
 class Dataset:
     supported_datasets = {
+        # main datasets
         'facebook': partial(FacebookPagePage, transform=RandomNodeSplit(split='train_rest')),
+        'reddit': partial(Reddit2, transform=Compose([FilterTopClass(6), RandomNodeSplit(split='train_rest')])),
+        'fb-illinois': partial(Facebook100, name='UIllinois20', target='year', transform=Compose([FilterTopClass(5), RandomNodeSplit(split='train_rest')])),
         'lastfm': partial(LastFMAsia, transform=Compose([FilterTopClass(10), RandomNodeSplit(split='train_rest')])),
-        'co-ph': partial(Coauthor, name='physics', transform=RandomNodeSplit(split='train_rest')),
+
+        # backup datasets
         'amz-comp': partial(Amazon, name='computers', transform=RandomNodeSplit(split='train_rest')),
-        'wiki': partial(WikiCS, transform=RandomNodeSplit(split='train_rest')),
-        'reddit': partial(Reddit2, transform=Compose([FilterTopClass(5), RandomNodeSplit(split='train_rest')])),
+        'amz-photo': partial(Amazon, name='photo', transform=RandomNodeSplit(split='train_rest')),
         'fb-penn': partial(Facebook100, name='UPenn7', target='status', transform=RandomNodeSplit(split='train_rest')),
         'fb-texas': partial(Facebook100, name='Texas84', target='gender', transform=RandomNodeSplit(split='train_rest')),
-        'fb-indiana': partial(Facebook100, name='Indiana69', target='major', transform=Compose([FilterTopClass(50), RandomNodeSplit(split='train_rest')])),
-        'fb-illinois': partial(Facebook100, name='UIllinois20', target='year', transform=Compose([FilterTopClass(5), RandomNodeSplit(split='train_rest')])),
-        'fb-harvard': partial(Facebook100, name='Harvard1', target='housing', transform=Compose([RandomNodeSplit(split='train_rest')])),
-        'arxiv': partial(load_ogb, name='ogbn-arxiv', transform=ToUndirected()),
-        # 'pubmed': partial(CitationFull, name='pubmed', transform=RandomNodeSplit(split='train_rest')),
-        # 'cora': partial(CitationFull, name='cora', transform=RandomNodeSplit(split='train_rest')),
-        # 'citeseer': partial(CitationFull, name='citeseer', transform=RandomNodeSplit(split='train_rest')),
-        # 'github': partial(GitHub, transform=RandomNodeSplit(split='train_rest')),
-        # 'co-cs': partial(Coauthor, name='cs', transform=RandomNodeSplit(split='train_rest')),
-        # 'amz-photo': partial(Amazon, name='photo', transform=RandomNodeSplit(split='train_rest')),
+
+        # other datasets
+        'co-ph': partial(Coauthor, name='physics', transform=RandomNodeSplit(split='train_rest')),
+        'co-cs': partial(Coauthor, name='cs', transform=RandomNodeSplit(split='train_rest')),
+        'wiki': partial(WikiCS, transform=RandomNodeSplit(split='train_rest')),
+        'fb-indiana': partial(Facebook100, name='Indiana69', target='major', transform=Compose([FilterTopClass(10), RandomNodeSplit(split='train_rest')])),
+        'fb-harvard': partial(Facebook100, name='Harvard1', target='housing', transform=Compose([FilterTopClass(12), RandomNodeSplit(split='train_rest')])),
+        'pubmed': partial(CitationFull, name='pubmed', transform=RandomNodeSplit(split='train_rest')),
+        'cora': partial(CitationFull, name='cora', transform=RandomNodeSplit(split='train_rest')),
+        'citeseer': partial(CitationFull, name='citeseer', transform=RandomNodeSplit(split='train_rest')),
+        'github': partial(GitHub, transform=RandomNodeSplit(split='train_rest')),
+
+        # 'arxiv': partial(load_ogb, name='ogbn-arxiv', transform=ToUndirected()),
         # 'deezer': partial(DeezerEurope, transform=RandomNodeSplit(split='train_rest')),
         # 'twitch-de': partial(Twitch, name='DE', transform=RandomNodeSplit(split='train_rest')),
     }
