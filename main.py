@@ -1,4 +1,3 @@
-from os import pread
 import sys
 import warnings
 import coloredlogs
@@ -100,14 +99,15 @@ def run(args):
 
 def main():
     warnings.filterwarnings('ignore')
-    coloredlogs.install(level='DEBUG', fmt='%(asctime)s %(module)s %(funcName)s %(levelname)s %(message)s', stream=sys.stdout)
-
+    coloredlogs.DEFAULT_FIELD_STYLES['levelname']['color'] = 256
+    coloredlogs.install(level='INFO', fmt='%(asctime)s %(module)s %(funcName)s %(levelname)s %(message)s', stream=sys.stdout)
+    
     init_parser = ArgumentParser(add_help=False, conflict_handler='resolve')
 
     # dataset args
     group_dataset = init_parser.add_argument_group('dataset arguments')
     Dataset.add_args(group_dataset)
-    group_dataset.add_argument('--add-knn', type=int, default=0, help='augment graph by adding k-nn edges')
+    group_dataset.add_argument('--add-knn', '--add_knn', type=int, default=0, help='augment graph by adding k-nn edges')
 
     # privacy args
     group_privacy = init_parser.add_argument_group('privacy arguments')
@@ -121,7 +121,7 @@ def main():
 
     # trainer arguments
     group_trainer = init_parser.add_argument_group('trainer arguments')
-    group_trainer.add_argument('--pre-train', help='pre-train an MLP and use its embeddings as input features', 
+    group_trainer.add_argument('--pre-train', '--pre_train', help='pre-train an MLP and use its embeddings as input features', 
                                 type=str2bool, nargs='?', const=True, default=False)
     group_trainer.add_argument('--cpu', help='train on CPU', type=str2bool, nargs='?', const=True, default=not torch.cuda.is_available())
     RandomSubGraphSampler.add_args(group_trainer)
