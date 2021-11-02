@@ -53,6 +53,7 @@ class JobManager:
                 f'#$ -e {self.jobs_dir}\n',
                 f'#$ -cwd\n',
                 f'#$ -V\n',
+                f'export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:10240\n',
                 f'python jobs.py -n {self.name} exec --id $SGE_TASK_ID \n'
             ]
 
@@ -77,7 +78,7 @@ class JobManager:
             with open(os.path.join(self.jobs_dir, f'{self.name}.jobs')) as jobs_file:
                 job_list = jobs_file.read().splitlines()
 
-            self.cmd_generator = lambda args: [job_list[i - 1] for i, _, _ in failed_jobs]
+            self.cmd_generator = lambda _: [job_list[i - 1] for i, _, _ in failed_jobs]
             self.name = f'{self.name}-resubmit'
             self.create()
             self.submit()
