@@ -4,8 +4,8 @@ from functools import partial
 import torch
 import torch.nn.functional as F
 from torch_geometric.utils import remove_self_loops, subgraph
-from torch_geometric.datasets import FacebookPagePage, LastFMAsia, Coauthor, Amazon, WikiCS, Reddit2, CitationFull, GitHub
-from torch_geometric.transforms import RandomNodeSplit, Compose, BaseTransform
+from torch_geometric.datasets import FacebookPagePage, LastFMAsia, Amazon, Reddit2
+from torch_geometric.transforms import RandomNodeSplit, Compose, BaseTransform, ToUndirected, RemoveIsolatedNodes
 from ogb.nodeproppred import PygNodePropPredDataset
 import pandas as pd
 from scipy.io import loadmat
@@ -13,6 +13,7 @@ from torch_geometric.data import Data, InMemoryDataset, download_url
 from sklearn.preprocessing import LabelEncoder
 from torch_geometric.utils import from_scipy_sparse_matrix
 from torch_geometric.nn import knn_graph
+from torch_sparse import SparseTensor
 from args import support_args
 
 
@@ -32,19 +33,74 @@ def load_ogb(name, transform=None, **kwargs):
     return [data]
 
 
-class FilterTopClass(BaseTransform):
-    def __init__(self, num_classes):
-        self.num_classes = num_classes
+# def load_imdb(transform=None, **kwargs):
+#     dataset = IMDB(**kwargs)
+#     data = dataset[0]
+#     data = ToSparseTensor()(data)
+
+#     adj = data[('actor', 'to', 'movie')]['adj_t']
+#     adj = adj.matmul(adj.t())
+#     edge_index = adj.to_torch_sparse_coo_tensor().coalesce().indices()
+
+#     data = data['movie']
+#     data = Data(x=data.x, y=data.y, edge_index=edge_index)
+
+#     if transform:
+#         data = transform(data)
+
+#     return [data]
+
+
+
+# def load_gnn_benchmark(name, transform=None, **kwargs):
+#     train_dataset = GNNBenchmarkDataset(name=name, split='train', **kwargs)
+#     val_dataset = GNNBenchmarkDataset(name=name, split='val', **kwargs)
+#     test_dataset = GNNBenchmarkDataset(name=name, split='test', **kwargs)
+
+#     data_list = [data for data in train_dataset] + [data for data in val_dataset] + [data for data in test_dataset]
+#     loader = DataLoader(data_list, batch_size=len(data_list), shuffle=False)
+
+#     batch = [data for data in loader][0]
+#     data = Data(x=batch.x, y=batch.y, edge_index=batch.edge_index)
+
+#     data.train_mask = torch.zeros_like(data.y, dtype=bool)
+#     data.val_mask = torch.zeros_like(data.y, dtype=bool)
+#     data.test_mask = torch.zeros_like(data.y, dtype=bool)
+
+#     num_train = len(train_dataset)
+#     num_val = len(val_dataset)
+
+#     data.train_mask[:num_train] = True
+#     data.val_mask[num_train:num_train+num_val] = True
+#     data.test_mask[num_train+num_val:] = True
+    
+#     if transform:
+#         data = transform(data)
+        
+#     return [data]
+
+
+class FilterClass(BaseTransform):
+    def __init__(self, top_k=None, include=None):
+        assert top_k is None or top_k > 0
+        assert include is None or len(include) > 0
+        self.top_k = top_k
+        self.include = include
 
     def __call__(self, data):
+        num_classes = data.y.max() + 1
+        include = list(range(num_classes)) if self.include is None else self.include
+        top_k = len(include) if self.top_k is None else self.top_k
+
         y = torch.nn.functional.one_hot(data.y)
+        y = y[:, include]
         c = y.sum(dim=0).sort(descending=True)
-        y = y[:, c.indices[:self.num_classes]]
+        y = y[:, c.indices[:top_k]]
         idx = y.sum(dim=1).bool()
 
         data.x = data.x[idx]
         data.y = y[idx].argmax(dim=1)
-        data.num_nodes = data.y.size(0)
+        # data.num_nodes = data.y.size(0)
         data.edge_index, data.edge_attr = subgraph(idx, data.edge_index, data.edge_attr, relabel_nodes=True)
 
         if 'train_mask' in data:
@@ -145,57 +201,68 @@ class Facebook100(InMemoryDataset):
 class Dataset:
     supported_datasets = {
         # main datasets
-        'facebook': partial(FacebookPagePage, transform=RandomNodeSplit(split='train_rest')),
-        'reddit': partial(Reddit2, transform=Compose([FilterTopClass(6), RandomNodeSplit(split='train_rest')])),
-        'fb-illinois': partial(Facebook100, name='UIllinois20', target='year', transform=Compose([FilterTopClass(5), RandomNodeSplit(split='train_rest')])),
-        'lastfm': partial(LastFMAsia, transform=Compose([FilterTopClass(10), RandomNodeSplit(split='train_rest')])),
+        'facebook': FacebookPagePage,
+        'reddit': partial(Reddit2, transform=FilterClass(6)),
+        'fb-illinois': partial(Facebook100, name='UIllinois20', target='year', transform=FilterClass(5)),
+        'products': partial(load_ogb, name='ogbn-products', transform=FilterClass(include=[7,  6,  3, 12,  2])),
 
         # backup datasets
-        'amz-comp': partial(Amazon, name='computers', transform=RandomNodeSplit(split='train_rest')),
-        'amz-photo': partial(Amazon, name='photo', transform=RandomNodeSplit(split='train_rest')),
-        'fb-penn': partial(Facebook100, name='UPenn7', target='status', transform=RandomNodeSplit(split='train_rest')),
-        'fb-texas': partial(Facebook100, name='Texas84', target='gender', transform=RandomNodeSplit(split='train_rest')),
+        'lastfm': partial(LastFMAsia, transform=FilterClass(10)),
+        'amz-comp': partial(Amazon, name='computers'),
+        'amz-photo': partial(Amazon, name='photo'),
+        'fb-penn': partial(Facebook100, name='UPenn7', target='status'),
+        'fb-texas': partial(Facebook100, name='Texas84', target='gender'),
 
         # other datasets
-        'co-ph': partial(Coauthor, name='physics', transform=RandomNodeSplit(split='train_rest')),
-        'co-cs': partial(Coauthor, name='cs', transform=RandomNodeSplit(split='train_rest')),
-        'wiki': partial(WikiCS, transform=RandomNodeSplit(split='train_rest')),
-        'fb-indiana': partial(Facebook100, name='Indiana69', target='major', transform=Compose([FilterTopClass(10), RandomNodeSplit(split='train_rest')])),
-        'fb-harvard': partial(Facebook100, name='Harvard1', target='housing', transform=Compose([FilterTopClass(12), RandomNodeSplit(split='train_rest')])),
-        'pubmed': partial(CitationFull, name='pubmed', transform=RandomNodeSplit(split='train_rest')),
-        'cora': partial(CitationFull, name='cora', transform=RandomNodeSplit(split='train_rest')),
-        'citeseer': partial(CitationFull, name='citeseer', transform=RandomNodeSplit(split='train_rest')),
-        'github': partial(GitHub, transform=RandomNodeSplit(split='train_rest')),
-
+        # 'co-ph': partial(Coauthor, name='physics'),
+        # 'co-cs': partial(Coauthor, name='cs'),
+        # 'wiki': WikiCS,
+        # 'fb-indiana': partial(Facebook100, name='Indiana69', target='major', transform=FilterClass(10)),
+        # 'fb-harvard': partial(Facebook100, name='Harvard1', target='housing', transform=FilterClass(12)),
+        # 'pubmed': partial(CitationFull, name='pubmed'),
+        # 'cora': partial(CitationFull, name='cora'),
+        # 'citeseer': partial(CitationFull, name='citeseer'),
+        # 'github': GitHub,
+        # 'flickr': Flickr,
+        # 'pattern': partial(load_gnn_benchmark, name='PATTERN'),
+        # 'cluster': partial(load_gnn_benchmark, name='CLUSTER'),
+        # 'imdb': load_imdb,
+        # 'BlogCatalog': partial(AttributedGraphDataset, name='BlogCatalog'),
+        # 'Flickr': partial(AttributedGraphDataset, name='Flickr'),
+        # 'Facebook': partial(AttributedGraphDataset, name='Facebook'),
+        # 'Twitter': partial(AttributedGraphDataset, name='Twitter'),
+        # 'TWeibo': partial(AttributedGraphDataset, name='TWeibo'),
         # 'arxiv': partial(load_ogb, name='ogbn-arxiv', transform=ToUndirected()),
-        # 'deezer': partial(DeezerEurope, transform=RandomNodeSplit(split='train_rest')),
-        # 'twitch-de': partial(Twitch, name='DE', transform=RandomNodeSplit(split='train_rest')),
+        # 'deezer': DeezerEurope,
+        # 'twitch-de': partial(Twitch, name='DE'),
     }
 
     def __init__(self,
                  dataset:    dict(help='name of the dataset', choices=supported_datasets) = 'reddit',
                  data_dir:   dict(help='directory to store the dataset') = './datasets',
-                 feature:    dict(help='type of node feature ("raw" for original features, "rand" for random features)') = 'raw',
                  normalize:  dict(help='if set to true, row-normalizes features') = False
                  ):
         self.name = dataset
         self.data_dir = data_dir
-        self.feature = feature
         self.normalize = normalize
 
     def load(self):
         data = self.supported_datasets[self.name](root=os.path.join(self.data_dir, self.name))[0]
         data.edge_index, _ = remove_self_loops(data.edge_index)
 
-        if self.feature == 'rand':
-            data.x = torch.randn_like(data.x)
-        elif self.feature == 'one':
-            data.x = torch.ones_like(data.x)
-        elif self.feature == 'pca' and data.num_features > 32:
-            _, _, V = torch.pca_lowrank(data.x, q=32)
-            data.x = torch.matmul(data.x, V[:, :32])
+        if isinstance(data.x, SparseTensor):
+            data.x = data.x.to_dense()
 
         if self.normalize:
             data.x = F.normalize(data.x, p=2., dim=-1)
 
+        transforms = [
+            RemoveIsolatedNodes(),            
+            ToUndirected(),
+        ]
+
+        if not hasattr(data, 'train_mask'):
+            transforms.append(RandomNodeSplit(split='train_rest'))
+
+        data = Compose(transforms)(data)
         return data
