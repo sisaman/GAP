@@ -1,7 +1,9 @@
 import enum
 import inspect
+import logging
+from tabulate import tabulate
 from argparse import ArgumentTypeError, Action
-from utils import colored_text, TermColors
+from utils import colored_text
 
 
 class Enum(enum.Enum):
@@ -64,7 +66,7 @@ def support_args(Cls):
         kwargs = {arg: value for arg, value in kwargs.items() if arg in parameters}
         return kwargs
 
-    def from_args(args, **kwargs):
+    def from_args(args, **kwargs) -> Cls:
         args = strip_unexpected_kwargs(Cls.__init__, vars(args))
         args.update(kwargs)
         return Cls(**args)
@@ -104,5 +106,24 @@ def support_args(Cls):
 
 
 def print_args(args):
-    message = [f'{name}: {colored_text(str(value), TermColors.FG.cyan)}' for name, value in vars(args).items()]
-    print(', '.join(message) + '\n')
+    col = 0
+    data = {}
+    keys = []
+    vals = []
+    num_rows = 7
+
+    for i, (key, val) in enumerate(vars(args).items()):
+        keys.append(colored_text(key, color='cyan', style='bright'))
+        vals.append(val)
+        if (i + 1) % num_rows == 0:
+            data[col] = keys
+            data[col+1] = vals
+            keys = []
+            vals = []
+            col += 2
+
+    data[col] = keys
+    data[col+1] = vals
+
+    message = 'program arguments\n' + tabulate(data, tablefmt='simple') + '\n'
+    logging.info(message)
