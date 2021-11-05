@@ -1,9 +1,10 @@
 import random
 import time
-import enum
 import functools
+import logging
 import numpy as np
 import torch
+import colorama
 from itertools import tee
 
 
@@ -49,51 +50,14 @@ def timeit(func):
         start = time.time()
         out = func(*args, **kwargs)
         end = time.time()
-        print(f'\nTotal time spent in {str(func.__name__)}:', end - start, 'seconds.\n\n')
+        logging.info(f'Total time spent in {str(func.__name__)}: {(end - start):.2f} seconds.\n\n')
         return out
 
     return wrapper
 
 
-def colored_text(msg, color):
-    if isinstance(color, str):
-        color = TermColors.FG.__dict__[color]
-    return color.value + msg + TermColors.Control.reset.value
-
-
-class TermColors:
-    class Control(enum.Enum):
-        reset = '\033[0m'
-        bold = '\033[01m'
-        disable = '\033[02m'
-        underline = '\033[04m'
-        reverse = '\033[07m'
-        strikethrough = '\033[09m'
-        invisible = '\033[08m'
-
-    class FG(enum.Enum):
-        black = '\033[30m'
-        red = '\033[31m'
-        green = '\033[32m'
-        orange = '\033[33m'
-        blue = '\033[34m'
-        purple = '\033[35m'
-        cyan = '\033[36m'
-        lightgrey = '\033[37m'
-        darkgrey = '\033[90m'
-        lightred = '\033[91m'
-        lightgreen = '\033[92m'
-        yellow = '\033[93m'
-        lightblue = '\033[94m'
-        pink = '\033[95m'
-        lightcyan = '\033[96m'
-
-    class BG(enum.Enum):
-        black = '\033[40m'
-        red = '\033[41m'
-        green = '\033[42m'
-        orange = '\033[43m'
-        blue = '\033[44m'
-        purple = '\033[45m'
-        cyan = '\033[46m'
-        lightgrey = '\033[47m'
+def colored_text(msg, color, style='normal'):
+    color = colorama.Fore.__dict__[color.upper()]
+    style = colorama.Style.__dict__[style.upper()]
+    text = style + color + msg + colorama.Style.RESET_ALL
+    return text
