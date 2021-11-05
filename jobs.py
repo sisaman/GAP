@@ -47,7 +47,7 @@ class JobManager:
                 f'#$ -N {self.name}-{begin}-{end}\n',
                 f'#$ -S /bin/bash\n',
                 f'#$ -P ai4media\n',
-                f'#$ -l pytorch,sgpu,gpumem=20\n',
+                f'#$ -l pytorch,sgpu,gpumem=24\n',
                 f'#$ -t {begin}-{end}\n',
                 f'#$ -o {self.jobs_dir}\n',
                 f'#$ -e {self.jobs_dir}\n',
