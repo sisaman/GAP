@@ -71,7 +71,7 @@ def run(args):
         logging.info(f'run: {iteration + 1}')
         model.reset_parameters()
         trainer.reset()
-        pretrain_transform = []
+        pre_transforms = []
 
         if args.pre_train:
             logger.disable()
@@ -84,13 +84,13 @@ def run(args):
             pt_trainer = Trainer.from_args(args, privacy_accountant=None, device=('cpu' if args.cpu else 'cuda'))
             pt_dataloder = RandomSubGraphSampler.from_args(args, data=data, pin_memory=not args.cpu, use_edge_sampling=False)
             pt_trainer.fit(pt_model, pt_dataloder)
-            pretrain_transform.append(pt_model.embed)
+            pre_transforms.append(pt_model.cpu().embed)
             logger.enabled = args.debug
 
         dataloader = RandomSubGraphSampler.from_args(args, 
             data=data, pin_memory=not args.cpu,
             use_edge_sampling=args.perturbation!='feature',
-            transform=Compose(transforms+pretrain_transform)
+            transform=Compose(pre_transforms + transforms),
         )
         
         best_metrics = trainer.fit(model, dataloader)

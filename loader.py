@@ -1,4 +1,5 @@
 import torch
+from torch_geometric.data import Data
 from torch_geometric.utils import remove_isolated_nodes, subgraph
 from args import support_args
 
@@ -22,7 +23,10 @@ class RandomSubGraphSampler(torch.utils.data.DataLoader):
         self.E = data.num_edges
         pin_memory = pin_memory and (sampling_rate < 1)
         self.sampler_fn = self.sample_edges if use_edge_sampling else self.sample_nodes
-        self.data = transform(data) if transform and sampling_rate == 1.0 else data
+        
+        self.data = Data(**data._store)
+        if transform is not None and sampling_rate == 1.0:
+            self.data = transform(self.data)
 
         super().__init__(self, batch_size=1, collate_fn=self.__collate__, num_workers=num_workers, pin_memory=pin_memory)
 
@@ -45,24 +49,23 @@ class RandomSubGraphSampler(torch.utils.data.DataLoader):
     def __len__(self):
         return self.num_steps
 
-    def __collate__(self, _):
-        data = self.data
-        
+    def __collate__(self, _):        
         if self.sampling_rate < 1.0:
             node_mask, edge_index = self.sampler_fn()
 
-            data = self.data.__class__()
-            data.edge_index = edge_index
-
-            for key, item in self.data:
-                if key in ['num_nodes', 'edge_index']:
-                    continue
-                if isinstance(item, torch.Tensor) and item.size(0) == self.N:
-                    data[key] = item[node_mask]
-                else:
-                    data[key] = item
+            data = Data(
+                x=self.data.x[node_mask], 
+                y=self.data.y[node_mask], 
+                train_mask=self.data.train_mask[node_mask],
+                val_mask=self.data.val_mask[node_mask],
+                test_mask=self.data.test_mask[node_mask],
+                edge_index=edge_index
+            )
 
             if self.transform:
                 data = self.transform(data)
 
-        return data
+            return data
+
+        else:
+            return self.data
