@@ -22,6 +22,7 @@ from torch_geometric.utils import degree
 def run(args):
     data = Dataset.from_args(args).load()
     num_classes = data.y.max().item() + 1
+    device = 'cpu' if args.cpu else 'cuda'
 
     stat = {
         'name': args.dataset,
@@ -62,10 +63,8 @@ def run(args):
         if args.noise_scale == 0.0:
             priv_engine.calibrate(eps=args.epsilon, delta=args.delta)
 
-    trainer = Trainer.from_args(args, 
-        privacy_accountant=partial(priv_engine.get_privacy_spent, delta=args.delta), 
-        device=('cpu' if args.cpu else 'cuda'),
-    )
+    trainer: Trainer = Trainer.from_args(args, device=device)
+    trainer.privacy_accountant = partial(priv_engine.get_privacy_spent, delta=args.delta)
     
     for iteration in range(args.repeats):
         logging.info(f'run: {iteration + 1}')
@@ -81,14 +80,14 @@ def run(args):
                 inductive=args.sampling_rate<1.0,
                 pre_layers=1, mp_layers=0, post_layers=1
             )
-            pt_trainer = Trainer.from_args(args, privacy_accountant=None, device=('cpu' if args.cpu else 'cuda'))
-            pt_dataloder = RandomSubGraphSampler.from_args(args, data=data, pin_memory=not args.cpu, use_edge_sampling=False)
+            pt_trainer: Trainer = Trainer.from_args(args, device=device)
+            pt_dataloder = RandomSubGraphSampler.from_args(args, data=data, device=device, use_edge_sampling=False)
             pt_trainer.fit(pt_model, pt_dataloder)
-            pre_transforms.append(pt_model.cpu().embed)
+            pre_transforms.append(pt_model.embed)
             logger.enabled = args.debug
 
         dataloader = RandomSubGraphSampler.from_args(args, 
-            data=data, pin_memory=not args.cpu,
+            data=data, device=device,
             use_edge_sampling=args.perturbation!='feature',
             transform=Compose(pre_transforms + transforms),
         )

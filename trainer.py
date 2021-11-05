@@ -9,7 +9,6 @@ from loggers import Logger
 @support_args
 class Trainer:
     def __init__(self,
-                 privacy_accountant,
                  optimizer: dict(help='optimization algorithm', choices=['sgd', 'adam']) = 'adam',
                  learning_rate: dict(help='learning rate') = 0.01,
                  weight_decay: dict(help='weight decay (L2 penalty)') = 0.0,
@@ -18,7 +17,7 @@ class Trainer:
                  device = 'cuda'
                  ):
 
-        self.privacy_accountant = privacy_accountant
+        self.privacy_accountant = None
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
         self.optimizer_name = optimizer
@@ -45,7 +44,6 @@ class Trainer:
     def fit(self, model, dataloader):
         self.model = model.to(self.device)
         optimizer = self.configure_optimizer()
-        # self.logger.watch(self.model)
 
         num_epochs_without_improvement = 0
         self.best_metrics = None
@@ -56,8 +54,6 @@ class Trainer:
                              file=sys.stdout)
                              
         for epoch, data in epoch_progbar:
-            data = data.to(self.device)
-
             metrics = {'epoch': epoch}
             train_metrics = self._train(data, optimizer)
             metrics.update(**train_metrics)
