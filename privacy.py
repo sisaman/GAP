@@ -147,7 +147,7 @@ class PrivacyEngine:
         else:
             logging.info('calibrating noise to privacy budget...')
             noise_scale = self.eps_delta_calibrator(eps, delta)
-            logging.info(f'noise scale: {noise_scale}')
+            logging.info(f'noise scale: {noise_scale:.4f}\n')
             self.update(noise_scale)
             
     def get_privacy_spent(self, epochs, delta):
