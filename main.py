@@ -33,6 +33,13 @@ def run(args):
         inductive=args.sampling_rate<1.0,
     )
 
+    if args.pre_train:
+        pt_model = PrivateNodeClassifier.from_args(args, 
+            num_classes=num_classes, 
+            inductive=args.sampling_rate<1.0,
+            pre_layers=1, mp_layers=0, post_layers=1
+        )
+
     ### calibrate noise to privacy budget ###
 
     if args.perturbation == 'graph':
@@ -48,6 +55,16 @@ def run(args):
 
     noise_scale = Calibrator(mechanism_builder).calibrate(eps=args.epsilon, delta=args.delta)
     mechanism.update(noise_scale=noise_scale)
+
+    accountant = lambda epochs: mechanism.build_mechanism(
+        noise_scale=noise_scale, 
+        epochs=epochs,
+        sampling_rate=args.sampling_rate
+    ).get_approxDP(delta=args.delta)
+
+    ### init trainer ###
+
+    trainer: Trainer = Trainer.from_args(args, device=device)
     
     for iteration in range(args.repeats):
         logging.info(f'run: {iteration + 1}')
@@ -62,14 +79,10 @@ def run(args):
 
         if args.pre_train:
             logger.disable()
-            pt_model = PrivateNodeClassifier.from_args(args, 
-                num_classes=num_classes, 
-                inductive=args.sampling_rate<1.0,
-                pre_layers=1, mp_layers=0, post_layers=1
-            )
-            pt_trainer: Trainer = Trainer.from_args(args, device=device)
-            pt_dataloder = RandomSubGraphSampler.from_args(args, data=data, device=device, use_edge_sampling=False)
-            pt_trainer.fit(pt_model, pt_dataloder)
+            pt_model.reset_parameters()
+            dataloder = RandomSubGraphSampler.from_args(args, data=data, device=device, use_edge_sampling=False)
+            trainer.reset()
+            trainer.fit(pt_model, dataloder)
             transforms.append(pt_model.embed)
             logger.enabled = args.debug
 
@@ -84,17 +97,8 @@ def run(args):
             transform=Compose(transforms),
         )
 
-        accountant = lambda epochs: mechanism.build_mechanism(
-            noise_scale=noise_scale, 
-            epochs=epochs,
-            sampling_rate=args.sampling_rate
-        ).get_approxDP(delta=args.delta)
-
-        trainer: Trainer = Trainer.from_args(args, 
-            device=device, 
-            privacy_accountant=accountant if args.debug else None
-        )
-
+        trainer.reset()
+        trainer.privacy_accountant = accountant if args.debug else None
         best_metrics = trainer.fit(model, dataloader)
 
         ### process results ###
