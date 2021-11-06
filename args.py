@@ -113,7 +113,7 @@ def print_args(args):
     num_rows = 7
 
     for i, (key, val) in enumerate(vars(args).items()):
-        keys.append(colored_text(key, color='cyan', style='bright'))
+        keys.append(colored_text(key, color='cyan', style='normal'))
         vals.append(val)
         if (i + 1) % num_rows == 0:
             data[col] = keys
