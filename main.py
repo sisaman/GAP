@@ -5,72 +5,70 @@ import coloredlogs
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import numpy as np
 import torch
-import tabulate
-from functools import partial
 from args import print_args, str2bool
 from datasets import Dataset, AddKNNGraph
 from loggers import Logger
 from models import PrivateGNN, PrivateNodeClassifier
 from loader import RandomSubGraphSampler
 from trainer import Trainer
-from privacy import TopMFilter, GraphPerturbationEngine
-from utils import timeit, colored_text, seed_everything, confidence_interval
+from privacy import Calibrator, TopMFilter
+from utils import timeit, seed_everything, confidence_interval
 from torch_geometric.transforms import Compose
-from torch_geometric.utils import degree
+    
 
 @timeit
 def run(args):
-    data = Dataset.from_args(args).load()
+    data = Dataset.from_args(args).load(verbose=True)
     num_classes = data.y.max().item() + 1
     device = 'cpu' if args.cpu else 'cuda'
-
-    stat = {
-        'name': args.dataset,
-        'nodes': data.num_nodes,
-        'edges': data.num_edges,
-        'features': data.num_features,
-        'classes': int(data.y.max().item() + 1),
-        'mean degree': f'{degree(data.edge_index[1], num_nodes=data.num_nodes).mean().item():.2f}',
-        'median degree': degree(data.edge_index[1], num_nodes=data.num_nodes).median().item(),
-        'baseline': f'{(data.y.unique(return_counts=True)[1].max().item() * 100 / data.num_nodes):.2f} %'
-    }
-
-    logging.info('dataset stats\n\n' + tabulate.tabulate([stat], headers='keys') + '\n')
 
     test_acc = []
     run_metrics = {}
     logger = Logger.from_args(args, enabled=args.debug, config=args)
-
-    model = PrivateNodeClassifier.from_args(args, 
-        num_features=args.hidden_dim if args.pre_train else data.num_features, 
-        num_classes=num_classes, 
-        inductive=args.sampling_rate<1.0,
-    )
-
-    transforms = []
-
-    if args.add_knn:
-        transforms.append(AddKNNGraph(args.add_knn))
-
-    if args.perturbation == 'graph':
-        mechanism = TopMFilter(noise_scale=args.noise_scale)
-        priv_engine = GraphPerturbationEngine(mechanism, epochs=args.epochs, sampling_rate=args.sampling_rate)
-        if args.noise_scale == 0.0:
-            priv_engine.calibrate(eps=args.epsilon, delta=args.delta)
-            transforms.append(mechanism.perturb)
-    else:
-        priv_engine = model.gnn.get_privacy_engine(epochs=args.epochs, sampling_rate=args.sampling_rate)
-        if args.noise_scale == 0.0:
-            priv_engine.calibrate(eps=args.epsilon, delta=args.delta)
-
-    trainer: Trainer = Trainer.from_args(args, device=device)
-    trainer.privacy_accountant = partial(priv_engine.get_privacy_spent, delta=args.delta)
     
     for iteration in range(args.repeats):
         logging.info(f'run: {iteration + 1}')
-        model.reset_parameters()
-        trainer.reset()
-        pre_transforms = []
+        
+        model = PrivateNodeClassifier.from_args(args, 
+            num_features=args.hidden_dim if args.pre_train else data.num_features, 
+            num_classes=num_classes, 
+            inductive=args.sampling_rate<1.0,
+        )
+
+        transforms = []
+
+        if args.add_knn:
+            transforms.append(AddKNNGraph(args.add_knn))
+
+        if args.perturbation == 'graph':
+            mechanism = TopMFilter(noise_scale=0.0)
+            mechanism_builder = lambda noise_scale: mechanism.build_mechanism(
+                noise_scale=noise_scale, 
+                epochs=args.epochs, 
+                sampling_rate=args.sampling_rate
+            )
+            calibrator = Calibrator(mechanism_builder)
+            noise_scale = calibrator.calibrate(eps=args.epsilon, delta=args.delta)
+            mechanism.update(noise_scale=noise_scale)
+            transforms.append(mechanism.perturb)
+        else:
+            mechanism = model.gnn
+            mechanism_builder = lambda noise_scale: mechanism.build_mechanism(
+                noise_scale=noise_scale, 
+                epochs=args.epochs, 
+                sampling_rate=args.sampling_rate
+            )
+            calibrator = Calibrator(mechanism_builder)
+            noise_scale = calibrator.calibrate(eps=args.epsilon, delta=args.delta)
+            mechanism.update(noise_scale=noise_scale)
+            
+        accountant = lambda epochs: mechanism.build_mechanism(
+            noise_scale=noise_scale, 
+            epochs=epochs,
+            sampling_rate=args.sampling_rate
+        ).get_approxDP(delta=args.delta)
+
+        trainer: Trainer = Trainer.from_args(args, device=device, privacy_accountant=accountant)
 
         if args.pre_train:
             logger.disable()
@@ -83,15 +81,15 @@ def run(args):
             pt_trainer: Trainer = Trainer.from_args(args, device=device)
             pt_dataloder = RandomSubGraphSampler.from_args(args, data=data, device=device, use_edge_sampling=False)
             pt_trainer.fit(pt_model, pt_dataloder)
-            pre_transforms.append(pt_model.embed)
+            transforms.append(pt_model.embed)
             logger.enabled = args.debug
 
         dataloader = RandomSubGraphSampler.from_args(args, 
             data=data, device=device,
             use_edge_sampling=args.perturbation!='feature',
-            transform=Compose(pre_transforms + transforms),
+            transform=Compose(transforms),
         )
-        
+
         best_metrics = trainer.fit(model, dataloader)
 
         # process results
@@ -115,7 +113,7 @@ def run(args):
 
 def main():
     warnings.filterwarnings('ignore')
-    coloredlogs.DEFAULT_FIELD_STYLES['levelname']['color'] = 'magenta'
+    coloredlogs.DEFAULT_FIELD_STYLES['levelname']['color'] = 32
     coloredlogs.install(level='INFO', fmt='%(asctime)s %(levelname)s %(message)s', stream=sys.stdout)
     
     init_parser = ArgumentParser(add_help=False, conflict_handler='resolve')
@@ -151,6 +149,11 @@ def main():
 
     parser = ArgumentParser(parents=[init_parser], formatter_class=ArgumentDefaultsHelpFormatter)
     args = parser.parse_args()
+
+    # correct mechanism and epsilon
+    if args.mechanism == 'null': args.epsilon = np.inf
+    if args.epsilon == np.inf: args.mechanism = 'null'
+
     print_args(args)
     args.cmd = ' '.join(sys.argv)  # store calling command
 
@@ -158,7 +161,7 @@ def main():
         seed_everything(args.seed)
 
     if not args.cpu and not torch.cuda.is_available():
-        print(colored_text('CUDA is not available, falling back to CPU', color='red'))
+        logging.warning('CUDA is not available, running on CPU') 
         args.cpu = True
 
     try:
