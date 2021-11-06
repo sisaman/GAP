@@ -25,50 +25,41 @@ def run(args):
     test_acc = []
     run_metrics = {}
     logger = Logger.from_args(args, enabled=args.debug, config=args)
+
+    ### initiallize model ###
+
+    model = PrivateNodeClassifier.from_args(args, 
+        num_features=args.hidden_dim if args.pre_train else data.num_features, 
+        num_classes=num_classes, 
+        inductive=args.sampling_rate<1.0,
+    )
+
+    ### calibrate noise to privacy budget ###
+
+    if args.perturbation == 'graph':
+        mechanism = TopMFilter(noise_scale=0.0) 
+    else:
+        mechanism = model.gnn
+
+    mechanism_builder = lambda noise_scale: mechanism.build_mechanism(
+        noise_scale=noise_scale, 
+        epochs=args.epochs, 
+        sampling_rate=args.sampling_rate
+    )
+
+    noise_scale = Calibrator(mechanism_builder).calibrate(eps=args.epsilon, delta=args.delta)
+    mechanism.update(noise_scale=noise_scale)
     
     for iteration in range(args.repeats):
         logging.info(f'run: {iteration + 1}')
-        
-        model = PrivateNodeClassifier.from_args(args, 
-            num_features=args.hidden_dim if args.pre_train else data.num_features, 
-            num_classes=num_classes, 
-            inductive=args.sampling_rate<1.0,
-        )
+        model.reset_parameters()
+
+        ### add data transforms ###
 
         transforms = []
 
-        if args.add_knn:
-            transforms.append(AddKNNGraph(args.add_knn))
-
         if args.perturbation == 'graph':
-            mechanism = TopMFilter(noise_scale=0.0)
-            mechanism_builder = lambda noise_scale: mechanism.build_mechanism(
-                noise_scale=noise_scale, 
-                epochs=args.epochs, 
-                sampling_rate=args.sampling_rate
-            )
-            calibrator = Calibrator(mechanism_builder)
-            noise_scale = calibrator.calibrate(eps=args.epsilon, delta=args.delta)
-            mechanism.update(noise_scale=noise_scale)
             transforms.append(mechanism.perturb)
-        else:
-            mechanism = model.gnn
-            mechanism_builder = lambda noise_scale: mechanism.build_mechanism(
-                noise_scale=noise_scale, 
-                epochs=args.epochs, 
-                sampling_rate=args.sampling_rate
-            )
-            calibrator = Calibrator(mechanism_builder)
-            noise_scale = calibrator.calibrate(eps=args.epsilon, delta=args.delta)
-            mechanism.update(noise_scale=noise_scale)
-            
-        accountant = lambda epochs: mechanism.build_mechanism(
-            noise_scale=noise_scale, 
-            epochs=epochs,
-            sampling_rate=args.sampling_rate
-        ).get_approxDP(delta=args.delta)
-
-        trainer: Trainer = Trainer.from_args(args, device=device, privacy_accountant=accountant)
 
         if args.pre_train:
             logger.disable()
@@ -84,15 +75,32 @@ def run(args):
             transforms.append(pt_model.embed)
             logger.enabled = args.debug
 
+        if args.add_knn:
+            transforms.append(AddKNNGraph(args.add_knn))
+
+        ### define dataloader and train model ###
+
         dataloader = RandomSubGraphSampler.from_args(args, 
             data=data, device=device,
             use_edge_sampling=args.perturbation!='feature',
             transform=Compose(transforms),
         )
 
+        accountant = lambda epochs: mechanism.build_mechanism(
+            noise_scale=noise_scale, 
+            epochs=epochs,
+            sampling_rate=args.sampling_rate
+        ).get_approxDP(delta=args.delta)
+
+        trainer: Trainer = Trainer.from_args(args, 
+            device=device, 
+            privacy_accountant=accountant if args.debug else None
+        )
+
         best_metrics = trainer.fit(model, dataloader)
 
-        # process results
+        ### process results ###
+
         for metric, value in best_metrics.items():
             run_metrics[metric] = run_metrics.get(metric, []) + [value]
 
@@ -150,10 +158,6 @@ def main():
     parser = ArgumentParser(parents=[init_parser], formatter_class=ArgumentDefaultsHelpFormatter)
     args = parser.parse_args()
 
-    # correct mechanism and epsilon
-    if args.mechanism == 'null': args.epsilon = np.inf
-    if args.epsilon == np.inf: args.mechanism = 'null'
-
     print_args(args)
     args.cmd = ' '.join(sys.argv)  # store calling command
 
@@ -167,7 +171,7 @@ def main():
     try:
         run(args)
     except KeyboardInterrupt:
-        print('Graceful Shutdown...')
+        logging.warn('Graceful Shutdown...')
 
 
 if __name__ == '__main__':

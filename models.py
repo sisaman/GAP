@@ -19,6 +19,7 @@ class MLP(torch.nn.Module):
         dimensions = [input_dim] + [hidden_dim] * (num_layers - 1) + [output_dim] if num_layers > 0 else []
         self.layers = ModuleList([Linear(in_channels, out_channels) for in_channels, out_channels in pairwise(dimensions)])
         self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(is_pred_module))]) if batchnorm else []
+        self.reset_parameters()
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -59,6 +60,7 @@ class GNN(torch.nn.Module):
         
         self.layers = self.init_layers()
         self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(is_pred_module))]) if batchnorm else []
+        self.reset_parameters()
 
     def init_layers(self) -> ModuleList:
         raise NotImplementedError
@@ -118,6 +120,7 @@ class PrivSAGEConv(MessagePassing):
             self.lin_r = Linear(in_channels, out_channels, bias=False)        
 
         self.mn = MessageNorm(learn_scale=True)
+        self.reset_parameters()
 
     def private_aggregation(self, x, edge_index):
         if self.agg_cached is None or not self.cached:
@@ -152,6 +155,7 @@ class PrivSAGEConv(MessagePassing):
         self.lin_l.reset_parameters()
         if self.root_weight:
             self.lin_r.reset_parameters()
+        self.mn.reset_parameters()
 
 
 class PrivateGNN(GNN):
@@ -159,7 +163,7 @@ class PrivateGNN(GNN):
 
     def __init__(self, perturbation, mechanism, *args, **kwargs):
         self.perturbation = perturbation
-        self.layer_mechanism = supported_mechanisms[mechanism](noise_sale=0.0)
+        self.layer_mechanism = supported_mechanisms[mechanism](noise_scale=0.0)
         super().__init__(*args, **kwargs)
 
     def update(self, noise_scale):
@@ -184,6 +188,7 @@ class PrivateGNN(GNN):
             subsample = AmplificationBySampling(PoissonSampling=True)
             subsampled_mech = subsample(model_mech, prob=sampling_rate, improved_bound_flag=True)
             return Composition()([subsampled_mech], [epochs])
+
 
 
 class PrivateGraphSAGE(PrivateGNN):
@@ -213,7 +218,7 @@ class PrivateGraphSAGE(PrivateGNN):
 class PrivateNodeClassifier(torch.nn.Module):
     supported_models = {'sage': PrivateGraphSAGE}
     supported_normalizations = {'batchnorm', 'selfnorm'}
-    supported_activations = {'relu': partial(ReLU, inplace=True), 'selu': partial(SELU, inplace=True), 'prelu': partial(PReLU)}
+    supported_activations = {'relu': partial(ReLU, inplace=True), 'selu': partial(SELU, inplace=True), 'prelu': PReLU}
 
     def __init__(self,
                  num_features, num_classes, 
@@ -234,7 +239,7 @@ class PrivateNodeClassifier(torch.nn.Module):
 
         super().__init__()
 
-        activaiton_fn = self.supported_activations[activation]()
+        self.activaiton_fn = self.supported_activations[activation]()
         dropout_fn = Dropout(dropout, inplace=True)
 
         self.pre_mlp = MLP(
@@ -242,7 +247,7 @@ class PrivateNodeClassifier(torch.nn.Module):
             hidden_dim=hidden_dim, 
             output_dim=num_classes if mp_layers + post_layers == 0 else hidden_dim, 
             num_layers=pre_layers, 
-            activation_fn=activaiton_fn, 
+            activation_fn=self.activaiton_fn, 
             dropout_fn=dropout_fn, 
             batchnorm=batchnorm,
             is_pred_module=(mp_layers + post_layers == 0)
@@ -257,7 +262,7 @@ class PrivateNodeClassifier(torch.nn.Module):
             num_layers=mp_layers, 
             stage_type=stage, 
             dropout_fn=dropout_fn, 
-            activation_fn=activaiton_fn, 
+            activation_fn=self.activaiton_fn, 
             batchnorm=batchnorm, 
             cache_first=not inductive and pre_layers == 0,
             root_weight=root_weight,
@@ -274,7 +279,7 @@ class PrivateNodeClassifier(torch.nn.Module):
             hidden_dim=hidden_dim, 
             output_dim=num_classes, 
             num_layers=post_layers, 
-            activation_fn=activaiton_fn, 
+            activation_fn=self.activaiton_fn, 
             dropout_fn=dropout_fn, 
             batchnorm=batchnorm,
             is_pred_module=True
@@ -283,6 +288,7 @@ class PrivateNodeClassifier(torch.nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
+        self.activaiton_fn.__init__()
         self.pre_mlp.reset_parameters()
         self.gnn.reset_parameters()
         self.post_mlp.reset_parameters()
