@@ -1,9 +1,11 @@
+import logging
 import os
 import ssl
 from functools import partial
+from tabulate import tabulate
 import torch
 import torch.nn.functional as F
-from torch_geometric.utils import remove_self_loops, subgraph
+from torch_geometric.utils import degree, remove_self_loops, subgraph
 from torch_geometric.datasets import FacebookPagePage, LastFMAsia, Amazon, Reddit2
 from torch_geometric.transforms import RandomNodeSplit, Compose, BaseTransform, ToUndirected, RemoveIsolatedNodes
 from ogb.nodeproppred import PygNodePropPredDataset
@@ -15,6 +17,7 @@ from torch_geometric.utils import from_scipy_sparse_matrix
 from torch_geometric.nn import knn_graph
 from torch_sparse import SparseTensor
 from args import support_args
+from utils import colored_text
 
 
 def load_ogb(name, transform=None, **kwargs):
@@ -238,7 +241,7 @@ class Dataset:
     }
 
     def __init__(self,
-                 dataset:    dict(help='name of the dataset', choices=supported_datasets) = 'reddit',
+                 dataset:    dict(help='name of the dataset', choices=supported_datasets) = 'facebook',
                  data_dir:   dict(help='directory to store the dataset') = './datasets',
                  normalize:  dict(help='if set to true, row-normalizes features') = False
                  ):
@@ -246,7 +249,8 @@ class Dataset:
         self.data_dir = data_dir
         self.normalize = normalize
 
-    def load(self):
+    def load(self, verbose=True):
+
         data = self.supported_datasets[self.name](root=os.path.join(self.data_dir, self.name))[0]
         data.edge_index, _ = remove_self_loops(data.edge_index)
 
@@ -259,10 +263,42 @@ class Dataset:
         transforms = [
             RemoveIsolatedNodes(),            
             ToUndirected(),
+            RandomNodeSplit(
+                split='train_rest', 
+                num_val=int(data.num_nodes * 0.1), 
+                num_test=int(data.num_nodes * 0.2)
+            )
         ]
 
-        if not hasattr(data, 'train_mask'):
-            transforms.append(RandomNodeSplit(split='train_rest'))
-
         data = Compose(transforms)(data)
+
+        if verbose:
+            self.print_stats(data)
+
+
         return data
+
+    def print_stats(self, data):
+        nodes_degree = degree(data.edge_index[1], num_nodes=data.num_nodes)
+        baseline = (data.y.unique(return_counts=True)[1].max().item() * 100 / data.num_nodes)
+        train_ratio = data.train_mask.sum().item() / data.num_nodes * 100
+        val_ratio = data.val_mask.sum().item() / data.num_nodes * 100
+        test_ratio = data.test_mask.sum().item() / data.num_nodes * 100
+
+
+        stat = {
+            'name': self.name,
+            'nodes': f'{data.num_nodes:,}',
+            'edges': f'{data.num_edges:,}',
+            'features': f'{data.num_features:,}',
+            'classes': int(data.y.max().item() + 1),
+            'mean degree': f'{nodes_degree.mean().item():.2f}',
+            'median degree': nodes_degree.median().item(),
+            'train/val/test (%)': f'{train_ratio:.2f} / {val_ratio:.2f} / {test_ratio:.2f}',
+            'baseline (%)': f'{baseline:.2f}'
+        }
+
+        headers = [colored_text(key, 'yellow', 'normal') for key in stat]
+        data = [stat.values()]
+
+        logging.info('dataset stats\n' + tabulate(data, headers=headers) + '\n')
