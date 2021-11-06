@@ -189,7 +189,7 @@ class Facebook100(InMemoryDataset):
         x = x[subset]
         y = y[subset]
 
-        data = Data(x=x, edge_index=edge_index, y=y, num_nodes=len(y))
+        data = Data(x=x, edge_index=edge_index, y=y)
 
         if self.pre_transform is not None:
             data = self.pre_transform(data)
