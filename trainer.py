@@ -14,16 +14,18 @@ class Trainer:
                  weight_decay: dict(help='weight decay (L2 penalty)') = 0.0,
                  patience: dict(help='early-stopping patience window size') = 0,
                  val_interval: dict(help='number of epochs to wait for validation', type=int) = 1,
-                 device = 'cuda'
+                 device = 'cuda',
+                 privacy_accountant = None,
                  ):
 
-        self.privacy_accountant = None
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
         self.optimizer_name = optimizer
         self.patience = patience
         self.val_interval = val_interval
         self.device = device
+        self.privacy_accountant = privacy_accountant
+        
         self.logger = Logger.get_instance()
         self.reset()
 
