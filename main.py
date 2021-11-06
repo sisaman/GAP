@@ -29,7 +29,6 @@ def run(args):
     ### initiallize model ###
 
     model = PrivateNodeClassifier.from_args(args, 
-        num_features=args.hidden_dim if args.pre_train else data.num_features, 
         num_classes=num_classes, 
         inductive=args.sampling_rate<1.0,
     )
@@ -64,7 +63,6 @@ def run(args):
         if args.pre_train:
             logger.disable()
             pt_model = PrivateNodeClassifier.from_args(args, 
-                num_features=data.num_features, 
                 num_classes=num_classes, 
                 inductive=args.sampling_rate<1.0,
                 pre_layers=1, mp_layers=0, post_layers=1

@@ -2,7 +2,7 @@ from functools import partial
 from autodp.transformer_zoo import AmplificationBySampling, ComposeGaussian, Composition
 import torch
 import torch.nn.functional as F
-from torch.nn import SELU, ModuleList, Dropout, ReLU, PReLU
+from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh
 from torch_geometric.nn import BatchNorm, MessagePassing, Linear, MessageNorm
 from utils import pairwise
 from args import support_args
@@ -195,21 +195,16 @@ class PrivateGraphSAGE(PrivateGNN):
     def init_layers(self):
         layers = []
 
-        if self.num_layers > 0:
-            dimensions = [self.input_dim] + (self.num_layers - 1) * [self.hidden_dim] + [self.output_dim]
-            input_dim_cumulative = dimensions[0]
-
-            for i, (in_channels, out_channels) in enumerate(pairwise(dimensions)):
-                conv = PrivSAGEConv(
-                    in_channels=input_dim_cumulative if self.stage_type == 'skipcat' else in_channels,
-                    out_channels=out_channels,
-                    cached=(i == 0 and self.cache_first),
-                    root_weight=self.root_weight,
-                    perturbation=self.perturbation,
-                    mechanism=self.layer_mechanism
-                )
-                layers.append(conv)
-                input_dim_cumulative += out_channels
+        for i in range(self.num_layers):
+            conv = PrivSAGEConv(
+                in_channels=-1,
+                out_channels=self.output_dim if i == self.num_layers - 1 else self.hidden_dim,
+                cached=(i == 0 and self.cache_first),
+                root_weight=self.root_weight,
+                perturbation=self.perturbation,
+                mechanism=self.layer_mechanism
+            )
+            layers.append(conv)
         
         return ModuleList(layers)
         
@@ -218,10 +213,14 @@ class PrivateGraphSAGE(PrivateGNN):
 class PrivateNodeClassifier(torch.nn.Module):
     supported_models = {'sage': PrivateGraphSAGE}
     supported_normalizations = {'batchnorm', 'selfnorm'}
-    supported_activations = {'relu': partial(ReLU, inplace=True), 'selu': partial(SELU, inplace=True), 'prelu': PReLU}
+    supported_activations = {
+        'relu': partial(ReLU, inplace=True), 
+        'selu': partial(SELU, inplace=True), 
+        'tanh': Tanh,
+    }
 
     def __init__(self,
-                 num_features, num_classes, 
+                 num_classes, 
                  perturbation: dict(help='perturbation method', option='-p', choices=PrivateGNN.supported_perturbations) = 'aggr', 
                  mechanism: dict(help='perturbation mechanism', choices=supported_mechanisms) = 'gaussian', 
                  model: dict(help='base GNN model', choices=supported_models) = 'sage',
@@ -243,7 +242,7 @@ class PrivateNodeClassifier(torch.nn.Module):
         dropout_fn = Dropout(dropout, inplace=True)
 
         self.pre_mlp = MLP(
-            input_dim=num_features, 
+            input_dim=-1, 
             hidden_dim=hidden_dim, 
             output_dim=num_classes if mp_layers + post_layers == 0 else hidden_dim, 
             num_layers=pre_layers, 
@@ -256,7 +255,7 @@ class PrivateNodeClassifier(torch.nn.Module):
         GraphNN = self.supported_models[model]
 
         self.gnn = GraphNN(
-            input_dim=num_features if pre_layers == 0 else hidden_dim, 
+            input_dim=-1, 
             hidden_dim=hidden_dim, 
             output_dim=num_classes if post_layers == 0 else hidden_dim, 
             num_layers=mp_layers, 
@@ -271,11 +270,8 @@ class PrivateNodeClassifier(torch.nn.Module):
             mechanism=mechanism,
         )
 
-        input_dim = num_features if pre_layers + mp_layers == 0 or (pre_layers == 0 and stage == 'skipcat') else hidden_dim
-        input_dim += int(stage == 'skipcat') * mp_layers * hidden_dim
-
         self.post_mlp = MLP(
-            input_dim=input_dim, 
+            input_dim=-1, 
             hidden_dim=hidden_dim, 
             output_dim=num_classes, 
             num_layers=post_layers, 
