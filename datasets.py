@@ -263,11 +263,7 @@ class Dataset:
         transforms = [
             RemoveIsolatedNodes(),            
             ToUndirected(),
-            RandomNodeSplit(
-                split='train_rest', 
-                num_val=int(data.num_nodes * 0.1), 
-                num_test=int(data.num_nodes * 0.2)
-            )
+            RandomNodeSplit(split='train_rest')
         ]
 
         data = Compose(transforms)(data)
