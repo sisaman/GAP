@@ -11,7 +11,9 @@ from scipy.optimize import minimize_scalar
 class NullMechanism(Mechanism):
     def __init__(self):
         super().__init__()
-        self.propagate_updates((0,0), type_of_update='approxDP')
+
+    def update(self, _):
+        self.__init__()
 
 
 class GaussianMechanism(mechanisms.ExactGaussianMechanism):
@@ -32,6 +34,12 @@ class GaussianMechanism(mechanisms.ExactGaussianMechanism):
     def clip(self, data, c):
         return (c / data.norm(p=2, dim=-1, keepdim=True)).clamp(max=1) * data
 
+    def get_approxDP(self, delta):
+        if self.noise_scale == 0:
+            return np.inf
+        else:
+            return super().get_approxDP(delta)
+
 
 class LaplaceMechanism(mechanisms.LaplaceMechanism):
     def __init__(self, noise_scale):
@@ -50,6 +58,12 @@ class LaplaceMechanism(mechanisms.LaplaceMechanism):
 
     def clip(self, data, c):
         return (c / data.norm(p=1, dim=-1, keepdim=True)).clamp(max=1) * data
+
+    def get_approxDP(self, delta):
+        if self.noise_scale == 0:
+            return np.inf
+        else:
+            return super().get_approxDP(delta)
     
 
 supported_mechanisms = {
@@ -62,18 +76,33 @@ class TopMFilter(Mechanism):
     def __init__(self, noise_scale):
         super().__init__()
         self.noise_scale = noise_scale
-        self.build()
-
-    def build(self):
         self.mech_edges = LaplaceMechanism(self.noise_scale)         # for individual edge perturbation
         self.mech_count = LaplaceMechanism(self.noise_scale * 9)     # for edge-count perturbation
         composed_mech = Composition()([self.mech_edges, self.mech_count], [1,1])
         self.set_all_representation(composed_mech)
-        return self
 
     def update(self, noise_scale):
-        self.noise_scale = noise_scale
-        self.build()
+        self.__init__(noise_scale)
+
+    def get_approxDP(self, delta):
+        if self.noise_scale == 0:
+            return np.inf
+        else:
+            return super().get_approxDP(delta)
+
+    def build_mechanism(self, noise_scale, epochs, sampling_rate) -> Mechanism:
+        if noise_scale == 0.0:
+            return NullMechanism()
+
+        self.update(noise_scale)
+        
+        if sampling_rate == 1.0:    
+            return self
+        else:
+            subsample = AmplificationBySampling(PoissonSampling=True)
+            subsampled_mech = subsample(self, prob=sampling_rate, improved_bound_flag=True)
+            complex_mech = Composition()([subsampled_mech], [epochs])
+            return complex_mech
 
     def perturb(self, data):
         if self.noise_scale == 0.0:
@@ -84,7 +113,7 @@ class TopMFilter(Mechanism):
         m = data.num_edges
         m_pert = self.mech_count.perturb(m, sensitivity=1)
         m_pert = round(m_pert.item())
-        eps_edges = 1 / self.mech_edges.params['b']
+        eps_edges = 1 / self.mech_edges.noise_scale
         
         theta = np.log((n * (n-1) / m_pert) - 1) / (2 * eps_edges) + 0.5
         if theta > 1:
@@ -125,53 +154,26 @@ class TopMFilter(Mechanism):
         )
 
 
-class PrivacyEngine:
-    def __init__(self, base_mechanism, epochs, sampling_rate):
-        super().__init__()
-        self.base_mechanism = base_mechanism
-        self.epochs = epochs
-        self.sampling_rate = sampling_rate
-
-    def build(self) -> Mechanism:
-        raise NotImplementedError
-
-    def update(self, noise_scale):
-        self.base_mechanism.update(noise_scale)
-        return self.build()
+class Calibrator:
+    def __init__(self, mechanism_cls):
+        self.mechanism_cls = mechanism_cls
 
     def calibrate(self, eps, delta):
-        mechanism = self.update(noise_scale=1)  # just a random non-zero init
+        mechanism = self.mechanism_cls(noise_scale=1)
 
         if eps == np.inf or isinstance(mechanism, NullMechanism):
-            self.base_mechanism.update(noise_scale=0.0)
+            return 0.0
         else:
             logging.info('calibrating noise to privacy budget...')
             noise_scale = self.eps_delta_calibrator(eps, delta)
-            logging.info(f'noise scale: {noise_scale:.4f}\n')
-            self.update(noise_scale)
-            
-    def get_privacy_spent(self, epochs, delta):
-        self.epochs = epochs
-        mechanism = self.build()
-        return mechanism.get_approxDP(delta)
-
+            logging.info(f'noise scale: {noise_scale:.4f}')
+            return noise_scale
+    
     def eps_delta_calibrator(self, eps, delta):
-        fn_err = lambda x: abs(eps - self.update(x).get_approxDP(delta))
-        results = minimize_scalar(fn_err, method='bounded', bounds=[0,100], tol=1e-8, options={'maxiter': 1000000})
+        fn_err = lambda x: abs(eps - self.mechanism_cls(x).get_approxDP(delta))
+        results = minimize_scalar(fn_err, method='bounded', bounds=[0,1000], tol=1e-8, options={'maxiter': 1000000})
 
         if results.success and results.fun < 1e-3:
             return results.x
         else:
             raise RuntimeError(f"eps_delta_calibrator fails to find a parameter:\n{results}")
-
-
-class GraphPerturbationEngine(PrivacyEngine):
-    def build(self):
-        if self.sampling_rate == 1.0:    
-            complex_mech = self.base_mechanism
-        else:
-            subsample = AmplificationBySampling(PoissonSampling=True)
-            subsampled_mech = subsample(self.base_mechanism, prob=self.sampling_rate, improved_bound_flag=True)
-            complex_mech = Composition()([subsampled_mech], [self.epochs])
-        
-        return complex_mech
