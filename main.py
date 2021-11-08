@@ -6,20 +6,20 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import numpy as np
 import torch
 from args import print_args, str2bool
-from datasets import Dataset, AddKNNGraph
+from datasets import Dataset, AddKNNGraph, RandomSubGraphSampler
 from loggers import Logger
 from models import PrivateGNN, PrivateNodeClassifier
-from loader import RandomSubGraphSampler
 from trainer import Trainer
 from privacy import Calibrator, TopMFilter
 from utils import timeit, seed_everything, confidence_interval
 from torch_geometric.transforms import Compose
+from torch_geometric.data import Data
     
 
 @timeit
 def run(args):
-    data = Dataset.from_args(args).load(verbose=True)
-    num_classes = data.y.max().item() + 1
+    data_initial = Dataset.from_args(args).load(verbose=True)
+    num_classes = data_initial.y.max().item() + 1
     device = 'cpu' if args.cpu else 'cuda'
 
     test_acc = []
@@ -68,38 +68,36 @@ def run(args):
     
     for iteration in range(args.repeats):
         logging.info(f'run: {iteration + 1}')
+        data = Data(**data_initial.to_dict())
         model.reset_parameters()
 
         ### add data transforms ###
 
         transforms = []
 
-        if args.perturbation == 'graph':
-            transforms.append(mechanism.perturb)
-
         if args.pre_train:
             logger.disable()
             pt_model.reset_parameters()
-            dataloder = RandomSubGraphSampler.from_args(args, data=data, device=device, use_edge_sampling=False)
             trainer.reset()
-            trainer.fit(pt_model, dataloder)
+            trainer.fit(pt_model, data)
             transforms.append(pt_model.embed)
             logger.enabled = args.debug
+
+        if args.sampling_rate:
+            transforms.append(RandomSubGraphSampler(args.sampling_rate, edge_sampling=True))
+
+        if args.perturbation == 'graph':
+            transforms.append(mechanism.perturb)
 
         if args.add_knn:
             transforms.append(AddKNNGraph(args.add_knn))
 
-        ### define dataloader and train model ###
+        ### prepare data and train model ###
 
-        dataloader = RandomSubGraphSampler.from_args(args, 
-            data=data, device=device,
-            use_edge_sampling=args.perturbation!='feature',
-            transform=Compose(transforms),
-        )
-
+        data = Compose(transforms)(data)
         trainer.reset()
         trainer.privacy_accountant = accountant if args.debug else None
-        best_metrics = trainer.fit(model, dataloader)
+        best_metrics = trainer.fit(model, data)
 
         ### process results ###
 
@@ -132,6 +130,7 @@ def main():
     group_dataset = init_parser.add_argument_group('dataset arguments')
     Dataset.add_args(group_dataset)
     group_dataset.add_argument('--add-knn', '--add_knn', type=int, default=0, help='augment graph by adding k-nn edges')
+    group_dataset.add_argument('--sampling-rate', '--sampling_rate', type=float, default=None, help='subgraph sampling rate')
 
     # privacy args
     group_privacy = init_parser.add_argument_group('privacy arguments')
@@ -148,7 +147,6 @@ def main():
     group_trainer.add_argument('--pre-train', '--pre_train', help='pre-train an MLP and use its embeddings as input features', 
                                 type=str2bool, nargs='?', const=True, default=False)
     group_trainer.add_argument('--cpu', help='train on CPU', type=str2bool, nargs='?', const=True, default=not torch.cuda.is_available())
-    RandomSubGraphSampler.add_args(group_trainer)
     Trainer.add_args(group_trainer)
 
     # experiment args
