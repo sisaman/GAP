@@ -63,7 +63,7 @@ class RandomSubGraphSampler(BaseTransform):
                     print(key)
                     data[key] = item[node_mask]
 
-        return self.data
+        return data
 
 
 class FilterClass(BaseTransform):
