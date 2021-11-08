@@ -125,5 +125,6 @@ def print_args(args):
     data[col] = keys
     data[col+1] = vals
 
+    print()
     message = 'program arguments\n' + tabulate(data, tablefmt='simple') + '\n'
     logging.info(message)

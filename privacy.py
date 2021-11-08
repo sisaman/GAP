@@ -178,7 +178,7 @@ class Calibrator:
         else:
             logging.info('calibrating noise to privacy budget...')
             noise_scale = self.eps_delta_calibrator(eps, delta)
-            logging.info(f'noise scale: {noise_scale:.4f}')
+            logging.info(f'noise scale: {noise_scale:.4f}\n')
             return noise_scale
     
     def eps_delta_calibrator(self, eps, delta):

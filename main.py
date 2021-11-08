@@ -36,7 +36,6 @@ def run(args):
     if args.pre_train:
         pt_model = PrivateNodeClassifier.from_args(args, 
             num_classes=num_classes, 
-            inductive=args.sampling_rate<1.0,
             pre_layers=1, mp_layers=0, post_layers=1
         )
 
@@ -130,7 +129,7 @@ def main():
     group_dataset = init_parser.add_argument_group('dataset arguments')
     Dataset.add_args(group_dataset)
     group_dataset.add_argument('--add-knn', '--add_knn', type=int, default=0, help='augment graph by adding k-nn edges')
-    group_dataset.add_argument('--sampling-rate', '--sampling_rate', type=float, default=None, help='subgraph sampling rate')
+    group_dataset.add_argument('--sampling-rate', '--sampling_rate', type=float, default=1.0, help='subgraph sampling rate')
 
     # privacy args
     group_privacy = init_parser.add_argument_group('privacy arguments')
