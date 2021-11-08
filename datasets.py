@@ -13,7 +13,7 @@ import pandas as pd
 from scipy.io import loadmat
 from torch_geometric.data import Data, InMemoryDataset, download_url
 from sklearn.preprocessing import LabelEncoder
-from torch_geometric.utils import from_scipy_sparse_matrix
+from torch_geometric.utils import from_scipy_sparse_matrix, remove_isolated_nodes
 from torch_geometric.nn import knn_graph
 from torch_sparse import SparseTensor
 from args import support_args
@@ -36,51 +36,34 @@ def load_ogb(name, transform=None, **kwargs):
     return [data]
 
 
-# def load_imdb(transform=None, **kwargs):
-#     dataset = IMDB(**kwargs)
-#     data = dataset[0]
-#     data = ToSparseTensor()(data)
+class RandomSubGraphSampler(BaseTransform):
+    def __init__(self, sampling_rate=1.0, edge_sampling=True):
+        self.sampling_rate = float(sampling_rate)
+        self.sampler_fn = self.edge_sampler if edge_sampling else self.node_sampler
 
-#     adj = data[('actor', 'to', 'movie')]['adj_t']
-#     adj = adj.matmul(adj.t())
-#     edge_index = adj.to_torch_sparse_coo_tensor().coalesce().indices()
+    def node_sampler(self, data: Data):
+        node_mask = torch.rand(data.num_nodes) < self.sampling_rate
+        edge_index, _ = subgraph(node_mask, data.edge_index, relabel_nodes=True, num_nodes=data.num_nodes)
+        return node_mask, edge_index
 
-#     data = data['movie']
-#     data = Data(x=data.x, y=data.y, edge_index=edge_index)
+    def edge_sampler(self, data: Data):
+        edge_mask = torch.rand(data.num_edges) < self.sampling_rate
+        edge_index = self.data.edge_index[:, edge_mask]
+        edge_index, _, node_mask = remove_isolated_nodes(edge_index, num_nodes=data.num_nodes)
+        return node_mask, edge_index
 
-#     if transform:
-#         data = transform(data)
+    def __call__(self, data: Data):        
+        if self.sampling_rate < 1.0:
+            node_mask, edge_index = self.sampler_fn()
+            data.edge_index = edge_index
 
-#     return [data]
+            n = data.num_nodes
+            for key, item in data:
+                if torch.is_tensor(item) and item.size(0) == n:
+                    print(key)
+                    data[key] = item[node_mask]
 
-
-
-# def load_gnn_benchmark(name, transform=None, **kwargs):
-#     train_dataset = GNNBenchmarkDataset(name=name, split='train', **kwargs)
-#     val_dataset = GNNBenchmarkDataset(name=name, split='val', **kwargs)
-#     test_dataset = GNNBenchmarkDataset(name=name, split='test', **kwargs)
-
-#     data_list = [data for data in train_dataset] + [data for data in val_dataset] + [data for data in test_dataset]
-#     loader = DataLoader(data_list, batch_size=len(data_list), shuffle=False)
-
-#     batch = [data for data in loader][0]
-#     data = Data(x=batch.x, y=batch.y, edge_index=batch.edge_index)
-
-#     data.train_mask = torch.zeros_like(data.y, dtype=bool)
-#     data.val_mask = torch.zeros_like(data.y, dtype=bool)
-#     data.test_mask = torch.zeros_like(data.y, dtype=bool)
-
-#     num_train = len(train_dataset)
-#     num_val = len(val_dataset)
-
-#     data.train_mask[:num_train] = True
-#     data.val_mask[num_train:num_train+num_val] = True
-#     data.test_mask[num_train+num_val:] = True
-    
-#     if transform:
-#         data = transform(data)
-        
-#     return [data]
+        return self.data
 
 
 class FilterClass(BaseTransform):
