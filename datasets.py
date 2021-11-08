@@ -187,12 +187,12 @@ class Facebook100(InMemoryDataset):
 class Dataset:
     supported_datasets = {
         # main datasets
-        'facebook': FacebookPagePage,
         'reddit': partial(Reddit2, transform=FilterClass(6)),
-        'fb-illinois': partial(Facebook100, name='UIllinois20', target='year', transform=FilterClass(5)),
+        'facebook': partial(Facebook100, name='UIllinois20', target='year', transform=FilterClass(5)),
         'products': partial(load_ogb, name='ogbn-products', transform=FilterClass(include=[7,  6,  3, 12,  2])),
 
         # backup datasets
+        'fb-pages': FacebookPagePage,
         'lastfm': partial(LastFMAsia, transform=FilterClass(10)),
         'amz-comp': partial(Amazon, name='computers'),
         'amz-photo': partial(Amazon, name='photo'),
