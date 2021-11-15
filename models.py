@@ -4,28 +4,29 @@ import torch
 import torch.nn.functional as F
 from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh
 from torch_geometric.nn import BatchNorm, MessagePassing, Linear, MessageNorm
+from torch_geometric.utils import add_remaining_self_loops
 from utils import pairwise
 from args import support_args
-from privacy import GaussianMechanism, NullMechanism, supported_mechanisms
+from privacy import Calibrator, GaussianMechanism, NullMechanism, TopMFilter, supported_mechanisms
 
 
 class MLP(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, dropout_fn, activation_fn, batchnorm, is_pred_module):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, dropout_fn, activation_fn, batchnorm, output_module):
         super().__init__()
         self.num_layers = num_layers
         self.dropout = dropout_fn
         self.activation = activation_fn
-        self.is_pred_module = is_pred_module
+        self.output_module = output_module
         dimensions = [input_dim] + [hidden_dim] * (num_layers - 1) + [output_dim] if num_layers > 0 else []
         self.layers = ModuleList([Linear(in_channels, out_channels) for in_channels, out_channels in pairwise(dimensions)])
-        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(is_pred_module))]) if batchnorm else []
+        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(output_module))]) if batchnorm else []
         self.reset_parameters()
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
             x = layer(x)
 
-            if i == self.num_layers - 1 and self.is_pred_module:
+            if i == self.num_layers - 1 and self.output_module:
                 break
 
             x = self.bns[i](x) if self.bns else x
@@ -45,7 +46,7 @@ class GNN(torch.nn.Module):
     supported_stages = {'stack', 'skipsum', 'skipmax', 'skipcat'}
 
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, stage_type, 
-                 dropout_fn, activation_fn, batchnorm, cache_first, root_weight, is_pred_module):
+                 dropout_fn, activation_fn, batchnorm, root_weight, inductive, input_module, output_module):
         super().__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -54,12 +55,13 @@ class GNN(torch.nn.Module):
         self.stage_type = stage_type
         self.dropout = dropout_fn
         self.activation = activation_fn
-        self.cache_first = cache_first
         self.root_weight = root_weight
-        self.is_pred_module = is_pred_module
+        self.inductive = inductive
+        self.input_module = input_module
+        self.output_module = output_module
         
         self.layers = self.init_layers()
-        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(is_pred_module))]) if batchnorm else []
+        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(output_module))]) if batchnorm else []
         self.reset_parameters()
 
     def init_layers(self) -> ModuleList:
@@ -68,7 +70,7 @@ class GNN(torch.nn.Module):
     def layer_forward(self, index, h_in, edge_index):
         h_out = self.layers[index](h_in, edge_index)
 
-        if index == self.num_layers - 1 and self.is_pred_module:
+        if index == self.num_layers - 1 and self.output_module:
             return h_out
 
         h_out = self.bns[index](h_out) if self.bns else h_out
@@ -79,6 +81,7 @@ class GNN(torch.nn.Module):
 
     def forward(self, x, edge_index):
         h_in = h_out = x
+        edge_index, _ = add_remaining_self_loops(edge_index, num_nodes=x.size(0))
 
         for i in range(self.num_layers):
             h_out = self.layer_forward(i, h_in, edge_index)
@@ -103,7 +106,7 @@ class GNN(torch.nn.Module):
             bn.reset_parameters()
 
 
-class PrivSAGEConv(MessagePassing):
+class PrivConv(MessagePassing):
     def __init__(self, in_channels, out_channels, root_weight, cached, perturbation, mechanism):
         super().__init__(aggr='add')
         
@@ -111,7 +114,7 @@ class PrivSAGEConv(MessagePassing):
         self.out_channels = out_channels
         self.root_weight = root_weight
         self.cached = cached
-        self.agg_cached = None
+        self.cached_agg = None
         self.perturbation_mode = perturbation
         self.mechanism = mechanism
         
@@ -123,21 +126,22 @@ class PrivSAGEConv(MessagePassing):
         self.reset_parameters()
 
     def private_aggregation(self, x, edge_index):
-        if self.agg_cached is None or not self.cached:
+        if self.cached_agg is None or not self.cached:
             
-            x = self.mechanism.normalize(x)
+            if self.perturbation_mode in {'aggr', 'feature'}:
+                x = self.mechanism.normalize(x)
 
             if self.perturbation_mode == 'feature':    
                 x = self.mechanism.perturb(x, sensitivity=1)
             
-            agg = x + self.propagate(edge_index, x=x)
+            agg = self.propagate(edge_index, x=x)
 
             if self.perturbation_mode == 'aggr':
                 agg = self.mechanism.perturb(agg, sensitivity=1)
 
-            self.agg_cached = agg
+            self.cached_agg = agg
 
-        return self.agg_cached
+        return self.cached_agg
 
     def forward(self, x, edge_index):
         out = self.private_aggregation(x, edge_index)
@@ -151,7 +155,7 @@ class PrivSAGEConv(MessagePassing):
         return out
 
     def reset_parameters(self):
-        self.agg_cached = None
+        self.cached_agg = None
         self.lin_l.reset_parameters()
         if self.root_weight:
             self.lin_r.reset_parameters()
@@ -159,60 +163,89 @@ class PrivSAGEConv(MessagePassing):
 
 
 class PrivateGNN(GNN):
-    supported_perturbations = {'feature', 'aggr'}
+    supported_perturbations = {'aggr', 'feature', 'graph'}                               ###### shoud be changed ######
 
     def __init__(self, perturbation, mechanism, *args, **kwargs):
         self.perturbation = perturbation
-        self.layer_mechanism = supported_mechanisms[mechanism](noise_scale=0.0)
+        
+        if perturbation == 'graph':
+            self.base_mechanism = TopMFilter(noise_scale=0.0)
+        else:
+            self.base_mechanism = supported_mechanisms[mechanism](noise_scale=0.0)
+
+        self.cached_edge_index = None
+
         super().__init__(*args, **kwargs)
 
+    def reset_parameters(self):
+        self.cached_edge_index = None
+        return super().reset_parameters()
+
+    def forward(self, x, edge_index):
+        if self.cached_edge_index is None or self.inductive:
+            if self.perturbation == 'graph':
+                edge_index = self.base_mechanism.perturb(edge_index, num_nodes=x.size(0))
+            self.cached_edge_index = edge_index
+            
+        return super().forward(x, self.cached_edge_index)
+
     def update(self, noise_scale):
-        self.layer_mechanism.update(noise_scale)
+        self.base_mechanism.update(noise_scale)
 
-    def layer_forward(self, index, h_in, edge_index):
-        return super().layer_forward(index, h_in, edge_index)
+    def build_mechanism(self, epochs, sampling_rate, noise_scale=None):
+        if noise_scale is None:
+            noise_scale = self.base_mechanism.noise_scale
 
-    def build_mechanism(self, noise_scale, epochs, sampling_rate):
         if self.num_layers == 0 or noise_scale == 0.0:
             return NullMechanism()
             
         self.update(noise_scale=noise_scale)
-        compose = ComposeGaussian() if isinstance(self.layer_mechanism, GaussianMechanism) else Composition()
+        compose = ComposeGaussian() if isinstance(self.base_mechanism, GaussianMechanism) else Composition()
 
         if sampling_rate == 1.0:
-            num_calls = int(self.cache_first) + (self.num_layers - int(self.cache_first)) * epochs
-            composed_mech = compose([self.layer_mechanism], [num_calls])
-            return composed_mech
+            if self.perturbation == 'graph':
+                return self.base_mechanism
+            else:
+                num_calls = int(self.cachable_first_agg) + (self.num_layers - int(self.cachable_first_agg)) * epochs
+                composed_mech = compose([self.base_mechanism], [num_calls])
+                return composed_mech
         else:
-            model_mech = compose([self.layer_mechanism], [self.num_layers])
-            subsample = AmplificationBySampling(PoissonSampling=True)
-            subsampled_mech = subsample(model_mech, prob=sampling_rate, improved_bound_flag=True)
-            return Composition()([subsampled_mech], [epochs])
+            if self.perturbation == 'graph':
+                subsample = AmplificationBySampling(PoissonSampling=True)
+                subsampled_mech = subsample(self, prob=sampling_rate, improved_bound_flag=True)
+                complex_mech = Composition()([subsampled_mech], [epochs])
+                return complex_mech
+            else:
+                model_mech = compose([self.base_mechanism], [self.num_layers])
+                subsample = AmplificationBySampling(PoissonSampling=True)
+                subsampled_mech = subsample(model_mech, prob=sampling_rate, improved_bound_flag=True)
+                complex_mech = Composition()([subsampled_mech], [epochs])
+                return complex_mech
 
-
-
-class PrivateGraphSAGE(PrivateGNN):
     def init_layers(self):
         layers = []
+        mechanism = self.base_mechanism if self.perturbation in {'aggr', 'feature'} else None
 
         for i in range(self.num_layers):
-            conv = PrivSAGEConv(
+            conv = PrivConv(
                 in_channels=-1,
                 out_channels=self.output_dim if i == self.num_layers - 1 else self.hidden_dim,
-                cached=(i == 0 and self.cache_first),
+                cached=(i == 0 and self.cachable_first_agg),
                 root_weight=self.root_weight,
                 perturbation=self.perturbation,
-                mechanism=self.layer_mechanism
+                mechanism=mechanism
             )
             layers.append(conv)
         
         return ModuleList(layers)
+
+    @property
+    def cachable_first_agg(self):
+        return (not self.inductive) and self.input_module
         
 
 @support_args
 class PrivateNodeClassifier(torch.nn.Module):
-    supported_models = {'sage': PrivateGraphSAGE}
-    supported_normalizations = {'batchnorm', 'selfnorm'}
     supported_activations = {
         'relu': partial(ReLU, inplace=True), 
         'selu': partial(SELU, inplace=True), 
@@ -221,23 +254,23 @@ class PrivateNodeClassifier(torch.nn.Module):
 
     def __init__(self,
                  num_classes, 
-                 perturbation: dict(help='perturbation method', option='-p', choices=PrivateGNN.supported_perturbations) = 'aggr', 
-                 mechanism: dict(help='perturbation mechanism', choices=supported_mechanisms) = 'gaussian', 
-                 model: dict(help='base GNN model', choices=supported_models) = 'sage',
-                 hidden_dim: dict(help='dimension of the hidden layers') = 16,
-                 pre_layers: dict(help='number of pre-processing linear layers') = 0,
-                 mp_layers: dict(help='number of message-passing layers') = 2,
-                 post_layers: dict(help='number of post-processing linear layers') = 0,
-                 activation: dict(help='type of activation function', choices=supported_activations) = 'relu',
-                 dropout: dict(help='dropout rate (between zero and one)') = 0.0,
-                 batchnorm: dict(help='if True, then model uses batch normalization') = True,
-                 stage: dict(help='stage type of skip connection', choices=GNN.supported_stages) = 'stack',
-                 root_weight: dict(help='if True, the layer adds transformed root node features to the output.') = True,
+                 perturbation:  dict(help='perturbation method', option='-p', choices=PrivateGNN.supported_perturbations) = 'aggr', 
+                 mechanism:     dict(help='perturbation mechanism', choices=supported_mechanisms) = 'gaussian', 
+                 hidden_dim:    dict(help='dimension of the hidden layers') = 16,
+                 pre_layers:    dict(help='number of pre-processing linear layers') = 0,
+                 mp_layers:     dict(help='number of message-passing layers') = 2,
+                 post_layers:   dict(help='number of post-processing linear layers') = 0,
+                 activation:    dict(help='type of activation function', choices=supported_activations) = 'relu',
+                 dropout:       dict(help='dropout rate (between zero and one)') = 0.0,
+                 batchnorm:     dict(help='if True, then model uses batch normalization') = True,
+                 stage:         dict(help='stage type of skip connection', choices=GNN.supported_stages) = 'stack',
+                 root_weight:   dict(help='if True, the layer adds transformed root node features to the output.') = True,
                  inductive=False,
                  ):
 
         super().__init__()
 
+        self.privacy_accountant = None
         self.activaiton_fn = self.supported_activations[activation]()
         dropout_fn = Dropout(dropout, inplace=True)
 
@@ -249,12 +282,10 @@ class PrivateNodeClassifier(torch.nn.Module):
             activation_fn=self.activaiton_fn, 
             dropout_fn=dropout_fn, 
             batchnorm=batchnorm,
-            is_pred_module=(mp_layers + post_layers == 0)
+            output_module=(mp_layers + post_layers == 0)
         )
 
-        GraphNN = self.supported_models[model]
-
-        self.gnn = GraphNN(
+        self.gnn = PrivateGNN(
             input_dim=-1, 
             hidden_dim=hidden_dim, 
             output_dim=num_classes if post_layers == 0 else hidden_dim, 
@@ -263,9 +294,10 @@ class PrivateNodeClassifier(torch.nn.Module):
             dropout_fn=dropout_fn, 
             activation_fn=self.activaiton_fn, 
             batchnorm=batchnorm, 
-            cache_first=not inductive and pre_layers == 0,
             root_weight=root_weight,
-            is_pred_module=(post_layers == 0),
+            inductive=inductive,
+            input_module=(pre_layers == 0),
+            output_module=(post_layers == 0),
             perturbation=perturbation,
             mechanism=mechanism,
         )
@@ -278,7 +310,7 @@ class PrivateNodeClassifier(torch.nn.Module):
             activation_fn=self.activaiton_fn, 
             dropout_fn=dropout_fn, 
             batchnorm=batchnorm,
-            is_pred_module=True
+            output_module=True
         )
 
         self.reset_parameters()
@@ -303,14 +335,17 @@ class PrivateNodeClassifier(torch.nn.Module):
         data.x = x
         return data
 
-    def training_step(self, data):
+    def training_step(self, data, epoch):
         y_true = data.y[data.train_mask]
         y_pred = self(data)[data.train_mask]
         
         loss = F.nll_loss(input=y_pred, target=y_true)
         acc = self.accuracy(input=y_pred, target=y_true)
-        
         metrics = {'train/loss': loss.item(), 'train/acc': acc}
+
+        if self.privacy_accountant:
+            metrics['eps'] = self.privacy_accountant(epochs=epoch)
+
         return loss, metrics
 
     def validation_step(self, data):
@@ -333,3 +368,19 @@ class PrivateNodeClassifier(torch.nn.Module):
         input = input.argmax(dim=1) if len(input.size()) > 1 else input
         target = target.argmax(dim=1) if len(target.size()) > 1 else target
         return (input == target).float().mean().item() * 100
+
+    def calibrate(self, epsilon, delta, epochs, sampling_rate):
+        mechanism_builder = lambda noise_scale: self.gnn.build_mechanism(
+            noise_scale=noise_scale, 
+            epochs=epochs, 
+            sampling_rate=sampling_rate
+        )
+
+        noise_scale = Calibrator(mechanism_builder).calibrate(eps=epsilon, delta=delta)
+        self.gnn.update(noise_scale=noise_scale)
+
+    def init_privacy_accountant(self, delta, sampling_rate):
+        self.privacy_accountant = lambda epochs: self.gnn.build_mechanism(
+            epochs=epochs,
+            sampling_rate=sampling_rate
+        ).get_approxDP(delta=delta)

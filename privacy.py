@@ -4,7 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 from autodp.autodp_core import Mechanism
 import autodp.mechanism_zoo as mechanisms
-from autodp.transformer_zoo import AmplificationBySampling, Composition
+from autodp.transformer_zoo import Composition
 from torch_geometric.utils import remove_self_loops, add_self_loops
 from scipy.optimize import minimize_scalar
 
@@ -102,27 +102,12 @@ class TopMFilter(Mechanism):
         else:
             return super().get_approxDP(delta)
 
-    def build_mechanism(self, noise_scale, epochs, sampling_rate) -> Mechanism:
-        if noise_scale == 0.0:
-            return NullMechanism()
-
-        self.update(noise_scale)
-        
-        if sampling_rate == 1.0:    
-            return self
-        else:
-            subsample = AmplificationBySampling(PoissonSampling=True)
-            subsampled_mech = subsample(self, prob=sampling_rate, improved_bound_flag=True)
-            complex_mech = Composition()([subsampled_mech], [epochs])
-            return complex_mech
-
-    def perturb(self, data):
+    def perturb(self, edge_index, num_nodes):
         if self.noise_scale == 0.0:
-            return data
+            return edge_index
 
-        data.edge_index, _ = remove_self_loops(data.edge_index)
-        n = data.num_nodes
-        m = data.num_edges
+        n = num_nodes
+        m = edge_index.shape[1]
         m_pert = self.mech_count.perturb(m, sensitivity=1)
         m_pert = round(m_pert.item())
         eps_edges = 1 / self.mech_edges.noise_scale
@@ -131,11 +116,11 @@ class TopMFilter(Mechanism):
         if theta > 1:
             theta = np.log((n * (n-1) / (2 * m_pert)) + 0.5 * (np.exp(eps_edges) - 1)) / eps_edges
 
-        loc = torch.ones_like(data.edge_index[0]).float()
+        loc = torch.ones_like(edge_index[0]).float()
         sample = self.mech_edges.perturb(loc, sensitivity=1)
-        edges_to_be_removed = data.edge_index[:, sample < theta]
+        edges_to_be_removed = edge_index[:, sample < theta]
 
-        edge_index_with_self_loops, _ = add_self_loops(data.edge_index, num_nodes=data.num_nodes)
+        edge_index_with_self_loops, _ = add_self_loops(edge_index, num_nodes=num_nodes)
         adjmat = self.to_sparse_adjacency(edge_index_with_self_loops, num_nodes=n)
         ### adjmat has m+n entries ###
 
@@ -152,9 +137,9 @@ class TopMFilter(Mechanism):
 
         adjmat = (adjmat.bool().int() - self.to_sparse_adjacency(edges_to_be_removed, num_nodes=n)).coalesce()
         edge_index, values = adjmat.indices(), adjmat.values()
-        data.edge_index = edge_index[:, values > 0].contiguous()
-        data.edge_index, _ = remove_self_loops(data.edge_index)
-        return data
+        edge_index = edge_index[:, values > 0].contiguous()
+        edge_index, _ = remove_self_loops(edge_index)
+        return edge_index
 
     @staticmethod
     def to_sparse_adjacency(edge_index, num_nodes):

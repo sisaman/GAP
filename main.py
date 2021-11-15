@@ -8,13 +8,13 @@ import torch
 from args import print_args, str2bool
 from datasets import Dataset, AddKNNGraph, RandomSubGraphSampler
 from loggers import Logger
-from models import PrivateGNN, PrivateNodeClassifier
+from models import PrivateNodeClassifier
 from trainer import Trainer
 from privacy import Calibrator, TopMFilter
 from utils import timeit, seed_everything, confidence_interval
 from torch_geometric.transforms import Compose
 from torch_geometric.data import Data
-    
+
 
 @timeit
 def run(args):
@@ -28,7 +28,7 @@ def run(args):
 
     ### initiallize model ###
 
-    model = PrivateNodeClassifier.from_args(args, 
+    model: PrivateNodeClassifier = PrivateNodeClassifier.from_args(args, 
         num_classes=num_classes, 
         inductive=args.sampling_rate<1.0,
     )
@@ -40,35 +40,17 @@ def run(args):
         )
 
     ### calibrate noise to privacy budget ###
-
-    if args.perturbation == 'graph':
-        mechanism = TopMFilter(noise_scale=0.0) 
-    else:
-        mechanism = model.gnn
-
-    mechanism_builder = lambda noise_scale: mechanism.build_mechanism(
-        noise_scale=noise_scale, 
-        epochs=args.epochs, 
-        sampling_rate=args.sampling_rate
-    )
-
-    noise_scale = Calibrator(mechanism_builder).calibrate(eps=args.epsilon, delta=args.delta)
-    mechanism.update(noise_scale=noise_scale)
-
-    accountant = lambda epochs: mechanism.build_mechanism(
-        noise_scale=noise_scale, 
-        epochs=epochs,
-        sampling_rate=args.sampling_rate
-    ).get_approxDP(delta=args.delta)
-
+    model.calibrate(epsilon=args.epsilon, delta=args.delta, epochs=args.epochs, sampling_rate=args.sampling_rate)
+    if args.debug:
+        model.init_privacy_accountant(delta=args.delta, sampling_rate=args.sampling_rate)
+    
     ### init trainer ###
 
     trainer: Trainer = Trainer.from_args(args, device=device)
     
     for iteration in range(args.repeats):
         logging.info(f'run: {iteration + 1}')
-        data = Data(**data_initial.to_dict())
-        model.reset_parameters()
+        data = Data(**data_initial.to_dict()).to(device)
 
         ### add data transforms ###
 
@@ -82,11 +64,9 @@ def run(args):
             transforms.append(pt_model.embed)
             logger.enabled = args.debug
 
-        if args.sampling_rate:
-            transforms.append(RandomSubGraphSampler(args.sampling_rate, edge_sampling=True))
-
-        if args.perturbation == 'graph':
-            transforms.append(mechanism.perturb)
+        ##### TODO: this should be changed #####
+        # if args.sampling_rate < 1.0:
+        #     transforms.append(RandomSubGraphSampler(args.sampling_rate, edge_sampling=True))
 
         if args.add_knn:
             transforms.append(AddKNNGraph(args.add_knn))
@@ -95,7 +75,7 @@ def run(args):
 
         data = Compose(transforms)(data)
         trainer.reset()
-        trainer.privacy_accountant = accountant if args.debug else None
+        model.reset_parameters()
         best_metrics = trainer.fit(model, data)
 
         ### process results ###
@@ -138,7 +118,6 @@ def main():
 
     # model args
     group_model = init_parser.add_argument_group('model arguments')
-    PrivateGNN.supported_perturbations.add('graph')
     PrivateNodeClassifier.add_args(group_model)
 
     # trainer arguments
@@ -150,6 +129,7 @@ def main():
 
     # experiment args
     group_expr = init_parser.add_argument_group('experiment arguments')
+    group_expr.add_argument('-n', '--name', type=str, default=None, help='experiment name')
     group_expr.add_argument('-s', '--seed', type=int, default=12345, help='initial random seed')
     group_expr.add_argument('-r', '--repeats', type=int, default=1, help="number of times the experiment is repeated")
     Logger.add_args(group_expr)

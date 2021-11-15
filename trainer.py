@@ -16,7 +16,6 @@ class Trainer:
                  patience: dict(help='early-stopping patience window size') = 0,
                  val_interval: dict(help='number of epochs to wait for validation', type=int) = 1,
                  device = 'cuda',
-                 privacy_accountant = None,
                  ):
 
         self.weight_decay = weight_decay
@@ -26,7 +25,6 @@ class Trainer:
         self.patience = patience
         self.val_interval = val_interval
         self.device = device
-        self.privacy_accountant = privacy_accountant
         
         self.logger = Logger.get_instance()
         self.reset()
@@ -53,17 +51,17 @@ class Trainer:
         num_epochs_without_improvement = 0
         self.best_metrics = None
 
-        epoch_progbar = tqdm(range(self.epochs), desc='Epochs', unit='epoch', file=sys.stdout)
+        epoch_progbar = tqdm(range(1, self.epochs + 1), desc='Epochs', unit='epoch', file=sys.stdout)
                              
         for epoch in epoch_progbar:
             metrics = {'epoch': epoch}
-            train_metrics = self._train(data, optimizer)
+            train_metrics = self._train(data, optimizer, epoch)
             metrics.update(**train_metrics)
             val_metrics = self._validation(data)
             metrics.update(**val_metrics)
 
             if self.val_interval:
-                if (epoch + 1) % self.val_interval == 0:
+                if epoch % self.val_interval == 0:
 
                     if self.performs_better(metrics):
                         self.best_metrics = metrics
@@ -75,8 +73,6 @@ class Trainer:
             else:
                 self.best_metrics = metrics
 
-            if self.privacy_accountant:
-                metrics['eps'] = self.privacy_accountant(epochs=epoch+1)
             self.logger.log(metrics)
 
             # display metrics on progress bar
@@ -87,10 +83,10 @@ class Trainer:
         self.logger.log_summary(self.best_metrics)
         return self.best_metrics
 
-    def _train(self, data, optimizer):
+    def _train(self, data, optimizer, epoch):
         self.model.train()
         optimizer.zero_grad()
-        loss, metrics = self.model.training_step(data)
+        loss, metrics = self.model.training_step(data, epoch)
         if loss is not None:
             loss.backward()
             optimizer.step()
