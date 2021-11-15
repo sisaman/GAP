@@ -6,7 +6,7 @@ from tabulate import tabulate
 import torch
 import torch.nn.functional as F
 from torch_geometric.utils import degree, remove_self_loops, subgraph
-from torch_geometric.datasets import FacebookPagePage, LastFMAsia, Amazon, Reddit2
+from torch_geometric.datasets import FacebookPagePage, LastFMAsia, Reddit2
 from torch_geometric.transforms import RandomNodeSplit, Compose, BaseTransform, ToUndirected, RemoveIsolatedNodes
 from ogb.nodeproppred import PygNodePropPredDataset
 import pandas as pd
@@ -194,10 +194,10 @@ class Dataset:
         # backup datasets
         'fb-pages': FacebookPagePage,
         'lastfm': partial(LastFMAsia, transform=FilterClass(10)),
-        'amz-comp': partial(Amazon, name='computers'),
-        'amz-photo': partial(Amazon, name='photo'),
-        'fb-penn': partial(Facebook100, name='UPenn7', target='status'),
-        'fb-texas': partial(Facebook100, name='Texas84', target='gender'),
+        # 'amz-comp': partial(Amazon, name='computers'),
+        # 'amz-photo': partial(Amazon, name='photo'),
+        # 'fb-penn': partial(Facebook100, name='UPenn7', target='status'),
+        # 'fb-texas': partial(Facebook100, name='Texas84', target='gender'),
 
         # other datasets
         # 'co-ph': partial(Coauthor, name='physics'),
