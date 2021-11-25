@@ -1,23 +1,25 @@
-import sys
-import warnings
-import logging
-import coloredlogs
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-import numpy as np
-import torch
-from args import print_args, str2bool
-from datasets import Dataset, AddKNNGraph
-from loggers import Logger
-from models import PrivateNodeClassifier
-from trainer import Trainer
-from utils import timeit, seed_everything, confidence_interval
-from torch_geometric.transforms import Compose
-from torch_geometric.data import Data
+from console import console
+with console.status('importing modules...'):
+    import logging
+    import sys
+    from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+    import numpy as np
+    import torch
+    from args import print_args, str2bool
+    from datasets import Dataset, AddKNNGraph
+    from loggers import Logger
+    from models import PrivateNodeClassifier
+    from trainer import Trainer
+    from utils import timeit, seed_everything, confidence_interval
+    from torch_geometric.transforms import Compose
+    from torch_geometric.data import Data
 
 
 @timeit
 def run(args):
-    data_initial = Dataset.from_args(args).load(verbose=True)
+    with console.status('loading dataset...'):
+        data_initial = Dataset.from_args(args).load(verbose=True)
+
     num_classes = data_initial.y.max().item() + 1
     device = 'cpu' if args.cpu else 'cuda'
 
@@ -33,23 +35,27 @@ def run(args):
     )
 
     if args.pre_train:
-        pt_model = PrivateNodeClassifier.from_args(args, 
+        pt_model: PrivateNodeClassifier = PrivateNodeClassifier.from_args(args, 
             num_classes=num_classes, 
             pre_layers=1, mp_layers=0, post_layers=1
         )
 
     ### calibrate noise to privacy budget ###
-    model.calibrate(epsilon=args.epsilon, delta=args.delta, epochs=args.epochs, sampling_rate=args.sampling_rate)
+    with console.status('calibrating noise to privacy budget...'):
+        model.calibrate(epsilon=args.epsilon, delta=args.delta, epochs=args.epochs, sampling_rate=args.sampling_rate)
+
     if args.debug:
         model.init_privacy_accountant(delta=args.delta, sampling_rate=args.sampling_rate)
     
-    ### init trainer ###
-
-    trainer: Trainer = Trainer.from_args(args, device=device)
     
+    ### run experiment ###
+
     for iteration in range(args.repeats):
-        logging.info(f'run: {iteration + 1}')
-        data = Data(**data_initial.to_dict()).to(device)
+        data = Data(**data_initial.to_dict())
+
+        if args.sampling_rate == 1.0 and not args.cpu:
+            with console.status('moving data to gpu...'):
+                data = data.to(device)
 
         ### add data transforms ###
 
@@ -58,8 +64,8 @@ def run(args):
         if args.pre_train:
             logger.disable()
             pt_model.reset_parameters()
-            trainer.reset()
-            trainer.fit(pt_model, data)
+            trainer: Trainer = Trainer.from_args(args, device=device)
+            trainer.fit(pt_model, data, description='pre-training...')
             transforms.append(pt_model.embed)
             logger.enabled = args.debug
 
@@ -73,9 +79,9 @@ def run(args):
         ### prepare data and train model ###
 
         data = Compose(transforms)(data)
-        trainer.reset()
+        trainer: Trainer = Trainer.from_args(args, device=device)
         model.reset_parameters()
-        best_metrics = trainer.fit(model, data)
+        best_metrics = trainer.fit(model, data, description='training...    ')
 
         ### process results ###
 
@@ -83,7 +89,8 @@ def run(args):
             run_metrics[metric] = run_metrics.get(metric, []) + [value]
 
         test_acc.append(best_metrics['test/acc'])
-        logging.info('test/acc: %.2f\t average: %.2f\n' % (test_acc[-1], np.mean(test_acc).item()))
+        console.print()
+        logging.info(f'run: {iteration + 1}\t test/acc: {test_acc[-1]:.2f}\t average: {np.mean(test_acc).item():.2f}\n')
 
     logger.enable()
     summary = {}
@@ -95,13 +102,10 @@ def run(args):
         logger.log_summary(summary)
 
     logger.finish()
+    print()
 
 
 def main():
-    warnings.filterwarnings('ignore')
-    coloredlogs.DEFAULT_FIELD_STYLES['levelname']['color'] = 32
-    coloredlogs.install(level='INFO', fmt='%(asctime)s %(levelname)s %(message)s', stream=sys.stdout)
-    
     init_parser = ArgumentParser(add_help=False, conflict_handler='resolve')
 
     # dataset args
@@ -143,13 +147,16 @@ def main():
         seed_everything(args.seed)
 
     if not args.cpu and not torch.cuda.is_available():
-        logging.warning('CUDA is not available, running on CPU') 
+        logging.warn('CUDA is not available, running on CPU') 
         args.cpu = True
 
     try:
         run(args)
     except KeyboardInterrupt:
+        print('\n\n')
         logging.warn('Graceful Shutdown...')
+    except Exception as e:
+        logging.exception(e)
 
 
 if __name__ == '__main__':

@@ -1,8 +1,10 @@
-import logging
 import os
 import ssl
 from functools import partial
-from tabulate import tabulate
+from rich.highlighter import ReprHighlighter
+from rich import box
+from console import console
+from rich.table import Table
 import torch
 import torch.nn.functional as F
 from torch_geometric.utils import degree, remove_self_loops, subgraph
@@ -16,7 +18,6 @@ from sklearn.preprocessing import LabelEncoder
 from torch_geometric.utils import from_scipy_sparse_matrix, remove_isolated_nodes
 from torch_geometric.nn import knn_graph
 from args import support_args
-from utils import colored_text
 
 
 def load_ogb(name, transform=None, **kwargs):
@@ -265,15 +266,15 @@ class Dataset:
             'nodes': f'{data.num_nodes:,}',
             'edges': f'{data.num_edges:,}',
             'features': f'{data.num_features:,}',
-            'classes': int(data.y.max().item() + 1),
+            'classes': f'{int(data.y.max().item() + 1)}',
             'mean degree': f'{nodes_degree.mean().item():.2f}',
-            'median degree': nodes_degree.median().item(),
+            'median degree': f'{nodes_degree.median().item()}',
             'train/val/test (%)': f'{train_ratio:.2f} / {val_ratio:.2f} / {test_ratio:.2f}',
             'baseline (%)': f'{baseline:.2f}'
         }
 
-        # headers = [colored_text(key, 'yellow', 'normal') for key in stat]
-        headers = stat.keys()
-        data = [stat.values()]
-
-        logging.info('dataset stats\n' + tabulate(data, headers=headers) + '\n')
+        highlighter = ReprHighlighter()
+        table = Table(*stat.keys(), title="dataset stats", box=box.HORIZONTALS)
+        table.add_row(*map(highlighter, stat.values()))
+        console.log(table)
+        console.print()

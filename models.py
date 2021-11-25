@@ -378,6 +378,7 @@ class PrivateNodeClassifier(torch.nn.Module):
 
         noise_scale = Calibrator(mechanism_builder).calibrate(eps=epsilon, delta=delta)
         self.gnn.update(noise_scale=noise_scale)
+        return self
 
     def init_privacy_accountant(self, delta, sampling_rate):
         self.privacy_accountant = lambda epochs: self.gnn.build_mechanism(

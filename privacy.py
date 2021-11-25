@@ -161,7 +161,6 @@ class Calibrator:
         if eps == np.inf or isinstance(mechanism, NullMechanism):
             return 0.0
         else:
-            logging.info('calibrating noise to privacy budget...')
             noise_scale = self.eps_delta_calibrator(eps, delta)
             logging.info(f'noise scale: {noise_scale:.4f}\n')
             return noise_scale

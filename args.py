@@ -1,6 +1,9 @@
 import enum
 import inspect
-import logging
+from console import console
+from rich.table import Table
+from rich.highlighter import ReprHighlighter
+from rich import box
 from tabulate import tabulate
 from argparse import ArgumentTypeError, Action
 
@@ -112,8 +115,7 @@ def print_args(args):
     num_rows = 7
 
     for i, (key, val) in enumerate(vars(args).items()):
-        # keys.append(colored_text(key, color='cyan', style='normal'))
-        keys.append(key)
+        keys.append(f'{key}:')
         
         vals.append(val)
         if (i + 1) % num_rows == 0:
@@ -126,6 +128,10 @@ def print_args(args):
     data[col] = keys
     data[col+1] = vals
 
+    highlighter = ReprHighlighter()
+    message = tabulate(data, tablefmt='plain')
+    table = Table(title='program arguments', show_header=False, box=box.HORIZONTALS)
+    table.add_row(highlighter(message))
+
     print()
-    message = 'program arguments\n' + tabulate(data, tablefmt='simple') + '\n'
-    logging.info(message)
+    console.log(table)
