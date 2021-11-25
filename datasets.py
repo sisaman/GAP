@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.utils import degree, remove_self_loops, subgraph
 from torch_geometric.datasets import FacebookPagePage, LastFMAsia, Reddit2
-from torch_geometric.transforms import RandomNodeSplit, Compose, BaseTransform, ToUndirected, RemoveIsolatedNodes
+from torch_geometric.transforms import RandomNodeSplit, Compose, BaseTransform, RemoveIsolatedNodes
 from ogb.nodeproppred import PygNodePropPredDataset
 import pandas as pd
 from scipy.io import loadmat
@@ -15,7 +15,6 @@ from torch_geometric.data import Data, InMemoryDataset, download_url
 from sklearn.preprocessing import LabelEncoder
 from torch_geometric.utils import from_scipy_sparse_matrix, remove_isolated_nodes
 from torch_geometric.nn import knn_graph
-from torch_sparse import SparseTensor
 from args import support_args
 from utils import colored_text
 
@@ -237,15 +236,11 @@ class Dataset:
         data = self.supported_datasets[self.name](root=os.path.join(self.data_dir, self.name))[0]
         data.edge_index, _ = remove_self_loops(data.edge_index)
 
-        if isinstance(data.x, SparseTensor):
-            data.x = data.x.to_dense()
-
         if self.normalize:
             data.x = F.normalize(data.x, p=2., dim=-1)
 
         transforms = [
             RemoveIsolatedNodes(),            
-            ToUndirected(),
             RandomNodeSplit(split='train_rest')
         ]
 
@@ -277,7 +272,8 @@ class Dataset:
             'baseline (%)': f'{baseline:.2f}'
         }
 
-        headers = [colored_text(key, 'yellow', 'normal') for key in stat]
+        # headers = [colored_text(key, 'yellow', 'normal') for key in stat]
+        headers = stat.keys()
         data = [stat.values()]
 
         logging.info('dataset stats\n' + tabulate(data, headers=headers) + '\n')

@@ -3,7 +3,6 @@ import inspect
 import logging
 from tabulate import tabulate
 from argparse import ArgumentTypeError, Action
-from utils import colored_text
 
 
 class Enum(enum.Enum):
@@ -113,7 +112,9 @@ def print_args(args):
     num_rows = 7
 
     for i, (key, val) in enumerate(vars(args).items()):
-        keys.append(colored_text(key, color='cyan', style='normal'))
+        # keys.append(colored_text(key, color='cyan', style='normal'))
+        keys.append(key)
+        
         vals.append(val)
         if (i + 1) % num_rows == 0:
             data[col] = keys
