@@ -103,7 +103,7 @@ class Trainer:
 
     def _train(self, data, optimizer, epoch):
         self.model.train()
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)
         loss, metrics = self.model.training_step(data, epoch)
         if loss is not None:
             loss.backward()
