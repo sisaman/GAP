@@ -46,7 +46,7 @@ class GNN(torch.nn.Module):
     supported_stages = {'stack', 'skipsum', 'skipmax', 'skipcat'}
 
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, stage_type, 
-                 dropout_fn, activation_fn, batchnorm, aggregation, root_weight, inductive, input_module, output_module):
+                 dropout_fn, activation_fn, batchnorm, aggregation, root_weight, has_fixed_input, output_module):
         super().__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -57,12 +57,11 @@ class GNN(torch.nn.Module):
         self.activation = activation_fn
         self.aggregation = aggregation
         self.root_weight = root_weight
-        self.inductive = inductive
-        self.input_module = input_module
+        self.has_fixed_input = has_fixed_input
         self.output_module = output_module
         
         self.layers = self.init_layers()
-        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(output_module))]) if batchnorm else []
+        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(self.output_module))]) if batchnorm else []
         self.reset_parameters()
 
     def init_layers(self) -> ModuleList:
@@ -184,7 +183,7 @@ class PrivateGNN(GNN):
         return super().reset_parameters()
 
     def forward(self, x, edge_index):
-        if self.cached_edge_index is None or self.inductive:
+        if self.cached_edge_index is None or not self.has_fixed_input:
             if self.perturbation == 'graph':
                 edge_index = self.base_mechanism.perturb(edge_index, num_nodes=x.size(0))
             self.cached_edge_index = edge_index
@@ -208,7 +207,7 @@ class PrivateGNN(GNN):
             if self.perturbation == 'graph':
                 return self.base_mechanism
             else:
-                num_calls = int(self.cachable_first_agg) + (self.num_layers - int(self.cachable_first_agg)) * epochs
+                num_calls = int(self.has_fixed_input) + (self.num_layers - int(self.has_fixed_input)) * epochs
                 composed_mech = compose([self.base_mechanism], [num_calls])
                 return composed_mech
         else:
@@ -232,7 +231,7 @@ class PrivateGNN(GNN):
             conv = PrivConv(
                 in_channels=-1,
                 out_channels=self.output_dim if i == self.num_layers - 1 else self.hidden_dim,
-                cached=(i == 0 and self.cachable_first_agg),
+                cached=(i == 0 and self.has_fixed_input),
                 aggr=self.aggregation,
                 root_weight=self.root_weight,
                 perturbation=self.perturbation,
@@ -241,10 +240,6 @@ class PrivateGNN(GNN):
             layers.append(conv)
         
         return ModuleList(layers)
-
-    @property
-    def cachable_first_agg(self):
-        return (not self.inductive) and self.input_module
         
 
 @support_args
@@ -269,11 +264,13 @@ class PrivateNodeClassifier(torch.nn.Module):
                  stage:         dict(help='stage type of skip connection', choices=GNN.supported_stages) = 'stack',
                  aggregation:   dict(help='type of aggregation function', choices=PrivateGNN.supported_aggregations) = 'sum',
                  root_weight:   dict(help='if True, the layer adds transformed root node features to the output.') = True,
+                 pre_train:     dict(help='if True, then model is pre-trained without GNN layers') = False,
                  inductive=False,
                  ):
 
         super().__init__()
 
+        self.pre_train_state = pre_train
         self.privacy_accountant = None
         self.activaiton_fn = self.supported_activations[activation]()
         dropout_fn = Dropout(dropout, inplace=True)
@@ -300,8 +297,7 @@ class PrivateNodeClassifier(torch.nn.Module):
             batchnorm=batchnorm, 
             aggregation=aggregation,
             root_weight=root_weight,
-            inductive=inductive,
-            input_module=(pre_layers == 0),
+            has_fixed_input=(not inductive) and (pre_layers == 0 or pre_train),
             output_module=(post_layers == 0),
             perturbation=perturbation,
             mechanism=mechanism,
@@ -326,19 +322,20 @@ class PrivateNodeClassifier(torch.nn.Module):
         self.gnn.reset_parameters()
         self.post_mlp.reset_parameters()
 
+    def set_model_state(self, pre_train):
+        self.pre_train_state = pre_train
+        for param in self.pre_mlp.parameters():
+            param.requires_grad = pre_train
+
     def forward(self, data):
         h = self.pre_mlp(data.x)
-        h = self.gnn(h, data.edge_index)
+
+        if not self.pre_train_state:
+            h = self.gnn(h, data.edge_index)
+
         h = self.post_mlp(h)
         h = F.log_softmax(h, dim=1)
         return h
-
-    @torch.no_grad()
-    def embed(self, data):
-        self.eval()
-        x = self.pre_mlp(data.x)
-        data.x = x
-        return data
 
     def training_step(self, data, epoch):
         y_true = data.y[data.train_mask]
@@ -349,7 +346,7 @@ class PrivateNodeClassifier(torch.nn.Module):
         metrics = {'train/loss': loss.item(), 'train/acc': acc}
 
         if self.privacy_accountant:
-            metrics['eps'] = self.privacy_accountant(epochs=epoch)
+            metrics['train/eps'] = self.privacy_accountant(epochs=epoch)
 
         return loss, metrics
 

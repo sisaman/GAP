@@ -46,7 +46,7 @@ class Trainer:
 
     def configure_optimizer(self):
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
-        return Optim(self.model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
+        return Optim(filter(lambda p: p.requires_grad, self.model.parameters()), lr=self.learning_rate, weight_decay=self.weight_decay)
 
     def performs_better(self, metrics):
         if self.best_metrics is None:
@@ -67,13 +67,15 @@ class Trainer:
             TextColumn('                 '),
             SpinnerColumn(),
             "{task.description}",
-            "{task.completed}/{task.total}",
+            "{task.completed:>3}/{task.total}",
             "{task.fields[unit]}",
             BarColumn(),
             "{task.percentage:>3.0f}%",
             TimeElapsedColumn(),
             "{task.fields[metrics]}",
         ]
+
+        ### TODO: move progress bar to main.py ###
 
         with Progress(*progress_bar, console=console) as progress:
             task_training = progress.add_task(description, total=self.epochs, metrics='', unit='epochs')

@@ -34,12 +34,6 @@ def run(args):
         inductive=args.sampling_rate<1.0,
     )
 
-    if args.pre_train:
-        pt_model: PrivateNodeClassifier = PrivateNodeClassifier.from_args(args, 
-            num_classes=num_classes, 
-            pre_layers=1, mp_layers=0, post_layers=1
-        )
-
     ### calibrate noise to privacy budget ###
     with console.status('calibrating noise to privacy budget...'):
         model.calibrate(epsilon=args.epsilon, delta=args.delta, epochs=args.epochs, sampling_rate=args.sampling_rate)
@@ -47,40 +41,37 @@ def run(args):
     if args.debug:
         model.init_privacy_accountant(delta=args.delta, sampling_rate=args.sampling_rate)
     
-    
     ### run experiment ###
 
     for iteration in range(args.repeats):
         data = Data(**data_initial.to_dict())
+        trainer: Trainer = Trainer.from_args(args, device=device)
+        model.reset_parameters()
 
         if args.sampling_rate == 1.0 and not args.cpu:
             with console.status('moving data to gpu...'):
                 data = data.to(device)
 
-        ### add data transforms ###
-
-        transforms = []
+        ### pre-training ###
 
         if args.pre_train:
-            logger.disable()
-            pt_model.reset_parameters()
-            trainer: Trainer = Trainer.from_args(args, device=device)
-            trainer.fit(pt_model, data, description='pre-training')
-            transforms.append(pt_model.embed)
-            logger.enabled = args.debug
+            model.set_model_state(pre_train=True)
+            trainer.fit(model, data, description='pre-training')
+            model.set_model_state(pre_train=False)
 
         ##### TODO: this should be changed #####
         # if args.sampling_rate < 1.0:
         #     transforms.append(RandomSubGraphSampler(args.sampling_rate, edge_sampling=True))
 
-        if args.add_knn:
-            transforms.append(AddKNNGraph(args.add_knn))
+        # transforms = []
 
-        ### prepare data and train model ###
+        # if args.add_knn:
+        #     transforms.append(AddKNNGraph(args.add_knn))
 
-        data = Compose(transforms)(data)
-        trainer: Trainer = Trainer.from_args(args, device=device)
-        model.reset_parameters()
+        # data = Compose(transforms)(data)
+
+        ### model training ###
+
         best_metrics = trainer.fit(model, data, description='training    ')
 
         ### process results ###
@@ -125,8 +116,6 @@ def main():
 
     # trainer arguments
     group_trainer = init_parser.add_argument_group('trainer arguments')
-    group_trainer.add_argument('--pre-train', '--pre_train', help='pre-train an MLP and use its embeddings as input features', 
-                                type=str2bool, nargs='?', const=True, default=False)
     group_trainer.add_argument('--cpu', help='train on CPU', type=str2bool, nargs='?', const=True, default=not torch.cuda.is_available())
     Trainer.add_args(group_trainer)
 
