@@ -1,10 +1,12 @@
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.padding import Padding
+from rich.traceback import install
 import warnings
 import logging
 
 console = Console(tab_size=4)
+install(console=console, width=console.width)
 warnings.filterwarnings('ignore')
 logging.basicConfig(
     level='INFO', 
