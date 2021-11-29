@@ -65,7 +65,7 @@ def run(args):
             logger.disable()
             pt_model.reset_parameters()
             trainer: Trainer = Trainer.from_args(args, device=device)
-            trainer.fit(pt_model, data, description='pre-training...')
+            trainer.fit(pt_model, data, description='pre-training')
             transforms.append(pt_model.embed)
             logger.enabled = args.debug
 
@@ -81,7 +81,7 @@ def run(args):
         data = Compose(transforms)(data)
         trainer: Trainer = Trainer.from_args(args, device=device)
         model.reset_parameters()
-        best_metrics = trainer.fit(model, data, description='training...    ')
+        best_metrics = trainer.fit(model, data, description='training    ')
 
         ### process results ###
 
