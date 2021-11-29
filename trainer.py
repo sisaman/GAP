@@ -24,6 +24,7 @@ class Trainer:
                  epochs:        dict(help='number of training epochs') = 100,
                  patience:      dict(help='early-stopping patience window size') = 0,
                  val_interval:  dict(help='number of epochs to wait for validation', type=int) = 1,
+                 use_amp:       dict(help='use automatic mixed precision training') = False,
                  device = 'cuda',
                  ):
 
@@ -33,6 +34,7 @@ class Trainer:
         self.epochs = epochs
         self.patience = patience
         self.val_interval = val_interval
+        self.use_amp = use_amp
         self.device = device
         
         self.logger = Logger.get_instance()
@@ -56,6 +58,7 @@ class Trainer:
         data = data.to(self.device)
         self.model = model.to(self.device)
         optimizer = self.configure_optimizer()
+        scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
         num_epochs_without_improvement = 0
         self.best_metrics = None
@@ -77,7 +80,7 @@ class Trainer:
 
             for epoch in range(1, self.epochs + 1):
                 metrics = {'epoch': epoch}
-                train_metrics = self._train(data, optimizer, epoch)
+                train_metrics = self._train(data, optimizer, scaler, epoch)
                 metrics.update(**train_metrics)
                 val_metrics = self._validation(data)
                 metrics.update(**val_metrics)
@@ -101,16 +104,23 @@ class Trainer:
         self.logger.log_summary(self.best_metrics)
         return self.best_metrics
 
-    def _train(self, data, optimizer, epoch):
+    def _train(self, data, optimizer, scaler, epoch):
         self.model.train()
         optimizer.zero_grad(set_to_none=True)
-        loss, metrics = self.model.training_step(data, epoch)
+
+        with torch.cuda.amp.autocast(enabled=self.use_amp):
+            loss, metrics = self.model.training_step(data, epoch)
+        
         if loss is not None:
-            loss.backward()
-            optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+
         return metrics
 
     @torch.no_grad()
     def _validation(self, data):
         self.model.eval()
-        return self.model.validation_step(data)
+        with torch.cuda.amp.autocast(enabled=self.use_amp):
+            out = self.model.validation_step(data)
+        return out
