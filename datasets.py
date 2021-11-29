@@ -232,7 +232,7 @@ class Dataset:
         self.data_dir = data_dir
         self.normalize = normalize
 
-    def load(self, verbose=True):
+    def load(self, verbose=False):
 
         data = self.supported_datasets[self.name](root=os.path.join(self.data_dir, self.name))[0]
         data.edge_index, _ = remove_self_loops(data.edge_index)
