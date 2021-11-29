@@ -250,7 +250,6 @@ class Dataset:
         if verbose:
             self.print_stats(data)
 
-
         return data
 
     def print_stats(self, data):
