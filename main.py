@@ -152,11 +152,12 @@ def main():
 
     try:
         run(args)
+        if not args.cpu:    
+            gpu_mem = torch.cuda.max_memory_allocated() / 1024 ** 3
+            logging.info(f'Max GPU memory used = {gpu_mem:.2f} GB')
     except KeyboardInterrupt:
         print('\n\n')
         logging.warn('Graceful Shutdown...')
-    except Exception as e:
-        logging.exception(e)
 
 
 if __name__ == '__main__':
