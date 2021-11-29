@@ -46,7 +46,7 @@ class GNN(torch.nn.Module):
     supported_stages = {'stack', 'skipsum', 'skipmax', 'skipcat'}
 
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, stage_type, 
-                 dropout_fn, activation_fn, batchnorm, root_weight, inductive, input_module, output_module):
+                 dropout_fn, activation_fn, batchnorm, aggregation, root_weight, inductive, input_module, output_module):
         super().__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -55,6 +55,7 @@ class GNN(torch.nn.Module):
         self.stage_type = stage_type
         self.dropout = dropout_fn
         self.activation = activation_fn
+        self.aggregation = aggregation
         self.root_weight = root_weight
         self.inductive = inductive
         self.input_module = input_module
@@ -107,8 +108,8 @@ class GNN(torch.nn.Module):
 
 
 class PrivConv(MessagePassing):
-    def __init__(self, in_channels, out_channels, root_weight, cached, perturbation, mechanism):
-        super().__init__(aggr='add')
+    def __init__(self, in_channels, out_channels, aggr, root_weight, cached, perturbation, mechanism):
+        super().__init__(aggr='add' if aggr == 'sum' else aggr)
         
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -163,7 +164,8 @@ class PrivConv(MessagePassing):
 
 
 class PrivateGNN(GNN):
-    supported_perturbations = {'aggr', 'feature', 'graph'}                               ###### shoud be changed ######
+    supported_perturbations = {'aggr', 'feature', 'graph'}
+    supported_aggregations = {'sum'}
 
     def __init__(self, perturbation, mechanism, *args, **kwargs):
         self.perturbation = perturbation
@@ -231,6 +233,7 @@ class PrivateGNN(GNN):
                 in_channels=-1,
                 out_channels=self.output_dim if i == self.num_layers - 1 else self.hidden_dim,
                 cached=(i == 0 and self.cachable_first_agg),
+                aggr=self.aggregation,
                 root_weight=self.root_weight,
                 perturbation=self.perturbation,
                 mechanism=mechanism
@@ -264,6 +267,7 @@ class PrivateNodeClassifier(torch.nn.Module):
                  dropout:       dict(help='dropout rate (between zero and one)') = 0.0,
                  batchnorm:     dict(help='if True, then model uses batch normalization') = True,
                  stage:         dict(help='stage type of skip connection', choices=GNN.supported_stages) = 'stack',
+                 aggregation:   dict(help='type of aggregation function', choices=PrivateGNN.supported_aggregations) = 'sum',
                  root_weight:   dict(help='if True, the layer adds transformed root node features to the output.') = True,
                  inductive=False,
                  ):
@@ -294,6 +298,7 @@ class PrivateNodeClassifier(torch.nn.Module):
             dropout_fn=dropout_fn, 
             activation_fn=self.activaiton_fn, 
             batchnorm=batchnorm, 
+            aggregation=aggregation,
             root_weight=root_weight,
             inductive=inductive,
             input_module=(pre_layers == 0),
