@@ -57,7 +57,8 @@ class Trainer:
 
     def load_best_model(self):
         if self.checkpoint_path:
-            return self.model.load_state_dict(torch.load(self.checkpoint_path))
+            self.model.load_state_dict(torch.load(self.checkpoint_path))
+            return self.model
         else:
             raise Exception('No checkpoint found')
 

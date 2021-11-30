@@ -2,13 +2,17 @@ from functools import partial
 from autodp.transformer_zoo import AmplificationBySampling, ComposeGaussian, Composition
 import torch
 import torch.nn.functional as F
-from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh
-from torch_geometric.nn import BatchNorm, MessagePassing, Linear, MessageNorm
+from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear
+from torch_geometric.nn import BatchNorm, MessagePassing, MessageNorm
 from torch_geometric.utils import add_remaining_self_loops
 from utils import pairwise
 from args import support_args
 from privacy import Calibrator, GaussianMechanism, NullMechanism, TopMFilter, supported_mechanisms
 
+class Linear(LazyLinear):
+    def __init__(self, in_features, out_features, bias=True):
+        super().__init__(out_features, bias)
+        
 
 class MLP(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, dropout_fn, activation_fn, batchnorm, is_output_module):
