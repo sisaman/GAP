@@ -1,6 +1,7 @@
 ### Developments
 
-- different agg functions (median, max)
+- ~~different agg functions (median, max)  **not feasible; only sum works well**~~
+- checkpoint for pre-training
 - inductive batch learning
 
 ### Experiments
