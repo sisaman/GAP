@@ -15,6 +15,7 @@ import pandas as pd
 from scipy.io import loadmat
 from torch_geometric.data import Data, InMemoryDataset, download_url
 from sklearn.preprocessing import LabelEncoder
+from sklearn.random_projection import GaussianRandomProjection
 from torch_geometric.utils import from_scipy_sparse_matrix, remove_isolated_nodes
 from torch_geometric.nn import knn_graph
 from args import support_args
@@ -223,29 +224,35 @@ class Dataset:
         # 'twitch-de': partial(Twitch, name='DE'),
     }
 
+    supported_features = {'original', 'randproj16', 'randproj32', 'randproj64'}
+
     def __init__(self,
                  dataset:    dict(help='name of the dataset', choices=supported_datasets) = 'facebook',
                  data_dir:   dict(help='directory to store the dataset') = './datasets',
-                 normalize:  dict(help='if set to true, row-normalizes features') = False
+                 normalize:  dict(help='if set to true, row-normalizes features') = False,
+                 features:   dict(help='features to use', choices=supported_features) = 'original',
                  ):
+
         self.name = dataset
         self.data_dir = data_dir
         self.normalize = normalize
+        self.features = features
 
     def load(self, verbose=False):
-
         data = self.supported_datasets[self.name](root=os.path.join(self.data_dir, self.name))[0]
         data.edge_index, _ = remove_self_loops(data.edge_index)
 
+        transforms = [RemoveIsolatedNodes(), RandomNodeSplit(split='train_rest')]
+        data = Compose(transforms)(data)
+
+        if self.features.startswith('randproj'):
+            dim = int(self.features[8:])
+            transformer = GaussianRandomProjection(n_components=dim)
+            x = transformer.fit_transform(data.x)
+            data.x = torch.tensor(x, dtype=torch.float)
+
         if self.normalize:
             data.x = F.normalize(data.x, p=2., dim=-1)
-
-        transforms = [
-            RemoveIsolatedNodes(),            
-            RandomNodeSplit(split='train_rest')
-        ]
-
-        data = Compose(transforms)(data)
 
         if verbose:
             self.print_stats(data)
@@ -258,7 +265,6 @@ class Dataset:
         train_ratio = data.train_mask.sum().item() / data.num_nodes * 100
         val_ratio = data.val_mask.sum().item() / data.num_nodes * 100
         test_ratio = data.test_mask.sum().item() / data.num_nodes * 100
-
 
         stat = {
             'name': self.name,
