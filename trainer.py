@@ -1,4 +1,5 @@
 from console import console
+import os, uuid
 import torch
 from torch.optim import SGD, Adam
 from args import support_args
@@ -36,13 +37,13 @@ class Trainer:
         self.val_interval = val_interval
         self.use_amp = use_amp
         self.device = device
-        
         self.logger = Logger.get_instance()
         self.reset()
 
     def reset(self):
         self.model = None
         self.best_metrics = None
+        self.checkpoint_path = None
 
     def configure_optimizer(self):
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
@@ -54,11 +55,21 @@ class Trainer:
         else:
             return metrics['val/acc'] > self.best_metrics['val/acc']
 
-    def fit(self, model, data, description=''):
+    def load_best_model(self):
+        if self.checkpoint_path:
+            return self.model.load_state_dict(torch.load(self.checkpoint_path))
+        else:
+            raise Exception('No checkpoint found')
+
+    def fit(self, model, data, checkpoint=False, description=''):
         data = data.to(self.device)
         self.model = model.to(self.device)
         optimizer = self.configure_optimizer()
         scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+
+        if checkpoint:
+            os.makedirs('checkpoints', exist_ok=True)
+            self.checkpoint_path = os.path.join('checkpoints', f'{uuid.uuid1()}.pt')
 
         num_epochs_without_improvement = 0
 
@@ -92,6 +103,9 @@ class Trainer:
                         if self.performs_better(metrics):
                             self.best_metrics = metrics
                             num_epochs_without_improvement = 0
+
+                            if checkpoint:
+                                torch.save(self.model.state_dict(), self.checkpoint_path)
                         else:
                             num_epochs_without_improvement += 1
                             if num_epochs_without_improvement >= self.patience > 0:

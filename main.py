@@ -56,7 +56,9 @@ def run(args):
 
         if args.pre_train:
             model.set_model_state(pre_train=True)
-            trainer.fit(model, data, description='pre-training')
+            trainer.fit(model, data, checkpoint=True, description='pre-training')
+            model = trainer.load_best_model()
+            model.set_model_state(pre_train=False)
 
         ##### TODO: this should be changed #####
         # if args.sampling_rate < 1.0:
@@ -72,8 +74,7 @@ def run(args):
         ### model training ###
 
         trainer.reset()
-        model.set_model_state(pre_train=False)
-        best_metrics = trainer.fit(model, data, description='training    ')
+        best_metrics = trainer.fit(model, data, checkpoint=False, description='training    ')
 
         ### process results ###
 
