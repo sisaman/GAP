@@ -50,7 +50,7 @@ def timeit(func):
         start = time.time()
         out = func(*args, **kwargs)
         end = time.time()
-        logging.info(f'Total time spent in {str(func.__name__)}: {(end - start):.2f} seconds.\n\n')
+        logging.info(f'Total time spent in {str(func.__name__)}: {(end - start):.2f} seconds.')
         return out
 
     return wrapper

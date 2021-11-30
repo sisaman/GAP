@@ -112,7 +112,7 @@ def print_args(args):
     data = {}
     keys = []
     vals = []
-    num_rows = 7
+    num_rows = 8
 
     for i, (key, val) in enumerate(vars(args).items()):
         keys.append(f'{key}:')
