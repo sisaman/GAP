@@ -61,7 +61,6 @@ class Trainer:
         scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
         num_epochs_without_improvement = 0
-        self.best_metrics = None
 
         progress_bar = [
             TextColumn('                 '),
