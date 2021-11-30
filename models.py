@@ -11,22 +11,22 @@ from privacy import Calibrator, GaussianMechanism, NullMechanism, TopMFilter, su
 
 
 class MLP(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, dropout_fn, activation_fn, batchnorm, output_module):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, dropout_fn, activation_fn, batchnorm, is_output_module):
         super().__init__()
         self.num_layers = num_layers
         self.dropout = dropout_fn
         self.activation = activation_fn
-        self.output_module = output_module
+        self.is_output_module = is_output_module
         dimensions = [input_dim] + [hidden_dim] * (num_layers - 1) + [output_dim] if num_layers > 0 else []
         self.layers = ModuleList([Linear(in_channels, out_channels) for in_channels, out_channels in pairwise(dimensions)])
-        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(output_module))]) if batchnorm else []
+        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(is_output_module))]) if batchnorm else []
         self.reset_parameters()
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
             x = layer(x)
 
-            if i == self.num_layers - 1 and self.output_module:
+            if i == self.num_layers - 1 and self.is_output_module:
                 break
 
             x = self.bns[i](x) if self.bns else x
@@ -46,7 +46,7 @@ class GNN(torch.nn.Module):
     supported_stages = {'stack', 'skipsum', 'skipmax', 'skipcat'}
 
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, stage_type, 
-                 dropout_fn, activation_fn, batchnorm, aggregation, root_weight, has_fixed_input, output_module):
+                 dropout_fn, activation_fn, batchnorm, aggregation, root_weight, has_fixed_input, is_output_module):
         super().__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -58,10 +58,10 @@ class GNN(torch.nn.Module):
         self.aggregation = aggregation
         self.root_weight = root_weight
         self.has_fixed_input = has_fixed_input
-        self.output_module = output_module
+        self.is_output_module = is_output_module
         
         self.layers = self.init_layers()
-        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(self.output_module))]) if batchnorm else []
+        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(is_output_module))]) if batchnorm else []
         self.reset_parameters()
 
     def init_layers(self) -> ModuleList:
@@ -70,7 +70,7 @@ class GNN(torch.nn.Module):
     def layer_forward(self, index, h_in, edge_index):
         h_out = self.layers[index](h_in, edge_index)
 
-        if index == self.num_layers - 1 and self.output_module:
+        if index == self.num_layers - 1 and self.is_output_module:
             return h_out
 
         h_out = self.bns[index](h_out) if self.bns else h_out
@@ -283,7 +283,7 @@ class PrivateNodeClassifier(torch.nn.Module):
             activation_fn=self.activaiton_fn, 
             dropout_fn=dropout_fn, 
             batchnorm=batchnorm,
-            output_module=(mp_layers + post_layers == 0)
+            is_output_module=(mp_layers + post_layers == 0)
         )
 
         self.gnn = PrivateGNN(
@@ -298,7 +298,7 @@ class PrivateNodeClassifier(torch.nn.Module):
             aggregation=aggregation,
             root_weight=root_weight,
             has_fixed_input=(not inductive) and (pre_layers == 0 or pre_train),
-            output_module=(post_layers == 0),
+            is_output_module=(post_layers == 0),
             perturbation=perturbation,
             mechanism=mechanism,
         )
@@ -311,7 +311,7 @@ class PrivateNodeClassifier(torch.nn.Module):
             activation_fn=self.activaiton_fn, 
             dropout_fn=dropout_fn, 
             batchnorm=batchnorm,
-            output_module=True
+            is_output_module=True
         )
 
         self.reset_parameters()
