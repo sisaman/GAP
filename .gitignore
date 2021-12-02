@@ -123,5 +123,5 @@ expr
 .vscode
 *.ipynb
 test
-TODO.MD
 checkpoints
+TODO
