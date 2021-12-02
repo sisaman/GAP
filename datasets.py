@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.utils import degree, remove_self_loops, subgraph
 from torch_geometric.datasets import FacebookPagePage, LastFMAsia, Reddit2
-from torch_geometric.transforms import RandomNodeSplit, Compose, BaseTransform, RemoveIsolatedNodes
+from torch_geometric.transforms import RandomNodeSplit, Compose, BaseTransform, RemoveIsolatedNodes, ToSparseTensor
 from ogb.nodeproppred import PygNodePropPredDataset
 import pandas as pd
 from scipy.io import loadmat
@@ -231,18 +231,21 @@ class Dataset:
                  data_dir:   dict(help='directory to store the dataset') = './datasets',
                  normalize:  dict(help='if set to true, row-normalizes features') = False,
                  features:   dict(help='features to use', choices=supported_features) = 'original',
+                 sparse:     dict(help='if set to true, uses sparse matrices') = True,
                  ):
 
         self.name = dataset
         self.data_dir = data_dir
         self.normalize = normalize
         self.features = features
+        self.sparse = sparse
 
     def load(self, verbose=False):
         data = self.supported_datasets[self.name](root=os.path.join(self.data_dir, self.name))[0]
         data.edge_index, _ = remove_self_loops(data.edge_index)
 
         transforms = [RemoveIsolatedNodes(), RandomNodeSplit(split='train_rest')]
+        transforms += [ToSparseTensor()] if self.sparse else []
         data = Compose(transforms)(data)
 
         if self.features.startswith('randproj'):
@@ -260,7 +263,11 @@ class Dataset:
         return data
 
     def print_stats(self, data):
-        nodes_degree = degree(data.edge_index[1], num_nodes=data.num_nodes)
+        if hasattr(data, 'adj_t'):
+            nodes_degree = data.adj_t.sum(dim=1)
+        else:
+            nodes_degree = degree(data.edge_index[1], num_nodes=data.num_nodes)
+
         baseline = (data.y.unique(return_counts=True)[1].max().item() * 100 / data.num_nodes)
         train_ratio = data.train_mask.sum().item() / data.num_nodes * 100
         val_ratio = data.val_mask.sum().item() / data.num_nodes * 100

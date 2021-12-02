@@ -7,6 +7,8 @@ import autodp.mechanism_zoo as mechanisms
 from autodp.transformer_zoo import Composition
 from torch_geometric.utils import remove_self_loops, add_self_loops, contains_self_loops
 from scipy.optimize import minimize_scalar
+from torch_sparse import SparseTensor
+
 
 class NullMechanism(Mechanism):
     def __init__(self):
@@ -104,9 +106,16 @@ class TopMFilter(Mechanism):
         else:
             return super().get_approxDP(delta)
  
-    def perturb(self, edge_index, num_nodes):
+    def perturb(self, edge_index_or_adj_t, num_nodes):
         if self.noise_scale == 0.0:
-            return edge_index
+            return edge_index_or_adj_t
+
+        is_sparse = isinstance(edge_index_or_adj_t, SparseTensor)
+        if is_sparse:
+            adj_t = edge_index_or_adj_t
+            edge_index = torch.cat(adj_t.coo()[:-1]).view(2,-1)
+        else:
+            edge_index = edge_index_or_adj_t
 
         # if the graph has self loops, we need to remove them to exclude them from edge count
         has_self_loops = contains_self_loops(edge_index)
@@ -128,7 +137,7 @@ class TopMFilter(Mechanism):
         edges_to_be_removed = edge_index[:, sample < theta]
 
         # we add self loops to the graph to exclude them from perturbation
-        edge_index_with_self_loops, _ = add_self_loops(edge_index, num_nodes=num_nodes)
+        edge_index_with_self_loops, _ = add_self_loops(edge_index, num_nodes=n)
         # adjmat will have m+n entries after adding self loops
         adjmat = self.to_sparse_adjacency(edge_index_with_self_loops, num_nodes=n)
 
@@ -155,7 +164,10 @@ class TopMFilter(Mechanism):
         if not has_self_loops: 
             edge_index, _ = remove_self_loops(edge_index)
 
-        return edge_index
+        if is_sparse:
+            return SparseTensor.from_edge_index(edge_index, sparse_sizes=(num_nodes, num_nodes))
+        else:
+            return edge_index
 
     @staticmethod
     def to_sparse_adjacency(edge_index, num_nodes):

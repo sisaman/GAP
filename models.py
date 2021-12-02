@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear
 from torch_geometric.nn import BatchNorm, MessagePassing, MessageNorm
 from torch_geometric.utils import add_remaining_self_loops
+from torch_sparse.tensor import SparseTensor
 from utils import pairwise
 from args import support_args
 from privacy import Calibrator, GaussianMechanism, NullMechanism, TopMFilter, supported_mechanisms
@@ -71,8 +72,8 @@ class GNN(torch.nn.Module):
     def init_layers(self) -> ModuleList:
         raise NotImplementedError
 
-    def layer_forward(self, index, h_in, edge_index):
-        h_out = self.layers[index](h_in, edge_index)
+    def layer_forward(self, index, h_in, edge_data):
+        h_out = self.layers[index](h_in, edge_data)
 
         if index == self.num_layers - 1 and self.is_output_module:
             return h_out
@@ -83,12 +84,11 @@ class GNN(torch.nn.Module):
         
         return h_out
 
-    def forward(self, x, edge_index):
+    def forward(self, x, edge_data):
         h_in = h_out = x
-        edge_index, _ = add_remaining_self_loops(edge_index, num_nodes=x.size(0))
 
         for i in range(self.num_layers):
-            h_out = self.layer_forward(i, h_in, edge_index)
+            h_out = self.layer_forward(i, h_in, edge_data)
             h_in = h_out = self.combine(input=h_in, output=h_out)
 
         return h_out
@@ -129,8 +129,13 @@ class PrivConv(MessagePassing):
         self.mn = MessageNorm(learn_scale=True)
         self.reset_parameters()
 
-    def private_aggregation(self, x, edge_index):
+    def private_aggregation(self, x, edge_data):
         if self.cached_agg is None or not self.cached:
+
+            if isinstance(edge_data, SparseTensor):
+                edge_data = edge_data.fill_diag(1)
+            else:
+                edge_data, _ = add_remaining_self_loops(edge_data, num_nodes=x.size(0))
             
             if self.perturbation_mode in {'aggr', 'feature'}:
                 x = self.mechanism.normalize(x)
@@ -138,7 +143,7 @@ class PrivConv(MessagePassing):
             if self.perturbation_mode == 'feature':    
                 x = self.mechanism.perturb(x, sensitivity=1)
             
-            agg = self.propagate(edge_index, x=x)
+            agg = self.propagate(edge_data, x=x)
 
             if self.perturbation_mode == 'aggr':
                 agg = self.mechanism.perturb(agg, sensitivity=1)
@@ -147,8 +152,8 @@ class PrivConv(MessagePassing):
 
         return self.cached_agg
 
-    def forward(self, x, edge_index):
-        out = self.private_aggregation(x, edge_index)
+    def forward(self, x, edge_data):
+        out = self.private_aggregation(x, edge_data)
         out = self.mn(x, out)
         out = self.lin_l(out)
 
@@ -157,6 +162,9 @@ class PrivConv(MessagePassing):
 
         out = F.normalize(out, p=2, dim=-1)
         return out
+
+    def message_and_aggregate(self, adj_t, x):
+        return adj_t.matmul(x, reduce=self.aggr)
 
     def reset_parameters(self):
         self.cached_agg = None
@@ -178,21 +186,21 @@ class PrivateGNN(GNN):
         else:
             self.base_mechanism = supported_mechanisms[mechanism](noise_scale=0.0)
 
-        self.cached_edge_index = None
+        self.cached_edge_data = None
 
         super().__init__(*args, **kwargs)
 
     def reset_parameters(self):
-        self.cached_edge_index = None
+        self.cached_edge_data = None
         return super().reset_parameters()
 
-    def forward(self, x, edge_index):
-        if self.cached_edge_index is None or not self.has_fixed_input:
+    def forward(self, x, edge_data):
+        if self.cached_edge_data is None or not self.has_fixed_input:
             if self.perturbation == 'graph':
-                edge_index = self.base_mechanism.perturb(edge_index, num_nodes=x.size(0))
-            self.cached_edge_index = edge_index
+                edge_data = self.base_mechanism.perturb(edge_data, num_nodes=x.size(0))
+            self.cached_edge_data = edge_data
             
-        return super().forward(x, self.cached_edge_index)
+        return super().forward(x, self.cached_edge_data)
 
     def update(self, noise_scale):
         self.base_mechanism.update(noise_scale)
@@ -335,7 +343,8 @@ class PrivateNodeClassifier(torch.nn.Module):
         h = self.pre_mlp(data.x)
 
         if not self.pre_train_state:
-            h = self.gnn(h, data.edge_index)
+            edge_data = data.adj_t if hasattr(data, 'adj_t') else data.edge_index
+            h = self.gnn(h, edge_data)
 
         h = self.post_mlp(h)
         h = F.log_softmax(h, dim=1)
