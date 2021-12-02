@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from autodp.autodp_core import Mechanism
 import autodp.mechanism_zoo as mechanisms
 from autodp.transformer_zoo import Composition
-from torch_geometric.utils import remove_self_loops, add_self_loops
+from torch_geometric.utils import remove_self_loops, add_self_loops, contains_self_loops
 from scipy.optimize import minimize_scalar
 
 class NullMechanism(Mechanism):
@@ -88,8 +88,10 @@ class TopMFilter(Mechanism):
     def __init__(self, noise_scale):
         super().__init__()
         self.noise_scale = noise_scale
-        self.mech_edges = LaplaceMechanism(self.noise_scale)         # for individual edge perturbation
-        self.mech_count = LaplaceMechanism(self.noise_scale * 9)     # for edge-count perturbation
+        # noise scales are set such that 0.1 of privacy budget is 
+        #   spent on perturbing total edge count and 0.9 on perturbing edges
+        self.mech_edges = LaplaceMechanism(self.noise_scale)
+        self.mech_count = LaplaceMechanism(self.noise_scale * 9)
         composed_mech = Composition()([self.mech_edges, self.mech_count], [1,1])
         self.set_all_representation(composed_mech)
 
@@ -101,10 +103,15 @@ class TopMFilter(Mechanism):
             return np.inf
         else:
             return super().get_approxDP(delta)
-
+ 
     def perturb(self, edge_index, num_nodes):
         if self.noise_scale == 0.0:
             return edge_index
+
+        # if the graph has self loops, we need to remove them to exclude them from edge count
+        has_self_loops = contains_self_loops(edge_index)
+        if has_self_loops:
+            edge_index = remove_self_loops(edge_index)
 
         n = num_nodes
         m = edge_index.shape[1]
@@ -120,13 +127,18 @@ class TopMFilter(Mechanism):
         sample = self.mech_edges.perturb(loc, sensitivity=1)
         edges_to_be_removed = edge_index[:, sample < theta]
 
+        # we add self loops to the graph to exclude them from perturbation
         edge_index_with_self_loops, _ = add_self_loops(edge_index, num_nodes=num_nodes)
+        # adjmat will have m+n entries after adding self loops
         adjmat = self.to_sparse_adjacency(edge_index_with_self_loops, num_nodes=n)
-        ### adjmat has m+n entries ###
 
         while True:
             adjmat = adjmat.coalesce()
             nnz = adjmat.values().size(0)
+
+            # we want the adjacency matrix to have (m_pert + n + num_edges_to_be_removed) non-zero entries,
+            #   so we keep adding edges until we have that many.
+            #   we later remove (n + num_edges_to_be_removed) edges so the final graph has exactly m_pert edges
             num_remaining_edges = m_pert + n + edges_to_be_removed.size(1) - nnz
 
             if num_remaining_edges <= 0:
@@ -135,10 +147,14 @@ class TopMFilter(Mechanism):
             edges_to_be_added = torch.randint(n, size=(2, num_remaining_edges), device=adjmat.device)
             adjmat = adjmat + self.to_sparse_adjacency(edges_to_be_added, num_nodes=n)
 
+        # remove edges to be removed: the graph will have m_pert + n edges
         adjmat = (adjmat.bool().int() - self.to_sparse_adjacency(edges_to_be_removed, num_nodes=n)).coalesce()
         edge_index, values = adjmat.indices(), adjmat.values()
         edge_index = edge_index[:, values > 0].contiguous()
-        edge_index, _ = remove_self_loops(edge_index)
+        # if the input graph did not initially have self loops, we need to remove them
+        if not has_self_loops: 
+            edge_index, _ = remove_self_loops(edge_index)
+
         return edge_index
 
     @staticmethod
