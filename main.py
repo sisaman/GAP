@@ -6,12 +6,11 @@ with console.status('importing modules...'):
     import numpy as np
     import torch
     from args import print_args, str2bool
-    from datasets import Dataset, AddKNNGraph
+    from datasets import Dataset
     from loggers import Logger
     from models import PrivateNodeClassifier
     from trainer import Trainer
     from utils import timeit, seed_everything, confidence_interval
-    from torch_geometric.transforms import Compose
     from torch_geometric.data import Data
 
 
@@ -59,17 +58,6 @@ def run(args):
             trainer.fit(model, data, checkpoint=True, description='pre-training')
             model = trainer.load_best_model()
             model.set_model_state(pre_train=False)
-
-        ##### TODO: this should be changed #####
-        # if args.sampling_rate < 1.0:
-        #     transforms.append(RandomSubGraphSampler(args.sampling_rate, edge_sampling=True))
-
-        # transforms = []
-
-        # if args.add_knn:
-        #     transforms.append(AddKNNGraph(args.add_knn))
-
-        # data = Compose(transforms)(data)
 
         ### model training ###
 

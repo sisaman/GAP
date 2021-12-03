@@ -3,7 +3,7 @@ from autodp.transformer_zoo import AmplificationBySampling, ComposeGaussian, Com
 import torch
 import torch.nn.functional as F
 from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear
-from torch_geometric.nn import BatchNorm, MessagePassing, MessageNorm
+from torch_geometric.nn import BatchNorm, MessagePassing, MessageNorm, knn_graph
 from torch_geometric.utils import add_remaining_self_loops
 from torch_sparse.tensor import SparseTensor
 from utils import pairwise
@@ -277,11 +277,13 @@ class PrivateNodeClassifier(torch.nn.Module):
                  aggregation:   dict(help='type of aggregation function', choices=PrivateGNN.supported_aggregations) = 'sum',
                  root_weight:   dict(help='if True, the layer adds transformed root node features to the output.') = True,
                  pre_train:     dict(help='if True, then model is pre-trained without GNN layers') = False,
+                 knn:           dict(help='if greater than zero, input graph is augmented by adding k-nn edges') = 0,
                  inductive=False,
                  ):
 
         super().__init__()
 
+        self.knn = knn
         self.pre_train_state = pre_train
         self.privacy_accountant = None
         self.activaiton_fn = self.supported_activations[activation]()
@@ -339,12 +341,31 @@ class PrivateNodeClassifier(torch.nn.Module):
         for param in self.pre_mlp.parameters():
             param.requires_grad = pre_train
 
+    def add_knn(self, x, edge_data):
+        if self.knn <= 0:
+            return edge_data
+
+        edge_index = knn_graph(x=x, k=self.knn, num_workers=6)
+
+        if isinstance(edge_data, SparseTensor):
+            num_nodes = x.size(0)
+            adj_t = edge_data + SparseTensor.from_edge_index(edge_index, sparse_sizes=(num_nodes, num_nodes))
+            return adj_t.coalesce()
+        else:
+            edge_index = torch.cat([edge_data, edge_index], dim=1)
+            return edge_index
+
     def forward(self, data):
         h = self.pre_mlp(data.x)
 
         if not self.pre_train_state:
             edge_data = data.adj_t if hasattr(data, 'adj_t') else data.edge_index
-            h = self.gnn(h, edge_data)
+
+            edge_data = self.add_knn(h, edge_data)
+            self.edge_data = edge_data
+            self.knn = 0
+
+            h = self.gnn(h, self.edge_data)
 
         h = self.post_mlp(h)
         h = F.log_softmax(h, dim=1)
