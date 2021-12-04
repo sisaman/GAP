@@ -9,7 +9,6 @@ with console.status('importing modules...'):
     from datasets import Dataset
     from loggers import Logger
     from models import PrivateNodeClassifier
-    from trainer import Trainer
     from utils import timeit, seed_everything, confidence_interval
     from torch_geometric.data import Data
 
@@ -28,41 +27,22 @@ def run(args):
 
     ### initiallize model ###
 
-    model: PrivateNodeClassifier = PrivateNodeClassifier.from_args(args, 
-        num_classes=num_classes, 
-        inductive=args.sampling_rate<1.0,
-    )
+    model: PrivateNodeClassifier = PrivateNodeClassifier.from_args(args, num_classes=num_classes)
 
     ### calibrate noise to privacy budget ###
     with console.status('calibrating noise to privacy budget...'):
-        model.calibrate(epsilon=args.epsilon, delta=args.delta, epochs=args.epochs, sampling_rate=args.sampling_rate)
+        model.calibrate(epsilon=args.epsilon, delta=args.delta)
 
-    if args.debug:
-        model.init_privacy_accountant(delta=args.delta, sampling_rate=args.sampling_rate)
-    
     ### run experiment ###
 
     for iteration in range(args.repeats):
         data = Data(**data_initial.to_dict())
-        trainer: Trainer = Trainer.from_args(args, device=device)
+
+        with console.status('moving data to gpu...'):
+            data = data.to(device)
+
         model.reset_parameters()
-
-        if args.sampling_rate == 1.0 and not args.cpu:
-            with console.status('moving data to gpu...'):
-                data = data.to(device)
-
-        ### pre-training ###
-
-        if args.pre_train:
-            model.set_model_state(pre_train=True)
-            trainer.fit(model, data, checkpoint=True, description='pre-training')
-            model = trainer.load_best_model()
-            model.set_model_state(pre_train=False)
-
-        ### model training ###
-
-        trainer.reset()
-        best_metrics = trainer.fit(model, data, checkpoint=False, description='training    ')
+        best_metrics = model.fit(model, data)
 
         ### process results ###
 
@@ -92,8 +72,6 @@ def main():
     # dataset args
     group_dataset = init_parser.add_argument_group('dataset arguments')
     Dataset.add_args(group_dataset)
-    group_dataset.add_argument('--add-knn', '--add_knn', type=int, default=0, help='augment graph by adding k-nn edges')
-    group_dataset.add_argument('--sampling-rate', '--sampling_rate', type=float, default=1.0, help='subgraph sampling rate')
 
     # privacy args
     group_privacy = init_parser.add_argument_group('privacy arguments')
@@ -103,11 +81,6 @@ def main():
     # model args
     group_model = init_parser.add_argument_group('model arguments')
     PrivateNodeClassifier.add_args(group_model)
-
-    # trainer arguments
-    group_trainer = init_parser.add_argument_group('trainer arguments')
-    group_trainer.add_argument('--cpu', help='train on CPU', type=str2bool, nargs='?', const=True, default=not torch.cuda.is_available())
-    Trainer.add_args(group_trainer)
 
     # experiment args
     group_expr = init_parser.add_argument_group('experiment arguments')

@@ -1,29 +1,28 @@
+import logging
 from functools import partial
-from autodp.transformer_zoo import AmplificationBySampling, ComposeGaussian, Composition
+from autodp.transformer_zoo import ComposeGaussian, Composition
 import torch
 import torch.nn.functional as F
 from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear
-from torch_geometric.nn import BatchNorm, MessagePassing, MessageNorm, knn_graph
-from torch_geometric.utils import add_remaining_self_loops
-from torch_sparse.tensor import SparseTensor
-from utils import pairwise
+from torch.optim import Adam, SGD
+from torch_geometric.nn import BatchNorm
 from args import support_args
 from privacy import Calibrator, GaussianMechanism, NullMechanism, TopMFilter, supported_mechanisms
+from pytorch_lightning import LightningModule, Trainer
+from torchmetrics import Accuracy
+from torch.utils.data import DataLoader
+from pytorch_lightning.callbacks import ModelCheckpoint
 
-class Linear(LazyLinear):
-    def __init__(self, in_features, out_features, bias=True):
-        super().__init__(out_features, bias)
-        
 
 class MLP(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, dropout_fn, activation_fn, batchnorm, is_output_module):
+    def __init__(self, hidden_dim, output_dim, num_layers, dropout_fn, activation_fn, batchnorm, is_output_module):
         super().__init__()
         self.num_layers = num_layers
         self.dropout = dropout_fn
         self.activation = activation_fn
         self.is_output_module = is_output_module
-        dimensions = [input_dim] + [hidden_dim] * (num_layers - 1) + [output_dim] if num_layers > 0 else []
-        self.layers = ModuleList([Linear(in_channels, out_channels) for in_channels, out_channels in pairwise(dimensions)])
+        dimensions = [hidden_dim] * (num_layers - 1) + [output_dim] if num_layers > 0 else []
+        self.layers = ModuleList([LazyLinear(out_channels) for out_channels in dimensions])
         self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(is_output_module))]) if batchnorm else []
         self.reset_parameters()
 
@@ -37,7 +36,7 @@ class MLP(torch.nn.Module):
             x = self.bns[i](x) if self.bns else x
             x = self.dropout(x)
             x = self.activation(x)
-        
+
         return x
 
     def reset_parameters(self):
@@ -45,379 +44,333 @@ class MLP(torch.nn.Module):
             layer.reset_parameters()
         for bn in self.bns:
             bn.reset_parameters()
-        
 
-class GNN(torch.nn.Module):
-    supported_stages = {'stack', 'skipsum', 'skipmax', 'skipcat'}
 
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, stage_type, 
-                 dropout_fn, activation_fn, batchnorm, aggregation, root_weight, has_fixed_input, is_output_module):
+class MultiStageClassifier(LightningModule):
+    supported_combinations = {
+        'cat', 'sum', 'max', 'mean' #, 'att'
+    }
+
+    def __init__(self, num_stages,
+                 hidden_dim, output_dim,
+                 pre_layers, post_layers, combination_type,
+                 activation_fn, dropout_fn, batchnorm):
+
         super().__init__()
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.output_dim = output_dim
-        self.num_layers = num_layers
-        self.stage_type = stage_type
-        self.dropout = dropout_fn
-        self.activation = activation_fn
-        self.aggregation = aggregation
-        self.root_weight = root_weight
-        self.has_fixed_input = has_fixed_input
-        self.is_output_module = is_output_module
-        
-        self.layers = self.init_layers()
-        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(is_output_module))]) if batchnorm else []
-        self.reset_parameters()
+        self.combination_type = combination_type
 
-    def init_layers(self) -> ModuleList:
-        raise NotImplementedError
+        self.pre_mlps = ModuleList([
+            MLP(
+                hidden_dim=hidden_dim,
+                output_dim=hidden_dim,
+                num_layers=pre_layers,
+                dropout_fn=dropout_fn,
+                activation_fn=activation_fn,
+                batchnorm=batchnorm,
+                is_output_module=False,
+            )
+            for _ in range(num_stages)
+        ])
 
-    def layer_forward(self, index, h_in, edge_data):
-        h_out = self.layers[index](h_in, edge_data)
+        self.post_mlp = MLP(
+            hidden_dim=hidden_dim,
+            output_dim=output_dim,
+            num_layers=post_layers,
+            activation_fn=activation_fn,
+            dropout_fn=dropout_fn,
+            batchnorm=batchnorm,
+            is_output_module=True
+        )
 
-        if index == self.num_layers - 1 and self.is_output_module:
-            return h_out
+    def forward(self, x_list):
+        h_list = [mlp(x) for x, mlp in zip(x_list, self.pre_mlps)]
+        h_combined = self.combine(h_list)
+        h_out = self.post_mlp(h_combined)
+        return F.log_softmax(h_out, dim=1)
 
-        h_out = self.bns[index](h_out) if self.bns else h_out
-        h_out = self.dropout(h_out)
-        h_out = self.activation(h_out)
-        
-        return h_out
-
-    def forward(self, x, edge_data):
-        h_in = h_out = x
-
-        for i in range(self.num_layers):
-            h_out = self.layer_forward(i, h_in, edge_data)
-            h_in = h_out = self.combine(input=h_in, output=h_out)
-
-        return h_out
-
-    def combine(self, input, output):
-        if self.stage_type == 'skipsum' and input.size() == output.size():
-            return input + output
-        elif self.stage_type == 'skipmax' and input.size() == output.size():
-            return torch.max(input, output)
-        elif self.stage_type == 'skipcat':
-            return torch.cat([input, output], dim=1)
+    def combine(self, h_list):
+        if self.combination_type == 'cat':
+            return torch.cat(h_list, dim=-1)
+        elif self.combination_type == 'sum':
+            return torch.stack(h_list, dim=0).sum(dim=0)
+        elif self.combination_type == 'mean':
+            return torch.stack(h_list, dim=0).mean(dim=0)
+        elif self.combination_type == 'max':
+            return torch.stack(h_list, dim=0).max(dim=0)
         else:
-            return output
+            raise ValueError(f'Unknown combination type {self.combination_type}')
+
+    @torch.no_grad()
+    def encode(self, x_list):
+        self.eval()
+        h_list = [mlp(x) for x, mlp in zip(x_list, self.pre_mlps)]
+        h_combined = self.combine(h_list)
+        return h_combined
 
     def reset_parameters(self):
-        for layer in self.layers:
-            layer.reset_parameters()
-        for bn in self.bns:
-            bn.reset_parameters()
+        for mlp in self.pre_mlps:
+            mlp.reset_parameters()
+        self.post_mlp.reset_parameters()
 
 
-class PrivConv(MessagePassing):
-    def __init__(self, in_channels, out_channels, aggr, root_weight, cached, perturbation, mechanism):
-        super().__init__(aggr='add' if aggr == 'sum' else aggr)
-        
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.root_weight = root_weight
-        self.cached = cached
-        self.cached_agg = None
-        self.perturbation_mode = perturbation
-        self.mechanism = mechanism
-        
-        self.lin_l = Linear(in_channels, out_channels, bias=True)
-        if self.root_weight:
-            self.lin_r = Linear(in_channels, out_channels, bias=False)        
-
-        self.mn = MessageNorm(learn_scale=True)
-        self.reset_parameters()
-
-    def private_aggregation(self, x, edge_data):
-        if self.cached_agg is None or not self.cached:
-
-            if isinstance(edge_data, SparseTensor):
-                edge_data = edge_data.fill_diag(1)
-            else:
-                edge_data, _ = add_remaining_self_loops(edge_data, num_nodes=x.size(0))
-            
-            if self.perturbation_mode in {'aggr', 'feature'}:
-                x = self.mechanism.normalize(x)
-
-            if self.perturbation_mode == 'feature':    
-                x = self.mechanism.perturb(x, sensitivity=1)
-            
-            agg = self.propagate(edge_data, x=x)
-
-            if self.perturbation_mode == 'aggr':
-                agg = self.mechanism.perturb(agg, sensitivity=1)
-
-            self.cached_agg = agg
-
-        return self.cached_agg
-
-    def forward(self, x, edge_data):
-        out = self.private_aggregation(x, edge_data)
-        out = self.mn(x, out)
-        out = self.lin_l(out)
-
-        if self.root_weight:
-            out += self.lin_r(x)
-
-        out = F.normalize(out, p=2, dim=-1)
-        return out
-
-    def message_and_aggregate(self, adj_t, x):
-        return adj_t.matmul(x, reduce=self.aggr)
-
-    def reset_parameters(self):
-        self.cached_agg = None
-        self.lin_l.reset_parameters()
-        if self.root_weight:
-            self.lin_r.reset_parameters()
-        self.mn.reset_parameters()
-
-
-class PrivateGNN(GNN):
+@support_args
+class PrivateNodeClassifier:
     supported_perturbations = {'aggr', 'feature', 'graph'}
-    supported_aggregations = {'sum'}
 
-    def __init__(self, perturbation, mechanism, *args, **kwargs):
+    supported_activations = {
+        'relu': partial(ReLU, inplace=True),
+        'selu': partial(SELU, inplace=True),
+        'tanh': Tanh,
+    }
+
+    def __init__(self,
+                 num_classes,
+                 perturbation:  dict(help='perturbation method', option='-p', choices=supported_perturbations) = 'aggr',
+                 mechanism:     dict(help='perturbation mechanism', choices=supported_mechanisms) = 'gaussian',
+                 hops:          dict(help='number of hops', option='-k') = 1,
+                 hidden_dim:    dict(help='dimension of the hidden layers') = 16,
+                 encoder_layers:dict(help='number of encoder MLP layers') = 2,
+                 pre_layers:    dict(help='number of pre-combination MLP layers') = 1,
+                 post_layers:   dict(help='number of post-combination MLP layers') = 1,
+                 combine:       dict(help='combination type of transformed hops', choices=MultiStageClassifier.supported_combinations) = 'cat',
+                 activation:    dict(help='type of activation function', choices=supported_activations) = 'relu',
+                 dropout:       dict(help='dropout rate (between zero and one)') = 0.0,
+                 batchnorm:     dict(help='if True, then model uses batch normalization') = True,
+                 optimizer:     dict(help='optimization algorithm', choices=['sgd', 'adam']) = 'adam',
+                 learning_rate: dict(help='learning rate', option='--lr') = 0.01,
+                 weight_decay:  dict(help='weight decay (L2 penalty)') = 0.0,
+                 cpu:           dict(help='if True, then model is trained on CPU') = False,
+                 pre_epochs:    dict(help='number of epochs for pre-training') = 100,
+                 epochs:        dict(help='number of epochs for training') = 100,
+                 precision:     dict(help='precision of the model', choices=[16, 32]) = 32,
+                 ):
+
+        super().__init__()
+
+        self.hops = hops
+        self.encoder_layers = encoder_layers
+        self.weight_decay = weight_decay
+        self.learning_rate = learning_rate
+        self.optimizer_name = optimizer
+        self.accelerator = 'cpu' if cpu else 'gpu'
+        self.pre_epochs = pre_epochs
+        self.epochs = epochs
+        self.precision = precision
         self.perturbation = perturbation
-        
+
         if perturbation == 'graph':
             self.base_mechanism = TopMFilter(noise_scale=0.0)
         else:
             self.base_mechanism = supported_mechanisms[mechanism](noise_scale=0.0)
 
-        self.cached_edge_data = None
-
-        super().__init__(*args, **kwargs)
-
-    def reset_parameters(self):
-        self.cached_edge_data = None
-        return super().reset_parameters()
-
-    def forward(self, x, edge_data):
-        if self.cached_edge_data is None or not self.has_fixed_input:
-            if self.perturbation == 'graph':
-                edge_data = self.base_mechanism.perturb(edge_data, num_nodes=x.size(0))
-            self.cached_edge_data = edge_data
-            
-        return super().forward(x, self.cached_edge_data)
-
-    def update(self, noise_scale):
-        self.base_mechanism.update(noise_scale)
-
-    def build_mechanism(self, epochs, sampling_rate, noise_scale=None):
-        if noise_scale is None:
-            noise_scale = self.base_mechanism.noise_scale
-
-        if self.num_layers == 0 or noise_scale == 0.0:
-            return NullMechanism()
-            
-        self.update(noise_scale=noise_scale)
-        compose = ComposeGaussian() if isinstance(self.base_mechanism, GaussianMechanism) else Composition()
-
-        if sampling_rate == 1.0:
-            if self.perturbation == 'graph':
-                return self.base_mechanism
-            else:
-                num_calls = int(self.has_fixed_input) + (self.num_layers - int(self.has_fixed_input)) * epochs
-                composed_mech = compose([self.base_mechanism], [num_calls])
-                return composed_mech
-        else:
-            if self.perturbation == 'graph':
-                subsample = AmplificationBySampling(PoissonSampling=True)
-                subsampled_mech = subsample(self, prob=sampling_rate, improved_bound_flag=True)
-                complex_mech = Composition()([subsampled_mech], [epochs])
-                return complex_mech
-            else:
-                model_mech = compose([self.base_mechanism], [self.num_layers])
-                subsample = AmplificationBySampling(PoissonSampling=True)
-                subsampled_mech = subsample(model_mech, prob=sampling_rate, improved_bound_flag=True)
-                complex_mech = Composition()([subsampled_mech], [epochs])
-                return complex_mech
-
-    def init_layers(self):
-        layers = []
-        mechanism = self.base_mechanism if self.perturbation in {'aggr', 'feature'} else None
-
-        for i in range(self.num_layers):
-            conv = PrivConv(
-                in_channels=-1,
-                out_channels=self.output_dim if i == self.num_layers - 1 else self.hidden_dim,
-                cached=(i == 0 and self.has_fixed_input),
-                aggr=self.aggregation,
-                root_weight=self.root_weight,
-                perturbation=self.perturbation,
-                mechanism=mechanism
-            )
-            layers.append(conv)
-        
-        return ModuleList(layers)
-        
-
-@support_args
-class PrivateNodeClassifier(torch.nn.Module):
-    supported_activations = {
-        'relu': partial(ReLU, inplace=True), 
-        'selu': partial(SELU, inplace=True), 
-        'tanh': Tanh,
-    }
-
-    def __init__(self,
-                 num_classes, 
-                 perturbation:  dict(help='perturbation method', option='-p', choices=PrivateGNN.supported_perturbations) = 'aggr', 
-                 mechanism:     dict(help='perturbation mechanism', choices=supported_mechanisms) = 'gaussian', 
-                 hidden_dim:    dict(help='dimension of the hidden layers') = 16,
-                 pre_layers:    dict(help='number of pre-processing linear layers') = 0,
-                 mp_layers:     dict(help='number of message-passing layers') = 2,
-                 post_layers:   dict(help='number of post-processing linear layers') = 0,
-                 activation:    dict(help='type of activation function', choices=supported_activations) = 'relu',
-                 dropout:       dict(help='dropout rate (between zero and one)') = 0.0,
-                 batchnorm:     dict(help='if True, then model uses batch normalization') = True,
-                 stage:         dict(help='stage type of skip connection', choices=GNN.supported_stages) = 'stack',
-                 aggregation:   dict(help='type of aggregation function', choices=PrivateGNN.supported_aggregations) = 'sum',
-                 root_weight:   dict(help='if True, the layer adds transformed root node features to the output.') = True,
-                 pre_train:     dict(help='if True, then model is pre-trained without GNN layers') = False,
-                 knn:           dict(help='if greater than zero, input graph is augmented by adding k-nn edges') = 0,
-                 inductive=False,
-                 ):
-
-        super().__init__()
-
-        self.knn = knn
-        self.pre_train_state = pre_train
-        self.privacy_accountant = None
-        self.activaiton_fn = self.supported_activations[activation]()
+        activation_fn = self.supported_activations[activation]()
         dropout_fn = Dropout(dropout, inplace=True)
 
-        self.pre_mlp = MLP(
-            input_dim=-1, 
-            hidden_dim=hidden_dim, 
-            output_dim=num_classes if mp_layers + post_layers == 0 else hidden_dim, 
-            num_layers=pre_layers, 
-            activation_fn=self.activaiton_fn, 
-            dropout_fn=dropout_fn, 
-            batchnorm=batchnorm,
-            is_output_module=(mp_layers + post_layers == 0)
+        self.encoder_classifier = MultiStageClassifier(
+            num_stages=1,
+            hidden_dim=hidden_dim,
+            output_dim=hidden_dim,
+            pre_layers=encoder_layers,
+            post_layers=1,
+            combination_type='cat',
+            activation_fn=activation_fn,
+            dropout_fn=dropout_fn,
+            batchnorm=batchnorm
         )
 
-        self.gnn = PrivateGNN(
-            input_dim=-1, 
-            hidden_dim=hidden_dim, 
-            output_dim=num_classes if post_layers == 0 else hidden_dim, 
-            num_layers=mp_layers, 
-            stage_type=stage, 
-            dropout_fn=dropout_fn, 
-            activation_fn=self.activaiton_fn, 
-            batchnorm=batchnorm, 
-            aggregation=aggregation,
-            root_weight=root_weight,
-            has_fixed_input=(not inductive) and (pre_layers == 0 or pre_train),
-            is_output_module=(post_layers == 0),
-            perturbation=perturbation,
-            mechanism=mechanism,
+        self.multi_stage_classifier = MultiStageClassifier(
+            num_stages=hops+1,
+            hidden_dim=hidden_dim,
+            output_dim=num_classes,
+            pre_layers=pre_layers,
+            post_layers=post_layers,
+            combination_type=combine,
+            activation_fn=activation_fn,
+            dropout_fn=dropout_fn,
+            batchnorm=batchnorm
         )
 
-        self.post_mlp = MLP(
-            input_dim=-1, 
-            hidden_dim=hidden_dim, 
-            output_dim=num_classes, 
-            num_layers=post_layers, 
-            activation_fn=self.activaiton_fn, 
-            dropout_fn=dropout_fn, 
-            batchnorm=batchnorm,
-            is_output_module=True
-        )
+        self.accuracy = {
+            'train': Accuracy(),
+            'val': Accuracy(),
+            'test': Accuracy(),
+        }
 
+        self.setup_models()
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.activaiton_fn.__init__()
-        self.pre_mlp.reset_parameters()
-        self.gnn.reset_parameters()
-        self.post_mlp.reset_parameters()
+        self.encoder_classifier.reset_parameters()
+        self.multi_stage_classifier.reset_parameters()
+        for stage in self.accuracy:
+            self.accuracy[stage].reset()
 
-    def set_model_state(self, pre_train):
-        self.pre_train_state = pre_train
-        for param in self.pre_mlp.parameters():
-            param.requires_grad = pre_train
+    def setup_models(self):
+        for model in [self.encoder_classifier, self.multi_stage_classifier]:
+            model.configure_optimizers = partial(self.configure_optimizers, model=model)
+            model.training_step = partial(self.step, stage='train')
+            model.validation_step = partial(self.step, stage='val')
+            model.test_step = partial(self.step, stage='test')
 
-    def add_knn(self, x, edge_data):
-        if self.knn <= 0:
-            return edge_data
+    def configure_optimizers(self, model):
+        Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
+        return Optim(model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
 
-        edge_index = knn_graph(x=x, k=self.knn, num_workers=6)
+    def fit(self, data):
+        self.data = data
+        self.reset_parameters()
 
-        if isinstance(edge_data, SparseTensor):
-            num_nodes = x.size(0)
-            adj_t = edge_data + SparseTensor.from_edge_index(edge_index, sparse_sizes=(num_nodes, num_nodes))
-            return adj_t.coalesce()
-        else:
-            edge_index = torch.cat([edge_data, edge_index], dim=1)
-            return edge_index
+        ### pre-training encoder ###
 
-    def forward(self, data):
-        h = self.pre_mlp(data.x)
+        if self.encoder_layers > 0:
+            logging.info('Pre-training encoder...')
+            self._pre_train_flag = True
+            
+            checkpoint_callback = ModelCheckpoint(
+                monitor="val/loss",
+                dirpath='./checkpoints/',
+                save_last=False,
+                save_top_k=1,
+                mode='min',
+                save_weights_only=True,
+            )
 
-        if not self.pre_train_state:
-            edge_data = data.adj_t if hasattr(data, 'adj_t') else data.edge_index
+            trainer = Trainer(
+                enable_checkpointing=True,
+                callbacks=[checkpoint_callback],
+                devices='auto',
+                accelerator=self.accelerator,
+                logger=False,
+                max_epochs=self.pre_epochs,
+                precision=self.precision,
+                enable_model_summary=False,
+            )
 
-            edge_data = self.add_knn(h, edge_data)
-            self.edge_data = edge_data
-            self.knn = 0
+            trainer.fit(
+                model=self.encoder_classifier, 
+                train_dataloader=self.train_dataloader(), 
+                val_dataloaders=self.val_dataloader()
+            )
 
-            h = self.gnn(h, self.edge_data)
+        ### precompute cached data ###
+        logging.info('Precomputing cached data...')
 
-        h = self.post_mlp(h)
-        h = F.log_softmax(h, dim=1)
-        return h
+        if self.perturbation == 'graph':
+            data.adj_t = self.base_mechanism.perturb(data.adj_t, num_nodes=data.num_nodes)
 
-    def training_step(self, data, epoch):
-        y_true = data.y[data.train_mask]
-        y_pred = self(data)[data.train_mask]
-        
-        loss = F.nll_loss(input=y_pred, target=y_true)
-        acc = self.accuracy(input=y_pred, target=y_true)
-        metrics = {'train/loss': loss.item(), 'train/acc': acc}
+        h = self.encoder_classifier.encode([data.x])
 
-        if self.privacy_accountant:
-            metrics['train/eps'] = self.privacy_accountant(epochs=epoch)
+        # TODO: make sure encode in trained L2-normalized
+        if self.perturbation in {'aggr', 'feature'}:
+            h = self.base_mechanism.normalize(h)
 
-        return loss, metrics
+        data.x_list = [h]
 
-    def validation_step(self, data):
-        y_pred = self(data)
-        y_true = data.y
+        for _ in range(1, self.hops + 1):
+            h = data.x_list[-1]
 
-        val_mask = data.val_mask
-        test_mask = data.test_mask
+            if self.perturbation == 'feature':
+                h = self.base_mechanism.perturb(h, sensitivity=1)
 
-        metrics = {
-            'val/loss': F.nll_loss(input=y_pred[val_mask], target=y_true[val_mask]).item(),
-            'val/acc': self.accuracy(input=y_pred[val_mask], target=y_true[val_mask]),
-            'test/acc': self.accuracy(input=y_pred[test_mask], target=y_true[test_mask]),
-        }
+            h = data.adj_t.matmul(data.x_list[-1])
 
-        return metrics
+            if self.perturbation == 'aggr':
+                h = self.base_mechanism.perturb(h, sensitivity=1)
 
-    @staticmethod
-    def accuracy(input, target):
-        input = input.argmax(dim=1) if len(input.size()) > 1 else input
-        target = target.argmax(dim=1) if len(target.size()) > 1 else target
-        return (input == target).float().mean().item() * 100
+            if self.perturbation in {'aggr', 'feature'}:
+                h = self.base_mechanism.normalize(h)
 
-    def calibrate(self, epsilon, delta, epochs, sampling_rate):
-        mechanism_builder = lambda noise_scale: self.gnn.build_mechanism(
-            noise_scale=noise_scale, 
-            epochs=epochs, 
-            sampling_rate=sampling_rate
+            data.x_list.append(h)
+
+        ### training ###
+        logging.info('Training...')
+
+        self._pre_train_flag = False
+        for stage in self.accuracy:
+            self.accuracy[stage].reset()
+
+        checkpoint_callback = ModelCheckpoint(
+            monitor="val/acc",
+            dirpath='./checkpoints/',
+            save_last=False,
+            save_top_k=1,
+            mode='max',
+            save_weights_only=True,
         )
 
-        noise_scale = Calibrator(mechanism_builder).calibrate(eps=epsilon, delta=delta)
-        self.gnn.update(noise_scale=noise_scale)
-        return self
+        trainer = Trainer(
+            enable_checkpointing=True,
+            callbacks=[checkpoint_callback],
+            devices='auto',
+            accelerator=self.accelerator,
+            logger=False,
+            max_epochs=self.pre_epochs,
+            precision=self.precision,
+            enable_model_summary=False,
+        )
 
-    def init_privacy_accountant(self, delta, sampling_rate):
-        self.privacy_accountant = lambda epochs: self.gnn.build_mechanism(
-            epochs=epochs,
-            sampling_rate=sampling_rate
-        ).get_approxDP(delta=delta)
+        trainer.fit(
+            model=self.multi_stage_classifier, 
+            train_dataloader=self.train_dataloader(), 
+            val_dataloaders=self.val_dataloader()
+        )
+
+        metrics = trainer.test(dataloaders=self.test_dataloader(), ckpt_path='best', verbose=False)
+        return metrics[0]
+
+    def train_dataloader(self):
+        train_idx = self.data.train_mask.nonzero(as_tuple=False).view(-1)
+        train_loader = DataLoader(train_idx, batch_size=1024, shuffle=True, num_workers=6, pin_memory=True)
+        return train_loader
+
+    def val_dataloader(self):
+        val_idx = self.data.val_mask.nonzero(as_tuple=False).view(-1)
+        val_loader = DataLoader(val_idx, batch_size=1024, shuffle=True, num_workers=6, pin_memory=True)
+        return val_loader
+
+    def test_dataloader(self):
+        test_idx = self.data.test_mask.nonzero(as_tuple=False).view(-1)
+        test_loader = DataLoader(test_idx, batch_size=1024, shuffle=True, num_workers=6, pin_memory=True)
+        return test_loader
+
+    def step(self, stage, batch, _):
+        if self._pre_train_flag:
+            model = self.encoder_classifier
+            y_pred = model([self.data.x[batch]])
+        else:
+            model = self.multi_stage_classifier
+            y_pred = model([x[batch] for x in self.data.x_list])
+
+        y_true = self.data.y[batch]
+        acc = self.accuracy[stage](y_pred, y_true)
+        metrics = {f'{stage}/acc': acc}
+
+        if stage != 'test':
+            loss = F.nll_loss(input=y_pred, target=y_true)
+            metrics[f'{stage}/loss'] = loss
+
+        model.log_dict(metrics, prog_bar=True, on_epoch=True, on_step=False)
+        return loss if stage == 'train' else metrics
+
+    def build_mechanism(self, noise_scale=None):
+        if noise_scale is None:
+            noise_scale = self.base_mechanism.noise_scale
+
+        if self.hops == 0 or noise_scale == 0.0:
+            return NullMechanism()
+
+        self.base_mechanism.update(noise_scale=noise_scale)
+
+        if self.perturbation == 'graph':
+            return self.base_mechanism
+        else:
+            compose = ComposeGaussian() if isinstance(self.base_mechanism, GaussianMechanism) else Composition()
+            composed_mech = compose([self.base_mechanism], [self.hops])
+            return composed_mech
+
+
+    def calibrate(self, epsilon, delta):
+        mechanism_builder = lambda noise_scale: self.build_mechanism(noise_scale=noise_scale)
+        noise_scale = Calibrator(mechanism_builder).calibrate(eps=epsilon, delta=delta)
+        self.base_mechanism.update(noise_scale=noise_scale)
+        return self
