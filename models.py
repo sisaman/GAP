@@ -1,17 +1,16 @@
-import logging
+from console import console
 from functools import partial
 from autodp.transformer_zoo import ComposeGaussian, Composition
 import torch
 import torch.nn.functional as F
-from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear
+from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear, Module, ModuleDict
 from torch.optim import Adam, SGD
 from torch_geometric.nn import BatchNorm
 from args import support_args
 from privacy import Calibrator, GaussianMechanism, NullMechanism, TopMFilter, supported_mechanisms
-from pytorch_lightning import LightningModule, Trainer
-from torchmetrics import Accuracy
+from torchmetrics import Accuracy, MeanMetric
 from torch.utils.data import DataLoader
-from pytorch_lightning.callbacks import ModelCheckpoint
+from trainer import Trainer
 
 
 class MLP(torch.nn.Module):
@@ -46,7 +45,7 @@ class MLP(torch.nn.Module):
             bn.reset_parameters()
 
 
-class MultiStageClassifier(LightningModule):
+class MultiStageClassifier(Module):
     supported_combinations = {
         'cat', 'sum', 'max', 'mean' #, 'att'
     }
@@ -86,7 +85,7 @@ class MultiStageClassifier(LightningModule):
         h_list = [mlp(x) for x, mlp in zip(x_list, self.pre_mlps)]
         h_combined = self.combine(h_list)
         h_out = self.post_mlp(h_combined)
-        return F.log_softmax(h_out, dim=1)
+        return F.log_softmax(h_out, dim=-1)
 
     def combine(self, h_list):
         if self.combination_type == 'cat':
@@ -114,7 +113,7 @@ class MultiStageClassifier(LightningModule):
 
 
 @support_args
-class PrivateNodeClassifier:
+class PrivateNodeClassifier(Module):
     supported_perturbations = {'aggr', 'feature', 'graph'}
 
     supported_activations = {
@@ -126,7 +125,7 @@ class PrivateNodeClassifier:
     def __init__(self,
                  num_classes,
                  perturbation:  dict(help='perturbation method', option='-p', choices=supported_perturbations) = 'aggr',
-                 mechanism:     dict(help='perturbation mechanism', choices=supported_mechanisms) = 'gaussian',
+                 mechanism:     dict(help='perturbation mechanism', option='-m', choices=supported_mechanisms) = 'gaussian',
                  hops:          dict(help='number of hops', option='-k') = 1,
                  hidden_dim:    dict(help='dimension of the hidden layers') = 16,
                  encoder_layers:dict(help='number of encoder MLP layers') = 2,
@@ -142,20 +141,21 @@ class PrivateNodeClassifier:
                  cpu:           dict(help='if True, then model is trained on CPU') = False,
                  pre_epochs:    dict(help='number of epochs for pre-training') = 100,
                  epochs:        dict(help='number of epochs for training') = 100,
-                 precision:     dict(help='precision of the model', choices=[16, 32]) = 32,
+                 batch_size:    dict(help='batch size (if zero, performs full-batch training)') = 0,
+                 use_amp:       dict(help='use automatic mixed precision training') = False,
                  ):
 
         super().__init__()
-
         self.hops = hops
         self.encoder_layers = encoder_layers
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
         self.optimizer_name = optimizer
-        self.accelerator = 'cpu' if cpu else 'gpu'
+        self.device = 'cpu' if cpu else 'cuda'
         self.pre_epochs = pre_epochs
         self.epochs = epochs
-        self.precision = precision
+        self.batch_size = batch_size
+        self.use_amp = use_amp
         self.perturbation = perturbation
 
         if perturbation == 'graph':
@@ -190,31 +190,37 @@ class PrivateNodeClassifier:
             batchnorm=batchnorm
         )
 
-        self.accuracy = {
-            'train': Accuracy(),
-            'val': Accuracy(),
-            'test': Accuracy(),
-        }
+        self.metrics = ModuleDict({
+            'train/loss': MeanMetric(compute_on_step=False),
+            'train/acc': Accuracy(compute_on_step=False),
+            'val/loss': MeanMetric(compute_on_step=False),
+            'val/acc': Accuracy(compute_on_step=False),
+            'test/acc': Accuracy(compute_on_step=False),
+        })
 
-        self.setup_models()
         self.reset_parameters()
 
     def reset_parameters(self):
         self.encoder_classifier.reset_parameters()
         self.multi_stage_classifier.reset_parameters()
-        for stage in self.accuracy:
-            self.accuracy[stage].reset()
+        for stage in self.metrics:
+            self.metrics[stage].reset()
 
-    def setup_models(self):
-        for model in [self.encoder_classifier, self.multi_stage_classifier]:
-            model.configure_optimizers = partial(self.configure_optimizers, model=model)
-            model.training_step = partial(self.step, stage='train')
-            model.validation_step = partial(self.step, stage='val')
-            model.test_step = partial(self.step, stage='test')
-
-    def configure_optimizers(self, model):
+    def configure_optimizers(self):
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
-        return Optim(model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
+        return Optim(
+            filter(lambda p: p.requires_grad, self.parameters()), 
+            lr=self.learning_rate, weight_decay=self.weight_decay
+        )
+
+    def set_training_state(self, pre_train):
+        self._pre_train_flag = pre_train
+        
+        for param in self.encoder_classifier.parameters():
+            param.requires_grad = pre_train
+        
+        for stage in self.metrics:
+            self.metrics[stage].reset()
 
     def fit(self, data):
         self.data = data
@@ -223,134 +229,124 @@ class PrivateNodeClassifier:
         ### pre-training encoder ###
 
         if self.encoder_layers > 0:
-            logging.info('Pre-training encoder...')
-            self._pre_train_flag = True
+            self.set_training_state(pre_train=True)
             
-            checkpoint_callback = ModelCheckpoint(
-                monitor="val/loss",
-                dirpath='./checkpoints/',
-                save_last=False,
-                save_top_k=1,
-                mode='min',
-                save_weights_only=True,
-            )
-
             trainer = Trainer(
-                enable_checkpointing=True,
-                callbacks=[checkpoint_callback],
-                devices='auto',
-                accelerator=self.accelerator,
-                logger=False,
-                max_epochs=self.pre_epochs,
-                precision=self.precision,
-                enable_model_summary=False,
+                epochs=self.pre_epochs, 
+                use_amp=self.use_amp, 
+                monitor='val/loss', monitor_mode='min', 
+                device=self.device
             )
 
             trainer.fit(
-                model=self.encoder_classifier, 
+                model=self, 
                 train_dataloader=self.train_dataloader(), 
-                val_dataloaders=self.val_dataloader()
+                val_dataloader=self.val_dataloader(),
+                description='pre-training',
+                checkpoint=True
             )
 
+            self.encoder_classifier = trainer.load_best_model().encoder_classifier
+
         ### precompute cached data ###
-        logging.info('Precomputing cached data...')
 
-        if self.perturbation == 'graph':
-            data.adj_t = self.base_mechanism.perturb(data.adj_t, num_nodes=data.num_nodes)
+        with console.status('precomputing cached data...'):
+            
+            if self.perturbation == 'graph':
+                data.adj_t = self.base_mechanism.perturb(data.adj_t, num_nodes=data.num_nodes)
 
-        h = self.encoder_classifier.encode([data.x])
+            h = self.encoder_classifier.encode([data.x])
 
-        # TODO: make sure encode in trained L2-normalized
-        if self.perturbation in {'aggr', 'feature'}:
-            h = self.base_mechanism.normalize(h)
-
-        data.x_list = [h]
-
-        for _ in range(1, self.hops + 1):
-            h = data.x_list[-1]
-
-            if self.perturbation == 'feature':
-                h = self.base_mechanism.perturb(h, sensitivity=1)
-
-            h = data.adj_t.matmul(data.x_list[-1])
-
-            if self.perturbation == 'aggr':
-                h = self.base_mechanism.perturb(h, sensitivity=1)
-
+            # TODO: make sure encode in trained L2-normalized
             if self.perturbation in {'aggr', 'feature'}:
                 h = self.base_mechanism.normalize(h)
 
-            data.x_list.append(h)
+            data.x_list = [h]
+
+            for _ in range(1, self.hops + 1):
+                h = data.x_list[-1]
+
+                if self.perturbation == 'feature':
+                    h = self.base_mechanism.perturb(h, sensitivity=1)
+
+                h = data.adj_t.matmul(data.x_list[-1])
+
+                if self.perturbation == 'aggr':
+                    h = self.base_mechanism.perturb(h, sensitivity=1)
+
+                if self.perturbation in {'aggr', 'feature'}:
+                    h = self.base_mechanism.normalize(h)
+
+                data.x_list.append(h)
 
         ### training ###
-        logging.info('Training...')
 
-        self._pre_train_flag = False
-        for stage in self.accuracy:
-            self.accuracy[stage].reset()
-
-        checkpoint_callback = ModelCheckpoint(
-            monitor="val/acc",
-            dirpath='./checkpoints/',
-            save_last=False,
-            save_top_k=1,
-            mode='max',
-            save_weights_only=True,
-        )
+        self.set_training_state(pre_train=False)
 
         trainer = Trainer(
-            enable_checkpointing=True,
-            callbacks=[checkpoint_callback],
-            devices='auto',
-            accelerator=self.accelerator,
-            logger=False,
-            max_epochs=self.pre_epochs,
-            precision=self.precision,
-            enable_model_summary=False,
+            epochs=self.epochs, 
+            use_amp=self.use_amp, 
+            monitor='val/acc', monitor_mode='max', 
+            device=self.device,
         )
 
-        trainer.fit(
-            model=self.multi_stage_classifier, 
+        metrics = trainer.fit(
+            model=self, 
             train_dataloader=self.train_dataloader(), 
-            val_dataloaders=self.val_dataloader()
+            val_dataloader=self.val_dataloader(),
+            test_dataloader=self.test_dataloader(),
+            checkpoint=False,
+            description='training    ',
         )
 
-        metrics = trainer.test(dataloaders=self.test_dataloader(), ckpt_path='best', verbose=False)
-        return metrics[0]
+        return metrics
 
     def train_dataloader(self):
         train_idx = self.data.train_mask.nonzero(as_tuple=False).view(-1)
-        train_loader = DataLoader(train_idx, batch_size=1024, shuffle=True, num_workers=6, pin_memory=True)
-        return train_loader
+        return self.index_loader(train_idx)
 
     def val_dataloader(self):
         val_idx = self.data.val_mask.nonzero(as_tuple=False).view(-1)
-        val_loader = DataLoader(val_idx, batch_size=1024, shuffle=True, num_workers=6, pin_memory=True)
-        return val_loader
+        return self.index_loader(val_idx)
 
     def test_dataloader(self):
         test_idx = self.data.test_mask.nonzero(as_tuple=False).view(-1)
-        test_loader = DataLoader(test_idx, batch_size=1024, shuffle=True, num_workers=6, pin_memory=True)
-        return test_loader
+        return self.index_loader(test_idx)
 
-    def step(self, stage, batch, _):
-        if self._pre_train_flag:
-            model = self.encoder_classifier
-            y_pred = model([self.data.x[batch]])
+    def index_loader(self, idx):        
+        if self.batch_size <= 0:
+            return [idx]
         else:
-            model = self.multi_stage_classifier
-            y_pred = model([x[batch] for x in self.data.x_list])
+            return DataLoader(idx, batch_size=self.batch_size, shuffle=True)
+
+    def get_metrics(self, stage='train'):
+        metrics = {}
+
+        for metric_name, metric_value in self.metrics.items():
+            if metric_name.startswith(stage):
+                value = metric_value.compute()
+                if torch.is_tensor(value):
+                    value = value.item()
+                value *= 100 if metric_name.endswith('acc') else 1
+                metrics[metric_name] = value
+
+        return metrics
+
+    def step(self, batch, stage):
+        if self._pre_train_flag:
+            y_pred = self.encoder_classifier([self.data.x[batch]])
+        else:
+            y_pred = self.multi_stage_classifier([x[batch] for x in self.data.x_list])
 
         y_true = self.data.y[batch]
-        acc = self.accuracy[stage](y_pred, y_true)
-        metrics = {f'{stage}/acc': acc}
+        self.metrics[f'{stage}/acc'].update(preds=y_pred, target=y_true)
 
+        loss = None
         if stage != 'test':
             loss = F.nll_loss(input=y_pred, target=y_true)
-            metrics[f'{stage}/loss'] = loss
+            self.metrics[f'{stage}/loss'].update(loss, weight=len(batch))
 
-        model.log_dict(metrics, prog_bar=True, on_epoch=True, on_step=False)
-        return loss if stage == 'train' else metrics
+        return loss
 
     def build_mechanism(self, noise_scale=None):
         if noise_scale is None:
