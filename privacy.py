@@ -120,7 +120,7 @@ class TopMFilter(Mechanism):
         # if the graph has self loops, we need to remove them to exclude them from edge count
         has_self_loops = contains_self_loops(edge_index)
         if has_self_loops:
-            edge_index = remove_self_loops(edge_index)
+            edge_index, _ = remove_self_loops(edge_index)
 
         n = num_nodes
         m = edge_index.shape[1]
