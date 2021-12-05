@@ -42,7 +42,7 @@ def run(args):
             data = data.to(device)
 
         model.reset_parameters()
-        best_metrics = model.fit(model, data)
+        best_metrics = model.fit(data)
 
         ### process results ###
 
