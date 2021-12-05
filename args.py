@@ -91,7 +91,8 @@ def support_args(Cls):
                     arg_info['action'] = EnumAction
 
                 if 'choices' in arg_info:
-                    arg_info['help'] = arg_info.get('help', '') + f" (choices: {', '.join(arg_info['choices'])})"
+                    choices = [str(c) for c in arg_info['choices']]
+                    arg_info['help'] = arg_info.get('help', '') + f" (choices: {', '.join(choices)})"
                     arg_info['metavar'] = param_name.upper()
 
                 options = {f'--{param_name}', f'--{param_name.replace("_", "-")}'}
