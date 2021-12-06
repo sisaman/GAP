@@ -4,15 +4,6 @@ import torch
 from args import support_args
 from loggers import Logger
 from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn, TextColumn
-
-
-def render_metrics(metrics):
-    out = []
-    for split in ['train', 'val', 'test']:
-        metric_str = ' '.join(f'{k}: {v:.3f}' for k, v in metrics.items() if k.startswith(split))
-        out.append(metric_str)
-    
-    return '  '.join(out)
     
 
 @support_args
@@ -59,7 +50,7 @@ class Trainer:
         else:
             raise Exception('No checkpoint found')
 
-    def fit(self, model, train_dataloader, val_dataloader, test_dataloader=None, checkpoint=False, description=''):
+    def fit(self, model, train_dataloader, val_dataloader, test_dataloader=[], checkpoint=False):
         # data = data.to(self.device)
         self.model = model.to(self.device)
         optimizer = self.model.configure_optimizers()
@@ -70,66 +61,73 @@ class Trainer:
             self.checkpoint_path = os.path.join('checkpoints', f'{uuid.uuid1()}.pt')
 
         num_epochs_without_improvement = 0
+        num_train_steps = len(train_dataloader)
+        num_val_steps = len(val_dataloader)
+        num_test_steps = len(test_dataloader)
 
-        progress_bar = [
-            TextColumn('                 '),
-            SpinnerColumn(),
-            "{task.description}",
-            "{task.completed:>3}/{task.total}",
-            "{task.fields[unit]}",
-            BarColumn(),
-            "{task.percentage:>3.0f}%",
-            TimeElapsedColumn(),
-            "{task.fields[metrics]}",
-        ]
-
-        ### TODO: move progress bar to main.py ###
-
-        with Progress(*progress_bar, console=console) as progress:
-            task_training = progress.add_task(description, total=self.epochs, metrics='', unit='epochs')
-
-            for epoch in range(1, self.epochs + 1):
-                metrics = {'epoch': epoch}
-
-                for batch in train_dataloader:
-                    batch = batch.to(self.device)
-                    self._train(batch, optimizer, scaler)
-
-                metrics.update(**self.model.get_metrics(stage='train'))
-                    
-                if self.val_interval:
-                    if epoch % self.val_interval == 0:
-
-                        for batch in val_dataloader:
-                            batch = batch.to(self.device)
-                            self._validate(batch, stage='val')
-                        
-                        metrics.update(**self.model.get_metrics(stage='val'))
-
-                        if test_dataloader is not None:
-                            for batch in test_dataloader:
-                                batch = batch.to(self.device)
-                                self._validate(batch, stage='test')
-
-                            metrics.update(**self.model.get_metrics(stage='test'))
-
-                        if self.performs_better(metrics):
-                            self.best_metrics = metrics
-                            num_epochs_without_improvement = 0
-
-                            if checkpoint:
-                                torch.save(self.model.state_dict(), self.checkpoint_path)
-                        else:
-                            num_epochs_without_improvement += 1
-                            if num_epochs_without_improvement >= self.patience > 0:
-                                break
-                else:
-                    self.best_metrics = metrics
-
-                self.logger.log(metrics)
-                progress.update(task_training, metrics=render_metrics(metrics), advance=1)
+        progress = TrainerProgress(
+            num_epochs=self.epochs, 
+            num_train_steps=num_train_steps, 
+            num_val_steps=num_val_steps, 
+            num_test_steps=num_test_steps
+        )
         
-        self.logger.log_summary(self.best_metrics)
+        progress.start()
+        
+        for epoch in range(1, self.epochs + 1):
+            metrics = {'epoch': epoch}
+
+            progress.update('train', visible=num_train_steps > 1)
+            for batch in train_dataloader:
+                batch = batch.to(self.device)
+                self._train(batch, optimizer, scaler)
+                progress.update('train', advance=1)
+
+            progress.reset('train', visible=False)
+            metrics.update(**self.model.aggregate_metrics(stage='train'))
+                
+            if self.val_interval:
+                if epoch % self.val_interval == 0:
+
+                    progress.update('val', visible=num_val_steps > 1)
+                    for batch in val_dataloader:
+                        batch = batch.to(self.device)
+                        self._validate(batch, stage='val')
+                        progress.update('val', advance=1)
+                    
+                    progress.reset('val', visible=False)
+                    metrics.update(**self.model.aggregate_metrics(stage='val'))
+
+                    if num_test_steps > 0:
+
+                        progress.update('test', visible=num_test_steps > 1)
+                        for batch in test_dataloader:
+                            batch = batch.to(self.device)
+                            self._validate(batch, stage='test')
+                            progress.update('test', advance=1)
+
+                        progress.reset('test', visible=False)
+                        metrics.update(**self.model.aggregate_metrics(stage='test'))
+
+                    if self.performs_better(metrics):
+                        self.best_metrics = metrics
+                        num_epochs_without_improvement = 0
+
+                        if checkpoint:
+                            torch.save(self.model.state_dict(), self.checkpoint_path)
+                    else:
+                        num_epochs_without_improvement += 1
+                        if num_epochs_without_improvement >= self.patience > 0:
+                            break
+            else:
+                self.best_metrics = metrics
+
+            if self.logger: self.logger.log(metrics)
+            progress.update('epoch', metrics=metrics, advance=1)
+
+        progress.stop()
+        
+        if self.logger: self.logger.log_summary(self.best_metrics)
         return self.best_metrics
 
     def _train(self, batch, optimizer, scaler):
@@ -149,3 +147,45 @@ class Trainer:
         self.model.eval()
         with torch.cuda.amp.autocast(enabled=self.use_amp):
             self.model.step(batch, stage=stage)
+
+
+class TrainerProgress(Progress):
+    def __init__(self, num_epochs, num_train_steps, num_val_steps, num_test_steps):
+
+        progress_bar = [
+            TextColumn('                 '),
+            SpinnerColumn(),
+            "{task.description}",
+            "{task.completed:>3}/{task.total}",
+            "{task.fields[unit]}",
+            BarColumn(),
+            "{task.percentage:>3.0f}%",
+            TimeElapsedColumn(),
+            "{task.fields[metrics]}"
+        ]
+
+        super().__init__(*progress_bar, console=console)
+
+        self.trainer_tasks = {
+            'epoch': self.add_task(total=num_epochs, metrics='', unit='epochs', description='overal progress'),
+            'train': self.add_task(total=num_train_steps, metrics='', unit='steps', description='training       ', visible=False),
+            'val':   self.add_task(total=num_val_steps, metrics='', unit='steps', description='validation     ', visible=False),
+            'test':  self.add_task(total=num_test_steps, metrics='', unit='steps', description='testing        ', visible=False),
+        }
+
+    def update(self, task, **kwargs):
+        if 'metrics' in kwargs:
+            kwargs['metrics'] = self.render_metrics(kwargs['metrics'])
+
+        super().update(self.trainer_tasks[task], **kwargs)
+
+    def reset(self, task, **kwargs):
+        super().reset(self.trainer_tasks[task], **kwargs)
+
+    def render_metrics(self, metrics):
+        out = []
+        for split in ['train', 'val', 'test']:
+            metric_str = ' '.join(f'{k}: {v:.3f}' for k, v in metrics.items() if k.startswith(split))
+            out.append(metric_str)
+        
+        return '  '.join(out)
