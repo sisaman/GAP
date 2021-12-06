@@ -30,16 +30,10 @@ class GaussianMechanism(mechanisms.ExactGaussianMechanism):
         return torch.normal(mean=data, std=std) if std else data
 
     def normalize(self, data):
-        if self.noise_scale == 0.0:
-            return data
-        else:
-            return F.normalize(data, p=2, dim=-1)
+        return F.normalize(data, p=2, dim=-1)
 
     def clip(self, data, c):
-        if self.noise_scale == 0.0:
-            return data
-        else:
-            return (c / data.norm(p=2, dim=-1, keepdim=True)).clamp(max=1) * data
+        return (c / data.norm(p=2, dim=-1, keepdim=True)).clamp(max=1) * data
 
     def get_approxDP(self, delta):
         if self.noise_scale == 0.0:
@@ -61,16 +55,10 @@ class LaplaceMechanism(mechanisms.LaplaceMechanism):
         return torch.distributions.Laplace(loc=data, scale=scale).sample() if scale else data
 
     def normalize(self, data):
-        if self.noise_scale == 0.0:
-            return data
-        else:
-            return F.normalize(data, p=1, dim=-1)
+        return F.normalize(data, p=1, dim=-1)
 
     def clip(self, data, c):
-        if self.noise_scale == 0.0:
-            return data
-        else:
-            return (c / data.norm(p=1, dim=-1, keepdim=True)).clamp(max=1) * data
+        return (c / data.norm(p=1, dim=-1, keepdim=True)).clamp(max=1) * data
 
     def get_approxDP(self, delta):
         if self.noise_scale == 0.0:
