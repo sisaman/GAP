@@ -1,4 +1,3 @@
-import logging
 import torch
 import numpy as np
 import torch.nn.functional as F
@@ -31,19 +30,19 @@ class GaussianMechanism(mechanisms.ExactGaussianMechanism):
         return torch.normal(mean=data, std=std) if std else data
 
     def normalize(self, data):
-        if self.noise_scale == 0:
+        if self.noise_scale == 0.0:
             return data
         else:
             return F.normalize(data, p=2, dim=-1)
 
     def clip(self, data, c):
-        if self.noise_scale == 0:
+        if self.noise_scale == 0.0:
             return data
         else:
             return (c / data.norm(p=2, dim=-1, keepdim=True)).clamp(max=1) * data
 
     def get_approxDP(self, delta):
-        if self.noise_scale == 0:
+        if self.noise_scale == 0.0:
             return np.inf
         else:
             return super().get_approxDP(delta)
@@ -62,19 +61,19 @@ class LaplaceMechanism(mechanisms.LaplaceMechanism):
         return torch.distributions.Laplace(loc=data, scale=scale).sample() if scale else data
 
     def normalize(self, data):
-        if self.noise_scale == 0:
+        if self.noise_scale == 0.0:
             return data
         else:
             return F.normalize(data, p=1, dim=-1)
 
     def clip(self, data, c):
-        if self.noise_scale == 0:
+        if self.noise_scale == 0.0:
             return data
         else:
             return (c / data.norm(p=1, dim=-1, keepdim=True)).clamp(max=1) * data
 
     def get_approxDP(self, delta):
-        if self.noise_scale == 0:
+        if self.noise_scale == 0.0:
             return np.inf
         else:
             return super().get_approxDP(delta)
@@ -190,7 +189,6 @@ class Calibrator:
             return 0.0
         else:
             noise_scale = self.eps_delta_calibrator(eps, delta)
-            logging.info(f'noise scale: {noise_scale:.4f}\n')
             return noise_scale
     
     def eps_delta_calibrator(self, eps, delta):

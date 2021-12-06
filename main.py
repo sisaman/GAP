@@ -5,7 +5,7 @@ with console.status('importing modules...'):
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
     import numpy as np
     import torch
-    from args import print_args, str2bool
+    from args import print_args
     from datasets import Dataset
     from loggers import Logger
     from models import PrivateNodeClassifier
