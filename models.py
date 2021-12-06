@@ -1,9 +1,10 @@
 from console import console
+import logging
 from functools import partial
 from autodp.transformer_zoo import ComposeGaussian, Composition
 import torch
 import torch.nn.functional as F
-from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear, Module, ModuleDict
+from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear, Module, ModuleDict, LazyBatchNorm1d
 from torch.optim import Adam, SGD
 from torch_geometric.nn import BatchNorm
 from args import support_args
@@ -14,27 +15,25 @@ from trainer import Trainer
 
 
 class MLP(torch.nn.Module):
-    def __init__(self, hidden_dim, output_dim, num_layers, dropout_fn, activation_fn, batchnorm, is_output_module):
+    def __init__(self, hidden_dim, output_dim, num_layers, dropout_fn, activation_fn, batchnorm, activate_output):
         super().__init__()
         self.num_layers = num_layers
         self.dropout = dropout_fn
         self.activation = activation_fn
-        self.is_output_module = is_output_module
+        self.activate_output = activate_output
         dimensions = [hidden_dim] * (num_layers - 1) + [output_dim] if num_layers > 0 else []
         self.layers = ModuleList([LazyLinear(out_channels) for out_channels in dimensions])
-        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - int(is_output_module))]) if batchnorm else []
+        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - 1 + int(activate_output))]) if batchnorm else []
         self.reset_parameters()
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
             x = layer(x)
 
-            if i == self.num_layers - 1 and self.is_output_module:
-                break
-
-            x = self.bns[i](x) if self.bns else x
-            x = self.dropout(x)
-            x = self.activation(x)
+            if i < self.num_layers - 1 or self.activate_output:
+                x = self.bns[i](x) if self.bns else x
+                x = self.dropout(x)
+                x = self.activation(x)
 
         return x
 
@@ -47,7 +46,7 @@ class MLP(torch.nn.Module):
 
 class MultiStageClassifier(Module):
     supported_combinations = {
-        'cat', 'sum', 'max', 'mean' #, 'att'
+        'cat', 'sum', 'max', 'mean' #, 'att'   ### TODO implement attention
     }
 
     def __init__(self, num_stages,
@@ -66,10 +65,14 @@ class MultiStageClassifier(Module):
                 dropout_fn=dropout_fn,
                 activation_fn=activation_fn,
                 batchnorm=batchnorm,
-                is_output_module=False,
+                activate_output=False,
             )
             for _ in range(num_stages)
         ])
+
+        self.bn = LazyBatchNorm1d() if batchnorm else False
+        self.dropout = dropout_fn
+        self.activation = activation_fn
 
         self.post_mlp = MLP(
             hidden_dim=hidden_dim,
@@ -78,14 +81,25 @@ class MultiStageClassifier(Module):
             activation_fn=activation_fn,
             dropout_fn=dropout_fn,
             batchnorm=batchnorm,
-            is_output_module=True
+            activate_output=False,
         )
 
+        # FIXME remove this
+        # self.mn = MessageNorm(learn_scale=True)
+
     def forward(self, x_list):
+        # FIXME remove this
+        # if len(x_list) > 1:
+        #     x_list[1] = self.mn(x_list[0], x_list[1])
+
         h_list = [mlp(x) for x, mlp in zip(x_list, self.pre_mlps)]
-        h_combined = self.combine(h_list)
-        h_out = self.post_mlp(h_combined)
-        return F.log_softmax(h_out, dim=-1)
+        h = self.combine(h_list)
+        h = F.normalize(h, p=2, dim=-1)
+        h = self.bn(h) if self.bn else h
+        h = self.dropout(h)
+        h = self.activation(h)
+        h = self.post_mlp(h)
+        return F.log_softmax(h, dim=-1)
 
     def combine(self, h_list):
         if self.combination_type == 'cat':
@@ -95,7 +109,8 @@ class MultiStageClassifier(Module):
         elif self.combination_type == 'mean':
             return torch.stack(h_list, dim=0).mean(dim=0)
         elif self.combination_type == 'max':
-            return torch.stack(h_list, dim=0).max(dim=0)
+            return torch.stack(h_list, dim=0).max(dim=0).values
+
         else:
             raise ValueError(f'Unknown combination type {self.combination_type}')
 
@@ -110,6 +125,8 @@ class MultiStageClassifier(Module):
         for mlp in self.pre_mlps:
             mlp.reset_parameters()
         self.post_mlp.reset_parameters()
+        # FIXME remove this
+        # self.mn.reset_parameters()
 
 
 @support_args
@@ -131,7 +148,7 @@ class PrivateNodeClassifier(Module):
                  encoder_layers:dict(help='number of encoder MLP layers') = 2,
                  pre_layers:    dict(help='number of pre-combination MLP layers') = 1,
                  post_layers:   dict(help='number of post-combination MLP layers') = 1,
-                 combine:       dict(help='combination type of transformed hops', choices=MultiStageClassifier.supported_combinations) = 'cat',
+                 combine:       dict(help='combination type of transformed hops', choices=MultiStageClassifier.supported_combinations) = 'sum',
                  activation:    dict(help='type of activation function', choices=supported_activations) = 'relu',
                  dropout:       dict(help='dropout rate (between zero and one)') = 0.0,
                  batchnorm:     dict(help='if True, then model uses batch normalization') = True,
@@ -166,7 +183,7 @@ class PrivateNodeClassifier(Module):
         activation_fn = self.supported_activations[activation]()
         dropout_fn = Dropout(dropout, inplace=True)
 
-        self.encoder_classifier = MultiStageClassifier(
+        self.encoder = MultiStageClassifier(
             num_stages=1,
             hidden_dim=hidden_dim,
             output_dim=hidden_dim,
@@ -178,7 +195,7 @@ class PrivateNodeClassifier(Module):
             batchnorm=batchnorm
         )
 
-        self.multi_stage_classifier = MultiStageClassifier(
+        self.classifier = MultiStageClassifier(
             num_stages=hops+1,
             hidden_dim=hidden_dim,
             output_dim=num_classes,
@@ -201,86 +218,87 @@ class PrivateNodeClassifier(Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.encoder_classifier.reset_parameters()
-        self.multi_stage_classifier.reset_parameters()
+        self.encoder.reset_parameters()
+        self.classifier.reset_parameters()
         for stage in self.metrics:
             self.metrics[stage].reset()
 
     def configure_optimizers(self):
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
-        return Optim(
-            filter(lambda p: p.requires_grad, self.parameters()), 
-            lr=self.learning_rate, weight_decay=self.weight_decay
-        )
+        parameters = self.encoder.parameters() if self._pre_train_flag else self.classifier.parameters()
+        return Optim(parameters, lr=self.learning_rate, weight_decay=self.weight_decay)
 
     def set_training_state(self, pre_train):
         self._pre_train_flag = pre_train
         
-        for param in self.encoder_classifier.parameters():
-            param.requires_grad = pre_train
-        
-        for stage in self.metrics:
-            self.metrics[stage].reset()
+        for metric in self.metrics:
+            self.metrics[metric].reset()
 
     def fit(self, data):
         self.data = data
-        self.reset_parameters()
 
         ### pre-training encoder ###
-
         if self.encoder_layers > 0:
-            self.set_training_state(pre_train=True)
-            
-            trainer = Trainer(
-                epochs=self.pre_epochs, 
-                use_amp=self.use_amp, 
-                monitor='val/loss', monitor_mode='min', 
-                device=self.device
-            )
-
-            trainer.fit(
-                model=self, 
-                train_dataloader=self.train_dataloader(), 
-                val_dataloader=self.val_dataloader(),
-                description='pre-training',
-                checkpoint=True
-            )
-
-            self.encoder_classifier = trainer.load_best_model().encoder_classifier
+            logging.info('pre-training encoder...')
+            self.pretrain_encoder()
 
         ### precompute cached data ###
-
         with console.status('precomputing cached data...'):
-            
-            if self.perturbation == 'graph':
-                data.adj_t = self.base_mechanism.perturb(data.adj_t, num_nodes=data.num_nodes)
+            self.precompute_cache()
 
-            h = self.encoder_classifier.encode([data.x])
+        ### training ###
+        logging.info('training base model...')
+        return self.train_model()
 
-            # TODO: make sure encode in trained L2-normalized
+    def pretrain_encoder(self):
+        self.set_training_state(pre_train=True)
+        
+        trainer = Trainer(
+            epochs=self.pre_epochs, 
+            use_amp=self.use_amp, 
+            monitor='val/loss', monitor_mode='min', 
+            device=self.device
+        )
+
+        trainer.fit(
+            model=self, 
+            train_dataloader=self.train_dataloader(), 
+            val_dataloader=self.val_dataloader(),
+            test_dataloader=self.test_dataloader(),
+            checkpoint=True
+        )
+
+        self.encoder = trainer.load_best_model().encoder
+
+    def precompute_cache(self):
+        data = self.data
+
+        if self.perturbation == 'graph':
+            data.adj_t = self.base_mechanism.perturb(data.adj_t, num_nodes=data.num_nodes)
+
+        h = self.encoder.encode([data.x])
+
+        if self.perturbation in {'aggr', 'feature'}:
+            h = self.base_mechanism.normalize(h)
+
+        data.x_list = [h]
+
+        for _ in range(1, self.hops + 1):
+
+            if self.perturbation == 'feature':
+                h = self.base_mechanism.perturb(h, sensitivity=1)
+
+            h = data.adj_t.matmul(h)
+
+            if self.perturbation == 'aggr':
+                h = self.base_mechanism.perturb(h, sensitivity=1)
+
             if self.perturbation in {'aggr', 'feature'}:
                 h = self.base_mechanism.normalize(h)
 
-            data.x_list = [h]
+            data.x_list.append(h)
 
-            for _ in range(1, self.hops + 1):
-                h = data.x_list[-1]
-
-                if self.perturbation == 'feature':
-                    h = self.base_mechanism.perturb(h, sensitivity=1)
-
-                h = data.adj_t.matmul(data.x_list[-1])
-
-                if self.perturbation == 'aggr':
-                    h = self.base_mechanism.perturb(h, sensitivity=1)
-
-                if self.perturbation in {'aggr', 'feature'}:
-                    h = self.base_mechanism.normalize(h)
-
-                data.x_list.append(h)
-
-        ### training ###
-
+    def train_model(self):
         self.set_training_state(pre_train=False)
 
         trainer = Trainer(
@@ -296,7 +314,6 @@ class PrivateNodeClassifier(Module):
             val_dataloader=self.val_dataloader(),
             test_dataloader=self.test_dataloader(),
             checkpoint=False,
-            description='training    ',
         )
 
         return metrics
@@ -304,6 +321,7 @@ class PrivateNodeClassifier(Module):
     def train_dataloader(self):
         train_idx = self.data.train_mask.nonzero(as_tuple=False).view(-1)
         return self.index_loader(train_idx)
+
 
     def val_dataloader(self):
         val_idx = self.data.val_mask.nonzero(as_tuple=False).view(-1)
@@ -319,12 +337,13 @@ class PrivateNodeClassifier(Module):
         else:
             return DataLoader(idx, batch_size=self.batch_size, shuffle=True)
 
-    def get_metrics(self, stage='train'):
+    def aggregate_metrics(self, stage='train'):
         metrics = {}
 
         for metric_name, metric_value in self.metrics.items():
             if metric_name.startswith(stage):
                 value = metric_value.compute()
+                metric_value.reset()
                 if torch.is_tensor(value):
                     value = value.item()
                 value *= 100 if metric_name.endswith('acc') else 1
@@ -333,17 +352,18 @@ class PrivateNodeClassifier(Module):
         return metrics
 
     def step(self, batch, stage):
-        if self._pre_train_flag:
-            y_pred = self.encoder_classifier([self.data.x[batch]])
-        else:
-            y_pred = self.multi_stage_classifier([x[batch] for x in self.data.x_list])
 
-        y_true = self.data.y[batch]
-        self.metrics[f'{stage}/acc'].update(preds=y_pred, target=y_true)
+        if self._pre_train_flag:
+            preds = self.encoder([self.data.x[batch]])
+        else:
+            preds = self.classifier([x[batch] for x in self.data.x_list])
+
+        target = self.data.y[batch]
+        self.metrics[f'{stage}/acc'].update(preds=preds, target=target)
 
         loss = None
         if stage != 'test':
-            loss = F.nll_loss(input=y_pred, target=y_true)
+            loss = F.nll_loss(input=preds, target=target)
             self.metrics[f'{stage}/loss'].update(loss, weight=len(batch))
 
         return loss
@@ -368,5 +388,6 @@ class PrivateNodeClassifier(Module):
     def calibrate(self, epsilon, delta):
         mechanism_builder = lambda noise_scale: self.build_mechanism(noise_scale=noise_scale)
         noise_scale = Calibrator(mechanism_builder).calibrate(eps=epsilon, delta=delta)
+        logging.info(f'noise scale: {noise_scale:.4f}\n')
         self.base_mechanism.update(noise_scale=noise_scale)
         return self
