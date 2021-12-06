@@ -96,8 +96,6 @@ class MultiStageClassifier(Module):
             return torch.cat(h_list, dim=-1)
         elif self.combination_type == 'sum':
             return torch.stack(h_list, dim=0).sum(dim=0)
-        elif self.combination_type == 'mean':
-            return torch.stack(h_list, dim=0).mean(dim=0)
         elif self.combination_type == 'max':
             return torch.stack(h_list, dim=0).max(dim=0).values
 
@@ -136,7 +134,7 @@ class PrivateNodeClassifier(Module):
                  encoder_layers:dict(help='number of encoder MLP layers') = 2,
                  pre_layers:    dict(help='number of pre-combination MLP layers') = 1,
                  post_layers:   dict(help='number of post-combination MLP layers') = 1,
-                 combine:       dict(help='combination type of transformed hops', choices=MultiStageClassifier.supported_combinations) = 'sum',
+                 combine:       dict(help='combination type of transformed hops', choices=MultiStageClassifier.supported_combinations) = 'cat',
                  activation:    dict(help='type of activation function', choices=supported_activations) = 'relu',
                  dropout:       dict(help='dropout rate (between zero and one)') = 0.0,
                  batchnorm:     dict(help='if True, then model uses batch normalization') = True,
@@ -174,7 +172,7 @@ class PrivateNodeClassifier(Module):
         self.encoder = MultiStageClassifier(
             num_stages=1,
             hidden_dim=hidden_dim,
-            output_dim=hidden_dim,
+            output_dim=num_classes,
             pre_layers=encoder_layers,
             post_layers=1,
             combination_type='cat',
