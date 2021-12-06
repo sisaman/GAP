@@ -6,7 +6,6 @@ import torch
 import torch.nn.functional as F
 from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear, Module, ModuleDict, LazyBatchNorm1d
 from torch.optim import Adam, SGD
-from torch_geometric.nn import BatchNorm
 from args import support_args
 from privacy import Calibrator, GaussianMechanism, NullMechanism, TopMFilter, supported_mechanisms
 from torchmetrics import Accuracy, MeanMetric
@@ -21,9 +20,8 @@ class MLP(torch.nn.Module):
         self.dropout = dropout_fn
         self.activation = activation_fn
         self.activate_output = activate_output
-        dimensions = [hidden_dim] * (num_layers - 1) + [output_dim] if num_layers > 0 else []
-        self.layers = ModuleList([LazyLinear(out_channels) for out_channels in dimensions])
-        self.bns = ModuleList([BatchNorm(hidden_dim) for _ in range(num_layers - 1 + int(activate_output))]) if batchnorm else []
+        self.layers = ModuleList([LazyLinear(hidden_dim)] * (num_layers -1) + [LazyLinear(output_dim)])
+        self.bns = ModuleList([LazyBatchNorm1d()] * (num_layers - 1 + int(activate_output))) if batchnorm else []
         self.reset_parameters()
 
     def forward(self, x):
@@ -66,9 +64,8 @@ class MultiStageClassifier(Module):
                 activation_fn=activation_fn,
                 batchnorm=batchnorm,
                 activate_output=False,
-            )
-            for _ in range(num_stages)
-        ])
+            )] * num_stages
+        )
 
         self.bn = LazyBatchNorm1d() if batchnorm else False
         self.dropout = dropout_fn
@@ -84,14 +81,7 @@ class MultiStageClassifier(Module):
             activate_output=False,
         )
 
-        # FIXME remove this
-        # self.mn = MessageNorm(learn_scale=True)
-
     def forward(self, x_list):
-        # FIXME remove this
-        # if len(x_list) > 1:
-        #     x_list[1] = self.mn(x_list[0], x_list[1])
-
         h_list = [mlp(x) for x, mlp in zip(x_list, self.pre_mlps)]
         h = self.combine(h_list)
         h = F.normalize(h, p=2, dim=-1)
@@ -125,8 +115,6 @@ class MultiStageClassifier(Module):
         for mlp in self.pre_mlps:
             mlp.reset_parameters()
         self.post_mlp.reset_parameters()
-        # FIXME remove this
-        # self.mn.reset_parameters()
 
 
 @support_args
@@ -304,7 +292,7 @@ class PrivateNodeClassifier(Module):
         trainer = Trainer(
             epochs=self.epochs, 
             use_amp=self.use_amp, 
-            monitor='val/acc', monitor_mode='max', 
+            monitor='val/loss', monitor_mode='min', 
             device=self.device,
         )
 
