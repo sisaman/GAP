@@ -60,53 +60,32 @@ class Trainer:
             os.makedirs('checkpoints', exist_ok=True)
             self.checkpoint_path = os.path.join('checkpoints', f'{uuid.uuid1()}.pt')
 
-        num_epochs_without_improvement = 0
-        num_train_steps = len(train_dataloader)
-        num_val_steps = len(val_dataloader)
-        num_test_steps = len(test_dataloader)
 
-        progress = TrainerProgress(
+        self.progress = TrainerProgress(
             num_epochs=self.epochs, 
-            num_train_steps=num_train_steps, 
-            num_val_steps=num_val_steps, 
-            num_test_steps=num_test_steps
+            num_train_steps=len(train_dataloader), 
+            num_val_steps=len(val_dataloader), 
+            num_test_steps=len(test_dataloader)
         )
         
-        progress.start()
+        self.progress.start()
+
+        num_epochs_without_improvement = 0
         
         for epoch in range(1, self.epochs + 1):
             metrics = {'epoch': epoch}
 
-            progress.update('train', visible=num_train_steps > 1)
-            for batch in train_dataloader:
-                batch = batch.to(self.device)
-                self._train(batch, optimizer, scaler)
-                progress.update('train', advance=1)
-
-            progress.reset('train', visible=False)
-            metrics.update(**self.model.aggregate_metrics(stage='train'))
+            # train loop
+            self.train_loop(train_dataloader, optimizer, scaler)
+            metrics.update(self.model.aggregate_metrics(stage='train'))
                 
             if self.val_interval:
                 if epoch % self.val_interval == 0:
+                    self.validation_loop(val_dataloader, 'val')
+                    metrics.update(self.model.aggregate_metrics(stage='val'))
 
-                    progress.update('val', visible=num_val_steps > 1)
-                    for batch in val_dataloader:
-                        batch = batch.to(self.device)
-                        self._validate(batch, stage='val')
-                        progress.update('val', advance=1)
-                    
-                    progress.reset('val', visible=False)
-                    metrics.update(**self.model.aggregate_metrics(stage='val'))
-
-                    if num_test_steps > 0:
-
-                        progress.update('test', visible=num_test_steps > 1)
-                        for batch in test_dataloader:
-                            batch = batch.to(self.device)
-                            self._validate(batch, stage='test')
-                            progress.update('test', advance=1)
-
-                        progress.reset('test', visible=False)
+                    if test_dataloader:
+                        self.validation_loop(test_dataloader, 'test')
                         metrics.update(**self.model.aggregate_metrics(stage='test'))
 
                     if self.performs_better(metrics):
@@ -123,14 +102,32 @@ class Trainer:
                 self.best_metrics = metrics
 
             if self.logger: self.logger.log(metrics)
-            progress.update('epoch', metrics=metrics, advance=1)
+            self.progress.update('epoch', metrics=metrics, advance=1)
 
-        progress.stop()
+        self.progress.stop()
         
         if self.logger: self.logger.log_summary(self.best_metrics)
         return self.best_metrics
 
-    def _train(self, batch, optimizer, scaler):
+    def train_loop(self, dataloader, optimizer, scaler):
+        self.progress.update('train', visible=len(dataloader) > 1)
+        for batch in dataloader:
+            batch = batch.to(self.device)
+            self.train_step(batch, optimizer, scaler)
+            self.progress.update('train', advance=1)
+
+        self.progress.reset('train', visible=False)
+
+    def validation_loop(self, dataloader, stage):
+        self.progress.update(stage, visible=len(dataloader) > 1)
+        for batch in dataloader:
+            batch = batch.to(self.device)
+            self.validation_step(batch, stage)
+            self.progress.update(stage, advance=1)
+
+        self.progress.reset(stage, visible=False)
+
+    def train_step(self, batch, optimizer, scaler):
         self.model.train()
         optimizer.zero_grad(set_to_none=True)
 
@@ -143,7 +140,7 @@ class Trainer:
             scaler.update()
 
     @torch.no_grad()
-    def _validate(self, batch, stage='val'):
+    def validation_step(self, batch, stage='val'):
         self.model.eval()
         with torch.cuda.amp.autocast(enabled=self.use_amp):
             self.model.step(batch, stage=stage)
