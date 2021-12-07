@@ -20,8 +20,13 @@ class MLP(torch.nn.Module):
         self.dropout = dropout_fn
         self.activation = activation_fn
         self.activate_output = activate_output
-        self.layers = ModuleList([LazyLinear(hidden_dim)] * (num_layers -1) + [LazyLinear(output_dim)] * (num_layers > 0))
-        self.bns = ModuleList([LazyBatchNorm1d()] * (num_layers - 1 + int(activate_output))) if batchnorm else []
+
+        dimensions = [hidden_dim] * (num_layers - 1) + [output_dim] * (num_layers > 0)
+        self.layers = ModuleList([LazyLinear(dim) for dim in dimensions])
+        
+        num_bns = batchnorm * (num_layers - 1 + activate_output)
+        self.bns = batchnorm and ModuleList([LazyBatchNorm1d() for _ in range(num_bns)])
+        
         self.reset_parameters()
 
     def forward(self, x):
@@ -256,6 +261,7 @@ class PrivateNodeClassifier(Module):
 
         self.encoder = trainer.load_best_model().encoder
 
+    @torch.no_grad()
     def precompute_cache(self):
         data = self.data
 

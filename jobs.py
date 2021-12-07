@@ -57,7 +57,7 @@ class JobManager:
                 f'#$ -N {self.name}-{begin}-{end}\n',
                 f'#$ -S /bin/bash\n',
                 f'#$ -P ai4media\n',
-                f'#$ -l pytorch,sgpu,gpumem=10\n',
+                f'#$ -l pytorch,sgpu,gpumem=16\n',
                 f'#$ -t {begin}-{end}\n',
                 f'#$ -o {self.output_dir}\n',
                 f'#$ -e {self.output_dir}\n',
@@ -100,28 +100,6 @@ class JobManager:
 
     def status(self):
         refresh_interval = 5
-        # console.print()
-
-        # with Live(console=console, vertical_overflow='crop') as live:
-        #     try:
-        #         while True:
-        #             failed_jobs = sorted(self.get_failed_jobs())
-        #             table = Table(title=f'last 10 faild jobs (total: {len(failed_jobs)})')
-        #             table.add_column('job id', justify='right')
-        #             table.add_column('error file', justify='left')
-        #             table.add_column('num lines', justify='right')
-                    
-        #             for job_id, error_file, num_lines in failed_jobs[-10:]:
-        #                 table.add_row(f'{job_id}', error_file, f'{num_lines}')
-
-        #             for i in range(refresh_interval):
-        #                 table.caption = f'refresh in {refresh_interval-i} seconds'
-        #                 live.update(Align.center(table))
-        #                 time.sleep(1)
-                    
-        #     except KeyboardInterrupt:
-        #         pass
-
         with console.status('looking for failed jobs ...'):
             try:
                 failed_ids = set()
