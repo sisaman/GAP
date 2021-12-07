@@ -1,9 +1,15 @@
+from console import console
+from args import print_args
+import logging
 import os
+import time
 import subprocess
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from tabulate import tabulate
-from tqdm import tqdm
 from pathlib import Path
+from rich.live import Live
+from rich.table import Table
+from rich.progress import track
+from rich.align import Align
 
 
 class JobManager:
@@ -43,7 +49,7 @@ class JobManager:
         num_cmds = sum(1 for _ in open(self.file))
         os.makedirs(self.output_dir, exist_ok=True)
 
-        for i in tqdm(range(0, num_cmds, window), desc='submitting jobs'):
+        for i in track(range(0, num_cmds, window), description='submitting jobs'):
             begin = i + 1
             end = min(i + window, num_cmds)
 
@@ -70,10 +76,10 @@ class JobManager:
             try:
                 subprocess.check_call(['qsub', job_file], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
             except subprocess.CalledProcessError as e:
-                print('\n\n', e.output, '\n\n')
+                logging.error(e.output)
                 raise e
 
-        print('done')
+        logging.info('job file submitted')
 
     def resubmit(self):
         failed_jobs = self.get_failed_jobs()
@@ -85,16 +91,51 @@ class JobManager:
             run_cmds = [job_list[i - 1] for i, _, _ in failed_jobs]
 
             with open(self.args.new_file, 'w') as file:
-                for run in tqdm(run_cmds):
+                for run in track(run_cmds, description='writing new jobs file'):
                     file.write(run + '\n')
 
-            print('new job file created:', self.args.new_file)
+            logging.info(f'new job file created: {self.args.new_file}')
             self.file = self.args.new_file
             self.submit()
 
     def status(self):
-        failed_jobs = self.get_failed_jobs()
-        print(tabulate(failed_jobs, headers=['job id', 'error file', 'num lines']) + '\n')
+        refresh_interval = 5
+        # console.print()
+
+        # with Live(console=console, vertical_overflow='crop') as live:
+        #     try:
+        #         while True:
+        #             failed_jobs = sorted(self.get_failed_jobs())
+        #             table = Table(title=f'last 10 faild jobs (total: {len(failed_jobs)})')
+        #             table.add_column('job id', justify='right')
+        #             table.add_column('error file', justify='left')
+        #             table.add_column('num lines', justify='right')
+                    
+        #             for job_id, error_file, num_lines in failed_jobs[-10:]:
+        #                 table.add_row(f'{job_id}', error_file, f'{num_lines}')
+
+        #             for i in range(refresh_interval):
+        #                 table.caption = f'refresh in {refresh_interval-i} seconds'
+        #                 live.update(Align.center(table))
+        #                 time.sleep(1)
+                    
+        #     except KeyboardInterrupt:
+        #         pass
+
+        with console.status('looking for failed jobs ...'):
+            try:
+                failed_ids = set()
+                while True:
+                    failed_jobs = self.get_failed_jobs()
+                    
+                    for job_id, error_file, num_lines in failed_jobs:
+                        if job_id not in failed_ids:
+                            failed_ids.add(job_id)
+                            console.print(f'job id: {job_id:<5d} num lines: {num_lines:<3d} error file: [dim yellow]{error_file}')
+
+                    time.sleep(refresh_interval)
+            except KeyboardInterrupt:
+                pass
 
     def exec(self):
         with open(self.file) as jobs_file:
@@ -143,7 +184,7 @@ def main():
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
     parser = JobManager.register_arguments(parser)
     args = parser.parse_args()
-    print(args)
+    # print_args(args, num_cols=1)
 
     JobManager(args).run()
 

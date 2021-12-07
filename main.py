@@ -38,7 +38,7 @@ def run(args):
     for iteration in range(args.repeats):
         data = Data(**data_initial.to_dict())
 
-        with console.status('moving data to gpu...'):
+        with console.status(f'moving data to {device}...'):
             data = data.to(device)
 
         model.reset_parameters()
@@ -92,7 +92,7 @@ def main():
     parser = ArgumentParser(parents=[init_parser], formatter_class=ArgumentDefaultsHelpFormatter)
     args = parser.parse_args()
 
-    print_args(args)
+    print_args(args, num_cols=4)
     args.cmd = ' '.join(sys.argv)  # store calling command
 
     if args.seed:

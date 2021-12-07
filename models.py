@@ -20,7 +20,7 @@ class MLP(torch.nn.Module):
         self.dropout = dropout_fn
         self.activation = activation_fn
         self.activate_output = activate_output
-        self.layers = ModuleList([LazyLinear(hidden_dim)] * (num_layers -1) + [LazyLinear(output_dim)])
+        self.layers = ModuleList([LazyLinear(hidden_dim)] * (num_layers -1) + [LazyLinear(output_dim)] * (num_layers > 0))
         self.bns = ModuleList([LazyBatchNorm1d()] * (num_layers - 1 + int(activate_output))) if batchnorm else []
         self.reset_parameters()
 

@@ -1,6 +1,7 @@
+from console import console
+import math
 import enum
 import inspect
-from console import console
 from rich.table import Table
 from rich.highlighter import ReprHighlighter
 from rich import box
@@ -108,14 +109,16 @@ def support_args(Cls):
     return Cls
 
 
-def print_args(args):
+def print_args(args, num_cols=4):
+    args = vars(args)
+    num_args = len(args)
+    num_rows = math.ceil(num_args / num_cols)
     col = 0
     data = {}
     keys = []
     vals = []
-    num_rows = 8
 
-    for i, (key, val) in enumerate(vars(args).items()):
+    for i, (key, val) in enumerate(args.items()):
         keys.append(f'{key}:')
         
         vals.append(val)
