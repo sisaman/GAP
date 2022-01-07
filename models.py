@@ -14,10 +14,10 @@ from trainer import Trainer
 
 
 class MLP(torch.nn.Module):
-    def __init__(self, hidden_dim, output_dim, num_layers, dropout_fn, activation_fn, batchnorm):
+    def __init__(self, hidden_dim, output_dim, num_layers, dropout, activation_fn, batchnorm):
         super().__init__()
         self.num_layers = num_layers
-        self.dropout = dropout_fn
+        self.dropout = Dropout(dropout, inplace=True)
         self.activation = activation_fn
 
         dimensions = [hidden_dim] * (num_layers - 1) + [output_dim] * (num_layers > 0)
@@ -54,7 +54,7 @@ class MultiStageClassifier(Module):
     def __init__(self, num_stages,
                  hidden_dim, output_dim,
                  pre_layers, post_layers, combination_type,
-                 activation_fn, dropout_fn, batchnorm):
+                 activation_fn, dropout, batchnorm):
 
         super().__init__()
         self.combination_type = combination_type
@@ -64,14 +64,14 @@ class MultiStageClassifier(Module):
                 hidden_dim=hidden_dim,
                 output_dim=hidden_dim,
                 num_layers=pre_layers,
-                dropout_fn=dropout_fn,
+                dropout=dropout,
                 activation_fn=activation_fn,
                 batchnorm=batchnorm,
             )] * num_stages
         )
 
         self.bn = LazyBatchNorm1d() if batchnorm else False
-        self.dropout = dropout_fn
+        self.dropout = Dropout(dropout, inplace=True)
         self.activation = activation_fn
 
         self.post_mlp = MLP(
@@ -79,7 +79,7 @@ class MultiStageClassifier(Module):
             output_dim=output_dim,
             num_layers=post_layers,
             activation_fn=activation_fn,
-            dropout_fn=dropout_fn,
+            dropout=dropout,
             batchnorm=batchnorm,
         )
 
@@ -170,7 +170,6 @@ class GAP(Module):
             self.base_mechanism = supported_mechanisms[mechanism](noise_scale=0.0)
 
         activation_fn = self.supported_activations[activation]()
-        dropout_fn = Dropout(dropout, inplace=True)
 
         self.encoder = MultiStageClassifier(
             num_stages=1,
@@ -180,7 +179,7 @@ class GAP(Module):
             post_layers=1,
             combination_type='cat',
             activation_fn=activation_fn,
-            dropout_fn=dropout_fn,
+            dropout=dropout,
             batchnorm=batchnorm
         )
 
@@ -192,7 +191,7 @@ class GAP(Module):
             post_layers=post_layers,
             combination_type=combine,
             activation_fn=activation_fn,
-            dropout_fn=dropout_fn,
+            dropout=dropout,
             batchnorm=batchnorm
         )
 
