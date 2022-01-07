@@ -14,10 +14,10 @@ from ogb.nodeproppred import PygNodePropPredDataset
 import pandas as pd
 from scipy.io import loadmat
 from torch_geometric.data import Data, InMemoryDataset, download_url
+from torch_geometric.loader import NeighborLoader
 from sklearn.preprocessing import LabelEncoder
 from sklearn.random_projection import GaussianRandomProjection
-from torch_geometric.utils import from_scipy_sparse_matrix, remove_isolated_nodes
-from torch_geometric.nn import knn_graph
+from torch_geometric.utils import from_scipy_sparse_matrix
 from args import support_args
 
 
@@ -35,6 +35,19 @@ def load_ogb(name, transform=None, **kwargs):
         data = transform(data)
 
     return [data]
+
+
+class NeighborSampler(BaseTransform):
+    def __init__(self, max_out_degree):
+        super().__init__()
+        self.max_out_degree = max_out_degree
+
+    def __call__(self, data):
+        data.adj_t = data.adj_t.t()
+        loader = NeighborLoader(data, num_neighbors=[self.max_out_degree], batch_size=data.num_nodes)
+        data = next(iter(loader))
+        data.adj_t = data.adj_t.t()
+        return data
 
 
 class FilterClass(BaseTransform):
