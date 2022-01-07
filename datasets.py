@@ -37,36 +37,6 @@ def load_ogb(name, transform=None, **kwargs):
     return [data]
 
 
-class RandomSubGraphSampler(BaseTransform):
-    def __init__(self, sampling_rate=1.0, edge_sampling=True):
-        self.sampling_rate = float(sampling_rate)
-        self.sampler_fn = self.edge_sampler if edge_sampling else self.node_sampler
-
-    def node_sampler(self, data: Data):
-        node_mask = torch.rand(data.num_nodes) < self.sampling_rate
-        edge_index, _ = subgraph(node_mask, data.edge_index, relabel_nodes=True, num_nodes=data.num_nodes)
-        return node_mask, edge_index
-
-    def edge_sampler(self, data: Data):
-        edge_mask = torch.rand(data.num_edges) < self.sampling_rate
-        edge_index = self.data.edge_index[:, edge_mask]
-        edge_index, _, node_mask = remove_isolated_nodes(edge_index, num_nodes=data.num_nodes)
-        return node_mask, edge_index
-
-    def __call__(self, data: Data):        
-        if self.sampling_rate < 1.0:
-            node_mask, edge_index = self.sampler_fn()
-            data.edge_index = edge_index
-
-            n = data.num_nodes
-            for key, item in data:
-                if torch.is_tensor(item) and item.size(0) == n:
-                    print(key)
-                    data[key] = item[node_mask]
-
-        return data
-
-
 class FilterClass(BaseTransform):
     def __init__(self, top_k=None, include=None):
         assert top_k is None or top_k > 0
