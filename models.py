@@ -1,13 +1,13 @@
 from console import console
 import logging
 from functools import partial
-from autodp.transformer_zoo import ComposeGaussian, Composition
+from autodp.transformer_zoo import ComposeGaussian
 import torch
 import torch.nn.functional as F
 from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear, Module, ModuleDict, LazyBatchNorm1d
 from torch.optim import Adam, SGD
 from args import support_args
-from privacy import Calibrator, GaussianMechanism, NullMechanism, TopMFilter, supported_mechanisms
+from privacy import Calibrator, GaussianMechanism, NullMechanism, TopMFilter
 from torchmetrics import Accuracy, MeanMetric
 from torch.utils.data import DataLoader
 from trainer import Trainer
@@ -56,10 +56,7 @@ class MultiStageClassifier(Module):
         'cat', 'sum', 'max', 'mean', 'att'   ### TODO implement attention
     }
 
-    def __init__(self, num_stages,
-                 hidden_dim, output_dim,
-                 pre_layers, post_layers, combination_type,
-                 activation, dropout, batchnorm):
+    def __init__(self, num_stages, hidden_dim, output_dim, pre_layers, post_layers, combination_type, activation, dropout, batchnorm):
 
         super().__init__()
         self.combination_type = combination_type
@@ -125,12 +122,12 @@ class MultiStageClassifier(Module):
 
 @support_args
 class GAP(Module):
-    supported_perturbations = {'aggr', 'feature', 'graph'}
+    supported_perturbations = {'aggr', 'graph'}
 
+    # TODO add node-level DP params
     def __init__(self,
                  num_classes,
                  perturbation:  dict(help='perturbation method', option='-p', choices=supported_perturbations) = 'aggr',
-                 mechanism:     dict(help='perturbation mechanism', option='-m', choices=supported_mechanisms) = 'gaussian',
                  hops:          dict(help='number of hops', option='-k') = 1,
                  hidden_dim:    dict(help='dimension of the hidden layers') = 16,
                  encoder_layers:dict(help='number of encoder MLP layers') = 2,
@@ -166,7 +163,7 @@ class GAP(Module):
         if perturbation == 'graph':
             self.base_mechanism = TopMFilter(noise_scale=0.0)
         else:
-            self.base_mechanism = supported_mechanisms[mechanism](noise_scale=0.0)
+            self.base_mechanism = GaussianMechanism(noise_scale=0.0)
 
         self.encoder = MultiStageClassifier(
             num_stages=1,
@@ -222,17 +219,17 @@ class GAP(Module):
     def fit(self, data):
         self.data = data
 
-        ### pre-training encoder ###
+        ### pretraining encoder module ###
         if self.encoder_layers > 0:
-            logging.info('pre-training encoder...')
+            logging.info('pretraining encoder module...')
             self.pretrain_encoder()
 
-        ### precompute cached data ###
-        with console.status('precomputing cached data...'):
-            self.precompute_cache()
+        ### precompute aggregation module ###
+        with console.status('precomputing aggregation module...'):
+            self.precompute_aggregations()
 
-        ### training ###
-        logging.info('training base model...')
+        ### training classification module ###
+        logging.info('training classification module...')
         return self.train_model()
 
     def pretrain_encoder(self):
@@ -256,7 +253,7 @@ class GAP(Module):
         self.encoder = trainer.load_best_model().encoder
 
     @torch.no_grad()
-    def precompute_cache(self):
+    def precompute_aggregations(self):
         data = self.data
 
         if self.perturbation == 'graph':
@@ -264,23 +261,23 @@ class GAP(Module):
 
         h = self.encoder.encode([data.x])
 
-        if self.perturbation in {'aggr', 'feature'}:
+        if self.perturbation == 'aggr':
             h = self.base_mechanism.normalize(h)
 
         data.x_list = [h]
 
         for _ in range(1, self.hops + 1):
 
-            if self.perturbation == 'feature':
-                h = self.base_mechanism.perturb(h, sensitivity=1)
-
+            # aggregate
             h = data.adj_t.matmul(h)
 
             if self.perturbation == 'aggr':
+
+                # perturb
                 h = self.base_mechanism.perturb(h, sensitivity=1)
 
-            if self.perturbation in {'aggr', 'feature'}:
-                h = self.base_mechanism.normalize(h)
+                # normalize
+                h = self.base_mechanism.normalize(h)    
 
             data.x_list.append(h)
 
@@ -366,7 +363,7 @@ class GAP(Module):
         if self.perturbation == 'graph':
             return self.base_mechanism
         else:
-            compose = ComposeGaussian() if isinstance(self.base_mechanism, GaussianMechanism) else Composition()
+            compose = ComposeGaussian()
             composed_mech = compose([self.base_mechanism], [self.hops])
             return composed_mech
 
