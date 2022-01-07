@@ -14,17 +14,16 @@ from trainer import Trainer
 
 
 class MLP(torch.nn.Module):
-    def __init__(self, hidden_dim, output_dim, num_layers, dropout_fn, activation_fn, batchnorm, activate_output):
+    def __init__(self, hidden_dim, output_dim, num_layers, dropout_fn, activation_fn, batchnorm):
         super().__init__()
         self.num_layers = num_layers
         self.dropout = dropout_fn
         self.activation = activation_fn
-        self.activate_output = activate_output
 
         dimensions = [hidden_dim] * (num_layers - 1) + [output_dim] * (num_layers > 0)
         self.layers = ModuleList([LazyLinear(dim) for dim in dimensions])
         
-        num_bns = batchnorm * (num_layers - 1 + activate_output)
+        num_bns = batchnorm * (num_layers - 1)
         self.bns = batchnorm and ModuleList([LazyBatchNorm1d() for _ in range(num_bns)])
         
         self.reset_parameters()
@@ -33,7 +32,7 @@ class MLP(torch.nn.Module):
         for i, layer in enumerate(self.layers):
             x = layer(x)
 
-            if i < self.num_layers - 1 or self.activate_output:
+            if i < self.num_layers - 1:
                 x = self.bns[i](x) if self.bns else x
                 x = self.dropout(x)
                 x = self.activation(x)
@@ -49,7 +48,7 @@ class MLP(torch.nn.Module):
 
 class MultiStageClassifier(Module):
     supported_combinations = {
-        'cat', 'sum', 'max', 'mean' #, 'att'   ### TODO implement attention
+        'cat', 'sum', 'max', 'mean', 'att'   ### TODO implement attention
     }
 
     def __init__(self, num_stages,
@@ -68,7 +67,6 @@ class MultiStageClassifier(Module):
                 dropout_fn=dropout_fn,
                 activation_fn=activation_fn,
                 batchnorm=batchnorm,
-                activate_output=False,
             )] * num_stages
         )
 
@@ -83,7 +81,6 @@ class MultiStageClassifier(Module):
             activation_fn=activation_fn,
             dropout_fn=dropout_fn,
             batchnorm=batchnorm,
-            activate_output=False,
         )
 
     def forward(self, x_list):
@@ -103,7 +100,8 @@ class MultiStageClassifier(Module):
             return torch.stack(h_list, dim=0).sum(dim=0)
         elif self.combination_type == 'max':
             return torch.stack(h_list, dim=0).max(dim=0).values
-
+        elif self.combination_type == 'att':
+            raise NotImplementedError
         else:
             raise ValueError(f'Unknown combination type {self.combination_type}')
 
