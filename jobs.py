@@ -1,15 +1,11 @@
 from console import console
-from args import print_args
 import logging
 import os
 import time
 import subprocess
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from pathlib import Path
-from rich.live import Live
-from rich.table import Table
 from rich.progress import track
-from rich.align import Align
 
 
 class JobManager:
