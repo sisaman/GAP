@@ -8,7 +8,7 @@ with console.status('importing modules...'):
     from args import print_args
     from datasets import Dataset
     from loggers import Logger
-    from models import PrivateNodeClassifier
+    from models import GAP
     from utils import timeit, seed_everything, confidence_interval
     from torch_geometric.data import Data
 
@@ -27,7 +27,7 @@ def run(args):
 
     ### initiallize model ###
 
-    model: PrivateNodeClassifier = PrivateNodeClassifier.from_args(args, num_classes=num_classes)
+    model: GAP = GAP.from_args(args, num_classes=num_classes)
 
     ### calibrate noise to privacy budget ###
     with console.status('calibrating noise to privacy budget...'):
@@ -80,7 +80,7 @@ def main():
 
     # model args
     group_model = init_parser.add_argument_group('model arguments')
-    PrivateNodeClassifier.add_args(group_model)
+    GAP.add_args(group_model)
 
     # experiment args
     group_expr = init_parser.add_argument_group('experiment arguments')

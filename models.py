@@ -121,7 +121,7 @@ class MultiStageClassifier(Module):
 
 
 @support_args
-class PrivateNodeClassifier(Module):
+class GAP(Module):
     supported_perturbations = {'aggr', 'feature', 'graph'}
 
     supported_activations = {
