@@ -12,13 +12,18 @@ from torchmetrics import Accuracy, MeanMetric
 from torch.utils.data import DataLoader
 from trainer import Trainer
 
+supported_activations = {
+    'relu': partial(ReLU, inplace=True),
+    'selu': partial(SELU, inplace=True),
+    'tanh': Tanh,
+}
 
 class MLP(torch.nn.Module):
-    def __init__(self, hidden_dim, output_dim, num_layers, dropout, activation_fn, batchnorm):
+    def __init__(self, hidden_dim, output_dim, num_layers, dropout, activation, batchnorm):
         super().__init__()
         self.num_layers = num_layers
         self.dropout = Dropout(dropout, inplace=True)
-        self.activation = activation_fn
+        self.activation = supported_activations[activation]()
 
         dimensions = [hidden_dim] * (num_layers - 1) + [output_dim] * (num_layers > 0)
         self.layers = ModuleList([LazyLinear(dim) for dim in dimensions])
@@ -54,7 +59,7 @@ class MultiStageClassifier(Module):
     def __init__(self, num_stages,
                  hidden_dim, output_dim,
                  pre_layers, post_layers, combination_type,
-                 activation_fn, dropout, batchnorm):
+                 activation, dropout, batchnorm):
 
         super().__init__()
         self.combination_type = combination_type
@@ -65,20 +70,20 @@ class MultiStageClassifier(Module):
                 output_dim=hidden_dim,
                 num_layers=pre_layers,
                 dropout=dropout,
-                activation_fn=activation_fn,
+                activation=activation,
                 batchnorm=batchnorm,
             )] * num_stages
         )
 
         self.bn = LazyBatchNorm1d() if batchnorm else False
         self.dropout = Dropout(dropout, inplace=True)
-        self.activation = activation_fn
+        self.activation = supported_activations[activation]()
 
         self.post_mlp = MLP(
             hidden_dim=hidden_dim,
             output_dim=output_dim,
             num_layers=post_layers,
-            activation_fn=activation_fn,
+            activation=activation,
             dropout=dropout,
             batchnorm=batchnorm,
         )
@@ -122,12 +127,6 @@ class MultiStageClassifier(Module):
 class GAP(Module):
     supported_perturbations = {'aggr', 'feature', 'graph'}
 
-    supported_activations = {
-        'relu': partial(ReLU, inplace=True),
-        'selu': partial(SELU, inplace=True),
-        'tanh': Tanh,
-    }
-
     def __init__(self,
                  num_classes,
                  perturbation:  dict(help='perturbation method', option='-p', choices=supported_perturbations) = 'aggr',
@@ -169,8 +168,6 @@ class GAP(Module):
         else:
             self.base_mechanism = supported_mechanisms[mechanism](noise_scale=0.0)
 
-        activation_fn = self.supported_activations[activation]()
-
         self.encoder = MultiStageClassifier(
             num_stages=1,
             hidden_dim=hidden_dim,
@@ -178,7 +175,7 @@ class GAP(Module):
             pre_layers=encoder_layers,
             post_layers=1,
             combination_type='cat',
-            activation_fn=activation_fn,
+            activation=activation,
             dropout=dropout,
             batchnorm=batchnorm
         )
@@ -190,7 +187,7 @@ class GAP(Module):
             pre_layers=pre_layers,
             post_layers=post_layers,
             combination_type=combine,
-            activation_fn=activation_fn,
+            activation=activation,
             dropout=dropout,
             batchnorm=batchnorm
         )
