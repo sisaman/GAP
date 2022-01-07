@@ -65,12 +65,6 @@ class LaplaceMechanism(mechanisms.LaplaceMechanism):
             return np.inf
         else:
             return super().get_approxDP(delta)
-    
-
-supported_mechanisms = {
-    'laplace': LaplaceMechanism,
-    'gaussian': GaussianMechanism
-}
 
 
 class TopMFilter(Mechanism):
