@@ -68,17 +68,6 @@ class FilterClass(BaseTransform):
         return data
 
 
-class AddKNNGraph(BaseTransform):
-    def __init__(self, k):
-        super().__init__()
-        self.k = k
-
-    def __call__(self, data):
-        edge_index = knn_graph(x=data.x, k=self.k, num_workers=6)
-        data.edge_index = torch.cat([data.edge_index, edge_index], dim=1)
-        return data
-
-
 class Facebook100(InMemoryDataset):
     url = 'https://github.com/sisaman/pyg-datasets/raw/main/datasets/facebook100/'
     targets = ['status', 'gender', 'major', 'minor', 'housing', 'year']
