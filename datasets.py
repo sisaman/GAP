@@ -43,10 +43,11 @@ class NeighborSampler(BaseTransform):
         self.max_out_degree = max_out_degree
 
     def __call__(self, data):
-        data.adj_t = data.adj_t.t()
-        loader = NeighborLoader(data, num_neighbors=[self.max_out_degree], batch_size=data.num_nodes)
-        data = next(iter(loader))
-        data.adj_t = data.adj_t.t()
+        if self.max_out_degree > 0:
+            data.adj_t = data.adj_t.t()
+            loader = NeighborLoader(data, num_neighbors=[self.max_out_degree], batch_size=data.num_nodes)
+            data = next(iter(loader))
+            data.adj_t = data.adj_t.t()
         return data
 
 
