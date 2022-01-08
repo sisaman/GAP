@@ -99,7 +99,7 @@ class TopMFilter(Mechanism):
         self.__init__(noise_scale)
         return self
  
-    def perturb(self, edge_index_or_adj_t, num_nodes):
+    def __call__(self, edge_index_or_adj_t, num_nodes):
         if self.params['noise_scale'] == 0.0:
             return edge_index_or_adj_t
 
@@ -161,9 +161,6 @@ class TopMFilter(Mechanism):
             return SparseTensor.from_edge_index(edge_index, sparse_sizes=(num_nodes, num_nodes))
         else:
             return edge_index
-
-    def __call__(self, edge_index_or_adj_t, num_nodes):
-        return self.perturb(edge_index_or_adj_t, num_nodes)
 
     @staticmethod
     def to_sparse_adjacency(edge_index, num_nodes):
