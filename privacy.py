@@ -9,35 +9,7 @@ from scipy.optimize import minimize_scalar
 from torch_sparse import SparseTensor
 
 
-class Mechanism(mechanisms.Mechanism):
-    def __init__(self):
-        super().__init__()
-
-    def is_zero(self):
-        eps = np.array([self.RenyiDP(alpha) for alpha in range(2,100)])
-        return np.all(eps == 0.0)
-
-    def is_inf(self):
-        eps = np.array([self.RenyiDP(alpha) for alpha in range(2,100)])
-        return np.all(eps == np.inf)
-
-    def calibrate(self, eps, delta):
-        self.update(noise_scale=1)
-
-        if eps == np.inf or self.is_inf() or self.is_zero():
-            return 0.0
-        else:
-            fn_err = lambda x: abs(eps - self.update(x).get_approxDP(delta))
-            results = minimize_scalar(fn_err, method='bounded', bounds=[0,1000], tol=1e-8, options={'maxiter': 1000000})
-
-            if results.success and results.fun < 1e-3:
-                self.update(results.x)
-                return results.x
-            else:
-                raise RuntimeError(f"eps_delta_calibrator fails to find a parameter:\n{results}")
-
-
-class ZeroMechanism(Mechanism):
+class ZeroMechanism(mechanisms.Mechanism):
     def __init__(self):
         super().__init__()
         self.name = 'ZeroMechanism'
@@ -45,7 +17,7 @@ class ZeroMechanism(Mechanism):
         self.propagate_updates(func=lambda _: 0, type_of_update='RDP')
         
 
-class InfMechanism(Mechanism):
+class InfMechanism(mechanisms.Mechanism):
     def __init__(self):
         super().__init__()
         self.name = 'InfMechanism'
@@ -78,7 +50,42 @@ class LaplaceMechanism(mechanisms.LaplaceMechanism):
         return self.perturb(data, sensitivity)
 
 
-class TopMFilter(Mechanism):
+class NoisyMechanism(mechanisms.Mechanism):
+    def __init__(self, noise_scale):
+        super().__init__()
+        self.name = 'NoisyMechanism'
+        self.params = {'noise_scale': noise_scale}
+
+    def is_zero(self):
+        eps = np.array([self.RenyiDP(alpha) for alpha in range(2,100)])
+        return np.all(eps == 0.0)
+
+    def is_inf(self):
+        eps = np.array([self.RenyiDP(alpha) for alpha in range(2,100)])
+        return np.all(eps == np.inf)
+
+    def update(self, noise_scale):
+        self.params.pop('noise_scale')
+        self.__init__(noise_scale, **self.params)
+        return self
+
+    def calibrate(self, eps, delta):
+        self.update(noise_scale=1)
+
+        if eps == np.inf or self.is_inf() or self.is_zero():
+            return 0.0
+        else:
+            fn_err = lambda x: abs(eps - self.update(x).get_approxDP(delta))
+            results = minimize_scalar(fn_err, method='bounded', bounds=[0,1000], tol=1e-8, options={'maxiter': 1000000})
+
+            if results.success and results.fun < 1e-3:
+                self.update(results.x)
+                return results.x
+            else:
+                raise RuntimeError(f"eps_delta_calibrator fails to find a parameter:\n{results}")
+
+
+class TopMFilter(NoisyMechanism):
     def __init__(self, noise_scale):
         super().__init__()
         self.name = 'TopMFilter'
@@ -94,10 +101,6 @@ class TopMFilter(Mechanism):
             mech = Composition()([self.mech_edges, self.mech_count], [1,1])
         
         self.set_all_representation(mech)
-
-    def update(self, noise_scale):
-        self.__init__(noise_scale)
-        return self
  
     def __call__(self, edge_index_or_adj_t, num_nodes):
         if self.params['noise_scale'] == 0.0:
@@ -172,7 +175,7 @@ class TopMFilter(Mechanism):
         )
 
 
-class NoisySGD(Mechanism):
+class NoisySGD(NoisyMechanism):
     def __init__(self, noise_scale, dataset_size, batch_size, epochs):
         super().__init__()
         self.name = 'NoisySGD'
@@ -196,15 +199,6 @@ class NoisySGD(Mechanism):
         
         self.set_all_representation(mech)
 
-    def update(self, noise_scale):
-        self.__init__(
-            noise_scale, 
-            self.params['dataset_size'], 
-            self.params['batch_size'], 
-            self.params['epochs'], 
-        )
-        return self
-
     def __call__(self, module, optimizer, dataloader, max_grad_norm):
         if self.params['noise_scale'] == 0.0 or self.params['epochs'] == 0:
             return module, optimizer, dataloader
@@ -218,7 +212,7 @@ class NoisySGD(Mechanism):
         )
 
 
-class PMA(Mechanism):
+class PMA(NoisyMechanism):
     def __init__(self, noise_scale, hops):
         super().__init__()
         self.name = 'PMA'
@@ -233,10 +227,6 @@ class PMA(Mechanism):
             mech = ComposeGaussian()([self.gm], [hops])
 
         self.set_all_representation(mech)
-
-    def update(self, noise_scale):
-        self.__init__(noise_scale, self.params['hops'])
-        return self
 
     def __call__(self, data, sensitivity):
         assert hasattr(data, 'adj_t')
