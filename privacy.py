@@ -1,20 +1,55 @@
+from opacus.privacy_engine import PrivacyEngine
 import torch
 import numpy as np
 import torch.nn.functional as F
-from autodp.autodp_core import Mechanism
 import autodp.mechanism_zoo as mechanisms
-from autodp.transformer_zoo import Composition
+from autodp.transformer_zoo import ComposeGaussian, Composition, AmplificationBySampling
 from torch_geometric.utils import remove_self_loops, add_self_loops, contains_self_loops
 from scipy.optimize import minimize_scalar
 from torch_sparse import SparseTensor
 
 
-class NullMechanism(Mechanism):
+class Mechanism(mechanisms.Mechanism):
     def __init__(self):
         super().__init__()
 
-    def update(self, _):
-        self.__init__()
+    def is_zero(self):
+        eps = np.array([self.RenyiDP(alpha) for alpha in range(2,100)])
+        return np.all(eps == 0.0)
+
+    def is_inf(self):
+        eps = np.array([self.RenyiDP(alpha) for alpha in range(2,100)])
+        return np.all(eps == np.inf)
+
+    def calibrate(self, eps, delta):
+        self.update(noise_scale=1)
+
+        if eps == np.inf or self.is_inf() or self.is_zero():
+            return 0.0
+        else:
+            fn_err = lambda x: abs(eps - self.update(x).get_approxDP(delta))
+            results = minimize_scalar(fn_err, method='bounded', bounds=[0,1000], tol=1e-8, options={'maxiter': 1000000})
+
+            if results.success and results.fun < 1e-3:
+                self.update(results.x)
+                return results.x
+            else:
+                raise RuntimeError(f"eps_delta_calibrator fails to find a parameter:\n{results}")
+
+
+class ZeroMechanism(Mechanism):
+    def __init__(self):
+        super().__init__()
+        self.name = 'ZeroMechanism'
+        self.params = {}
+        self.propagate_updates(func=lambda _: 0, type_of_update='RDP')
+        
+
+class InfMechanism(Mechanism):
+    def __init__(self):
+        super().__init__()
+        self.name = 'InfMechanism'
+        self.params = {}
 
 
 class GaussianMechanism(mechanisms.ExactGaussianMechanism):
@@ -22,24 +57,12 @@ class GaussianMechanism(mechanisms.ExactGaussianMechanism):
         self.noise_scale = noise_scale
         super().__init__(sigma=noise_scale)
 
-    def update(self, noise_scale):
-        self.__init__(noise_scale)
-
     def perturb(self, data, sensitivity):
         std = self.params['sigma'] * sensitivity
         return torch.normal(mean=data, std=std) if std else data
 
-    def normalize(self, data):
-        return F.normalize(data, p=2, dim=-1)
-
-    def clip(self, data, c):
-        return (c / data.norm(p=2, dim=-1, keepdim=True)).clamp(max=1) * data
-
-    def get_approxDP(self, delta):
-        if self.noise_scale == 0.0:
-            return np.inf
-        else:
-            return super().get_approxDP(delta)
+    def __call__(self, data, sensitivity):
+        return self.perturb(data, sensitivity)
 
 
 class LaplaceMechanism(mechanisms.LaplaceMechanism):
@@ -47,48 +70,37 @@ class LaplaceMechanism(mechanisms.LaplaceMechanism):
         self.noise_scale = noise_scale
         super().__init__(b=noise_scale)
 
-    def update(self, noise_scale):
-        self.__init__(noise_scale)
-
     def perturb(self, data, sensitivity):
         scale = self.params['b'] * sensitivity
         return torch.distributions.Laplace(loc=data, scale=scale).sample() if scale else data
 
-    def normalize(self, data):
-        return F.normalize(data, p=1, dim=-1)
-
-    def clip(self, data, c):
-        return (c / data.norm(p=1, dim=-1, keepdim=True)).clamp(max=1) * data
-
-    def get_approxDP(self, delta):
-        if self.noise_scale == 0.0:
-            return np.inf
-        else:
-            return super().get_approxDP(delta)
+    def __call__(self, data, sensitivity):
+        return self.perturb(data, sensitivity)
 
 
 class TopMFilter(Mechanism):
     def __init__(self, noise_scale):
         super().__init__()
-        self.noise_scale = noise_scale
-        # noise scales are set such that 0.1 of privacy budget is 
-        #   spent on perturbing total edge count and 0.9 on perturbing edges
-        self.mech_edges = LaplaceMechanism(self.noise_scale)
-        self.mech_count = LaplaceMechanism(self.noise_scale * 9)
-        composed_mech = Composition()([self.mech_edges, self.mech_count], [1,1])
-        self.set_all_representation(composed_mech)
+        self.name = 'TopMFilter'
+        self.params = {'noise_scale': noise_scale}
+
+        if noise_scale == 0:
+            mech = InfMechanism()
+        else:
+            # noise scales are set such that 0.1 of privacy budget is 
+            #   spent on perturbing total edge count and 0.9 on perturbing edges
+            self.mech_edges = LaplaceMechanism(noise_scale)
+            self.mech_count = LaplaceMechanism(noise_scale * 9)
+            mech = Composition()([self.mech_edges, self.mech_count], [1,1])
+        
+        self.set_all_representation(mech)
 
     def update(self, noise_scale):
         self.__init__(noise_scale)
-
-    def get_approxDP(self, delta):
-        if self.noise_scale == 0:
-            return np.inf
-        else:
-            return super().get_approxDP(delta)
+        return self
  
     def perturb(self, edge_index_or_adj_t, num_nodes):
-        if self.noise_scale == 0.0:
+        if self.params['noise_scale'] == 0.0:
             return edge_index_or_adj_t
 
         is_sparse = isinstance(edge_index_or_adj_t, SparseTensor)
@@ -150,6 +162,9 @@ class TopMFilter(Mechanism):
         else:
             return edge_index
 
+    def __call__(self, edge_index_or_adj_t, num_nodes):
+        return self.perturb(edge_index_or_adj_t, num_nodes)
+
     @staticmethod
     def to_sparse_adjacency(edge_index, num_nodes):
         return torch.sparse_coo_tensor(
@@ -160,24 +175,91 @@ class TopMFilter(Mechanism):
         )
 
 
-class Calibrator:
-    def __init__(self, mechanism_cls):
-        self.mechanism_cls = mechanism_cls
+class NoisySGD(Mechanism):
+    def __init__(self, noise_scale, dataset_size, batch_size, epochs):
+        super().__init__()
+        self.name = 'NoisySGD'
+        self.params = {
+            'noise_scale': noise_scale, 
+            'dataset_size': dataset_size, 
+            'batch_size': batch_size, 
+            'epochs': epochs,
+        }
 
-    def calibrate(self, eps, delta):
-        mechanism = self.mechanism_cls(noise_scale=1)
-
-        if eps == np.inf or isinstance(mechanism, NullMechanism):
-            return 0.0
+        if epochs == 0:
+            mech = ZeroMechanism()
+        elif noise_scale == 0.0:
+            mech = InfMechanism()
         else:
-            noise_scale = self.eps_delta_calibrator(eps, delta)
-            return noise_scale
-    
-    def eps_delta_calibrator(self, eps, delta):
-        fn_err = lambda x: abs(eps - self.mechanism_cls(x).get_approxDP(delta))
-        results = minimize_scalar(fn_err, method='bounded', bounds=[0,1000], tol=1e-8, options={'maxiter': 1000000})
+            subsample = AmplificationBySampling()
+            compose = Composition()
+            gm = GaussianMechanism(noise_scale=noise_scale)
+            subsampled_gm = subsample(gm, prob=batch_size/dataset_size, improved_bound_flag=True)
+            mech = compose([subsampled_gm],[epochs * dataset_size / batch_size])
+        
+        self.set_all_representation(mech)
 
-        if results.success and results.fun < 1e-3:
-            return results.x
+    def update(self, noise_scale):
+        self.__init__(
+            noise_scale, 
+            self.params['dataset_size'], 
+            self.params['batch_size'], 
+            self.params['epochs'], 
+        )
+        return self
+
+    def __call__(self, module, optimizer, dataloader, max_grad_norm):
+        if self.params['noise_scale'] == 0.0 or self.params['epochs'] == 0:
+            return module, optimizer, dataloader
+
+        return PrivacyEngine().make_private(
+            module=module,
+            optimizer=optimizer,
+            data_loader=dataloader,
+            noise_multiplier=self.params['noise_scale'],
+            max_grad_norm=max_grad_norm,
+        )
+
+
+class PMA(Mechanism):
+    def __init__(self, noise_scale, hops):
+        super().__init__()
+        self.name = 'PMA'
+        self.params = {'noise_scale': noise_scale, 'hops': hops}
+        self.gm = GaussianMechanism(noise_scale=noise_scale)
+
+        if hops == 0:
+            mech = ZeroMechanism()
+        elif noise_scale == 0.0:
+            mech = InfMechanism()
         else:
-            raise RuntimeError(f"eps_delta_calibrator fails to find a parameter:\n{results}")
+            mech = ComposeGaussian()([self.gm], [hops])
+
+        self.set_all_representation(mech)
+
+    def update(self, noise_scale):
+        self.__init__(noise_scale, self.params['hops'])
+        return self
+
+    def __call__(self, data, sensitivity):
+        assert hasattr(data, 'adj_t')
+
+        if hasattr(data, 'x_list'):
+            x = data.x_list[0]
+        else:
+            x = data.x
+
+        x = F.normalize(x, p=2, dim=-1)
+        data.x_list = [x]
+
+        for _ in range(1, self.params['hops'] + 1):
+            # aggregate
+            x = data.adj_t.matmul(x)
+            # perturb
+            x = self.gm(x, sensitivity=sensitivity)
+            # normalize
+            x = x = F.normalize(x, p=2, dim=-1)
+
+            data.x_list.append(x)
+
+        return data
