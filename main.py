@@ -73,11 +73,6 @@ def main():
     group_dataset = init_parser.add_argument_group('dataset arguments')
     Dataset.add_args(group_dataset)
 
-    # privacy args
-    group_privacy = init_parser.add_argument_group('privacy arguments')
-    group_privacy.add_argument('-e', '--epsilon', type=float, default=np.inf, help='DP epsilon parameter')
-    group_privacy.add_argument('-d', '--delta', type=float, default=1e-6, help='DP delta parameter')
-
     # model args
     group_model = init_parser.add_argument_group('model arguments')
     GAP.add_args(group_model)
