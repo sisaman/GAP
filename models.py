@@ -246,7 +246,7 @@ class GAP(Module):
         for metric in self.metrics:
             self.metrics[metric].reset()
 
-    def init_privacy_mechanisms(self, dataset_size):
+    def init_privacy_mechanisms(self):
         self.pma_mechanism = PMA(noise_scale=self.noise_scale, hops=self.hops)
 
         if self.perturbation == 'graph':
@@ -255,6 +255,8 @@ class GAP(Module):
         elif self.dp_level == 'edge':
             mechanism_list = [self.pma_mechanism]
         elif self.dp_level == 'node':
+            dataset_size = len(self.train_dataloader().dataset)
+
             self.pretraining_noisy_sgd = NoisySGD(
                 noise_scale=self.noise_scale, dataset_size=dataset_size, batch_size=self.batch_size, epochs=self.pre_epochs
             )
@@ -278,8 +280,7 @@ class GAP(Module):
         self.data = NeighborSampler(self.max_degree)(data)
 
         ### initialize privacy mechanism ###
-        dataset_size = len(self.train_dataloader().dataset)
-        self.init_privacy_mechanisms(dataset_size)
+        self.init_privacy_mechanisms()
 
         ### pretraining encoder module ###
         if self.encoder_layers > 0:
@@ -325,7 +326,9 @@ class GAP(Module):
         h = self.encoder.encode([data.x])
         h = F.normalize(h, p=2, dim=-1)
         data.x_list = [h]
-        self.data = self.pma_mechanism(data)
+
+        sensitivity = 1 if self.dp_level == 'edge' else np.sqrt(self.max_degree)
+        self.data = self.pma_mechanism(data, sensitivity=sensitivity)
 
     def train_classifier(self):
         self.set_training_state(pre_train=False)
@@ -362,9 +365,9 @@ class GAP(Module):
 
     def index_loader(self, idx):
         if self.batch_size <= 0:
-            return TensorDataset(idx)
+            return TensorDataset(idx.view(1, -1))
         else:
-            return DataLoader(TensorDataset(idx), batch_size=self.batch_size, shuffle=True)
+            return DataLoader(TensorDataset(idx), batch_size=self.batch_size, shuffle=True, num_workers=6)
 
     def aggregate_metrics(self, stage='train'):
         metrics = {}
