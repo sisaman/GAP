@@ -258,11 +258,21 @@ class GAP(Module):
             dataset_size = len(self.train_dataloader().dataset)
 
             self.pretraining_noisy_sgd = NoisySGD(
-                noise_scale=self.noise_scale, dataset_size=dataset_size, batch_size=self.batch_size, epochs=self.pre_epochs
+                noise_scale=self.noise_scale, 
+                dataset_size=dataset_size, 
+                batch_size=self.batch_size, 
+                epochs=self.pre_epochs,
+                max_grad_norm=self.max_grad_norm,
             )
+
             self.training_noisy_sgd = NoisySGD(
-                noise_scale=self.noise_scale, dataset_size=dataset_size, batch_size=self.batch_size, epochs=self.epochs
+                noise_scale=self.noise_scale, 
+                dataset_size=dataset_size, 
+                batch_size=self.batch_size, 
+                epochs=self.epochs,
+                max_grad_norm=self.max_grad_norm,
             )
+
             mechanism_list = [self.pretraining_noisy_sgd, self.pma_mechanism, self.training_noisy_sgd]
 
         composed_mech = ComposedNoisyMechanism(
@@ -367,7 +377,7 @@ class GAP(Module):
         if self.batch_size <= 0:
             return TensorDataset(idx.view(1, -1))
         else:
-            return DataLoader(TensorDataset(idx), batch_size=self.batch_size, shuffle=True, num_workers=6)
+            return DataLoader(TensorDataset(idx), batch_size=self.batch_size, shuffle=True)
 
     def aggregate_metrics(self, stage='train'):
         metrics = {}
