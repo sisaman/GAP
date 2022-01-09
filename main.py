@@ -26,15 +26,9 @@ def run(args):
     logger = Logger.from_args(args, enabled=args.debug, config=args)
 
     ### initiallize model ###
-
     model: GAP = GAP.from_args(args, num_classes=num_classes)
 
-    ### calibrate noise to privacy budget ###
-    with console.status('calibrating noise to privacy budget...'):
-        model.calibrate(epsilon=args.epsilon, delta=args.delta)
-
     ### run experiment ###
-
     for iteration in range(args.repeats):
         data = Data(**data_initial.to_dict())
 
@@ -45,7 +39,6 @@ def run(args):
         best_metrics = model.fit(data)
 
         ### process results ###
-
         for metric, value in best_metrics.items():
             run_metrics[metric] = run_metrics.get(metric, []) + [value]
 
