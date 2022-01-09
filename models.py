@@ -4,11 +4,10 @@ import logging
 from functools import partial
 import torch
 import torch.nn.functional as F
-from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear, Module, ModuleDict, LazyBatchNorm1d
+from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear, Module, LazyBatchNorm1d
 from torch.optim import Adam, SGD
 from args import support_args
 from privacy import TopMFilter, NoisySGD, PMA, ComposedNoisyMechanism
-from torchmetrics import Accuracy, MeanMetric
 from torch.utils.data import DataLoader, TensorDataset
 from trainer import Trainer
 from datasets import NeighborSampler
@@ -219,21 +218,11 @@ class GAP(Module):
             batchnorm=batchnorm
         )
 
-        self.metrics = ModuleDict({
-            'train/loss': MeanMetric(compute_on_step=False),
-            'train/acc': Accuracy(compute_on_step=False),
-            'val/loss': MeanMetric(compute_on_step=False),
-            'val/acc': Accuracy(compute_on_step=False),
-            'test/acc': Accuracy(compute_on_step=False),
-        })
-
         self.reset_parameters()
 
     def reset_parameters(self):
         self.encoder.reset_parameters()
         self.classifier.reset_parameters()
-        for stage in self.metrics:
-            self.metrics[stage].reset()
 
     def configure_optimizers(self):
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
@@ -242,9 +231,6 @@ class GAP(Module):
 
     def set_training_state(self, pre_train):
         self._pre_train_flag = pre_train
-        
-        for metric in self.metrics:
-            self.metrics[metric].reset()
 
     def init_privacy_mechanisms(self):
         self.pma_mechanism = PMA(noise_scale=self.noise_scale, hops=self.hops)
@@ -284,7 +270,6 @@ class GAP(Module):
         with console.status('calibrating noise to privacy budget...'):
             noise_scale = composed_mech.calibrate(eps=self.epsilon, delta=self.delta)
             logging.info(f'noise scale: {noise_scale:.4f}\n')
-
 
     def fit(self, data):
         self.data = NeighborSampler(self.max_degree)(data)
@@ -379,20 +364,6 @@ class GAP(Module):
         else:
             return DataLoader(TensorDataset(idx), batch_size=self.batch_size, shuffle=True)
 
-    def aggregate_metrics(self, stage='train'):
-        metrics = {}
-
-        for metric_name, metric_value in self.metrics.items():
-            if metric_name.startswith(stage):
-                value = metric_value.compute()
-                metric_value.reset()
-                if torch.is_tensor(value):
-                    value = value.item()
-                value *= 100 if metric_name.endswith('acc') else 1
-                metrics[metric_name] = value
-
-        return metrics
-
     def step(self, batch, stage):
         if self._pre_train_flag:
             preds = self.encoder([self.data.x[batch]])
@@ -400,11 +371,12 @@ class GAP(Module):
             preds = self.classifier([x[batch] for x in self.data.x_list])
 
         target = self.data.y[batch]
-        self.metrics[f'{stage}/acc'].update(preds=preds, target=target)
+        acc = (preds.argmax(dim=1) == target).float().mean() * 100
+        metrics = {f'{stage}/acc': acc}
 
         loss = None
         if stage != 'test':
             loss = F.nll_loss(input=preds, target=target)
-            self.metrics[f'{stage}/loss'].update(loss, weight=len(batch))
+            metrics[f'{stage}/loss'] = loss.detach()
 
-        return loss
+        return loss, metrics

@@ -3,6 +3,7 @@ import os, uuid
 import torch
 from args import support_args
 from loggers import Logger
+from torchmetrics import MeanMetric
 from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn, TextColumn
 
 
@@ -28,12 +29,35 @@ class Trainer:
         self.device = device
         self.dp_mechanism = dp_mechanism
         self.logger = Logger.get_instance()
-        self.reset()
+        
+        self.metrics = {
+            'train/loss': MeanMetric(compute_on_step=False).to(device),
+            'train/acc': MeanMetric(compute_on_step=False).to(device),
+            'val/loss': MeanMetric(compute_on_step=False).to(device),
+            'val/acc': MeanMetric(compute_on_step=False).to(device),
+            'test/acc': MeanMetric(compute_on_step=False).to(device),
+        }
 
     def reset(self):
         self.model = None
         self.best_metrics = None
         self.checkpoint_path = None
+
+        for metric in self.metrics.values():
+            metric.reset()
+
+    def aggregate_metrics(self, stage='train'):
+        metrics = {}
+
+        for metric_name, metric_value in self.metrics.items():
+            if metric_name.startswith(stage):
+                value = metric_value.compute()
+                metric_value.reset()
+                if torch.is_tensor(value):
+                    value = value.item()
+                metrics[metric_name] = value
+
+        return metrics
 
     def performs_better(self, metrics):
         if self.best_metrics is None:
@@ -53,6 +77,7 @@ class Trainer:
             raise Exception('No checkpoint found')
 
     def fit(self, model, train_dataloader, val_dataloader, test_dataloader=[], checkpoint=False):
+        self.reset()
         self.model = model.to(self.device)
         optimizer = self.model.configure_optimizers()
         scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
@@ -64,13 +89,11 @@ class Trainer:
                 data_loader=train_dataloader,
             )
             model.step = self.model.step
-            model.aggregate_metrics = self.model.aggregate_metrics
             self.model = model
 
         if checkpoint:
             os.makedirs('checkpoints', exist_ok=True)
             self.checkpoint_path = os.path.join('checkpoints', f'{uuid.uuid1()}.pt')
-
 
         self.progress = TrainerProgress(
             num_epochs=self.epochs, 
@@ -88,16 +111,16 @@ class Trainer:
 
                 # train loop
                 self.train_loop(train_dataloader, optimizer, scaler)
-                metrics.update(self.model.aggregate_metrics(stage='train'))
+                metrics.update(self.aggregate_metrics(stage='train'))
                     
                 if self.val_interval:
                     if epoch % self.val_interval == 0:
                         self.validation_loop(val_dataloader, 'val')
-                        metrics.update(self.model.aggregate_metrics(stage='val'))
+                        metrics.update(self.aggregate_metrics(stage='val'))
 
                         if test_dataloader:
                             self.validation_loop(test_dataloader, 'test')
-                            metrics.update(**self.model.aggregate_metrics(stage='test'))
+                            metrics.update(self.aggregate_metrics(stage='test'))
 
                         if self.performs_better(metrics):
                             self.best_metrics = metrics
@@ -124,7 +147,9 @@ class Trainer:
 
         for batch in dataloader:
             batch = batch[0].to(self.device)  # [0] is due to TensorDataset
-            self.train_step(batch, optimizer, scaler)
+            metrics = self.train_step(batch, optimizer, scaler)
+            for item in metrics:
+                self.metrics[item].update(metrics[item], weight=len(batch))
             self.progress.update('train', advance=1)
 
         self.progress.reset('train', visible=False)
@@ -132,10 +157,12 @@ class Trainer:
     def validation_loop(self, dataloader, stage):
         self.model.eval()
         self.progress.update(stage, visible=len(dataloader) > 1)
-        
+
         for batch in dataloader:
             batch = batch[0].to(self.device)
-            self.validation_step(batch, stage)
+            metrics = self.validation_step(batch, stage)
+            for item in metrics:
+                self.metrics[item].update(metrics[item], weight=len(batch))
             self.progress.update(stage, advance=1)
 
         self.progress.reset(stage, visible=False)
@@ -144,17 +171,20 @@ class Trainer:
         optimizer.zero_grad(set_to_none=True)
 
         with torch.cuda.amp.autocast(enabled=self.use_amp):
-            loss = self.model.step(batch, stage='train')
+            loss, metrics = self.model.step(batch, stage='train')
         
         if loss is not None:
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
 
+        return metrics
+
     @torch.no_grad()
     def validation_step(self, batch, stage='val'):
         with torch.cuda.amp.autocast(enabled=self.use_amp):
-            self.model.step(batch, stage=stage)
+            _, metrics = self.model.step(batch, stage=stage)
+        return metrics
 
 
 class TrainerProgress(Progress):
