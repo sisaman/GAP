@@ -1,22 +1,35 @@
 from console import console
+import numpy as np
 import logging
 from functools import partial
-from autodp.transformer_zoo import ComposeGaussian
 import torch
 import torch.nn.functional as F
 from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear, Module, ModuleDict, LazyBatchNorm1d
 from torch.optim import Adam, SGD
 from args import support_args
-from privacy import Calibrator, GaussianMechanism, NullMechanism, TopMFilter
+from privacy import TopMFilter, NoisySGD, PMA, ComposedNoisyMechanism
 from torchmetrics import Accuracy, MeanMetric
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from trainer import Trainer
+from datasets import NeighborSampler
+from opacus.grad_sample import register_grad_sampler
+
 
 supported_activations = {
     'relu': partial(ReLU, inplace=True),
     'selu': partial(SELU, inplace=True),
     'tanh': Tanh,
 }
+
+
+@register_grad_sampler(LazyLinear)
+def compute_lazy_linear_grad_sample(layer, activations, backprops):
+    gs = torch.einsum("n...i,n...j->nij", backprops, activations)
+    ret = {layer.weight: gs}
+    if layer.bias is not None:
+        ret[layer.bias] = torch.einsum("n...k->nk", backprops)
+    return ret
+
 
 class MLP(torch.nn.Module):
     def __init__(self, hidden_dim, output_dim, num_layers, dropout, activation, batchnorm):
@@ -29,7 +42,7 @@ class MLP(torch.nn.Module):
         self.layers = ModuleList([LazyLinear(dim) for dim in dimensions])
         
         num_bns = batchnorm * (num_layers - 1)
-        self.bns = batchnorm and ModuleList([LazyBatchNorm1d() for _ in range(num_bns)])
+        self.bns = ModuleList([LazyBatchNorm1d() for _ in range(num_bns)]) if batchnorm else []
         
         self.reset_parameters()
 
@@ -47,6 +60,7 @@ class MLP(torch.nn.Module):
     def reset_parameters(self):
         for layer in self.layers:
             layer.reset_parameters()
+        
         for bn in self.bns:
             bn.reset_parameters()
 
@@ -115,20 +129,28 @@ class MultiStageClassifier(Module):
         return h_combined
 
     def reset_parameters(self):
+        if self.bn:
+            self.bn.reset_parameters()
+
         for mlp in self.pre_mlps:
             mlp.reset_parameters()
+        
         self.post_mlp.reset_parameters()
 
 
 @support_args
 class GAP(Module):
+    supported_dp_levels = {'edge', 'node'}
     supported_perturbations = {'aggr', 'graph'}
 
-    # TODO add node-level DP params
     def __init__(self,
                  num_classes,
+                 dp_level:      dict(help='level of privacy protection', choices=supported_dp_levels) = 'edge',
                  perturbation:  dict(help='perturbation method', option='-p', choices=supported_perturbations) = 'aggr',
+                 epsilon:       dict(help='DP epsilon parameter', option='-e') = np.inf,
+                 delta:         dict(help='DP delta parameter', option='-d') = 1e-6,
                  hops:          dict(help='number of hops', option='-k') = 1,
+                 max_degree:    dict(help='max degree per each node') = 0,
                  hidden_dim:    dict(help='dimension of the hidden layers') = 16,
                  encoder_layers:dict(help='number of encoder MLP layers') = 2,
                  pre_layers:    dict(help='number of pre-combination MLP layers') = 1,
@@ -144,11 +166,23 @@ class GAP(Module):
                  pre_epochs:    dict(help='number of epochs for pre-training') = 100,
                  epochs:        dict(help='number of epochs for training') = 100,
                  batch_size:    dict(help='batch size (if zero, performs full-batch training)') = 0,
+                 max_grad_norm: dict(help='maximum norm of the per-sample gradients (ignored when using edge-level DP)') = 1.0,
                  use_amp:       dict(help='use automatic mixed precision training') = False,
                  ):
 
         super().__init__()
+
+        assert dp_level == 'edge' or perturbation == 'aggr'
+        assert dp_level == 'edge' or max_degree > 0 
+        assert dp_level == 'edge' or batch_size > 0
+        assert encoder_layers == 0 or pre_epochs > 0
+
+        self.dp_level = dp_level
+        self.perturbation = perturbation
+        self.epsilon = epsilon
+        self.delta = delta
         self.hops = hops
+        self.max_degree = max_degree
         self.encoder_layers = encoder_layers
         self.weight_decay = weight_decay
         self.learning_rate = learning_rate
@@ -158,12 +192,8 @@ class GAP(Module):
         self.epochs = epochs
         self.batch_size = batch_size
         self.use_amp = use_amp
-        self.perturbation = perturbation
-
-        if perturbation == 'graph':
-            self.base_mechanism = TopMFilter(noise_scale=0.0)
-        else:
-            self.base_mechanism = GaussianMechanism(noise_scale=0.0)
+        self.max_grad_norm = max_grad_norm
+        self.noise_scale = 1.0 # will be calibrated later
 
         self.encoder = MultiStageClassifier(
             num_stages=1,
@@ -216,8 +246,40 @@ class GAP(Module):
         for metric in self.metrics:
             self.metrics[metric].reset()
 
+    def init_privacy_mechanisms(self, dataset_size):
+        self.pma_mechanism = PMA(noise_scale=self.noise_scale, hops=self.hops)
+
+        if self.perturbation == 'graph':
+            self.graph_mechanism = TopMFilter(noise_scale=self.noise_scale)
+            mechanism_list = [self.graph_mechanism]
+        elif self.dp_level == 'edge':
+            mechanism_list = [self.pma_mechanism]
+        elif self.dp_level == 'node':
+            self.pretraining_noisy_sgd = NoisySGD(
+                noise_scale=self.noise_scale, dataset_size=dataset_size, batch_size=self.batch_size, epochs=self.pre_epochs
+            )
+            self.training_noisy_sgd = NoisySGD(
+                noise_scale=self.noise_scale, dataset_size=dataset_size, batch_size=self.batch_size, epochs=self.epochs
+            )
+            mechanism_list = [self.pretraining_noisy_sgd, self.pma_mechanism, self.training_noisy_sgd]
+
+        composed_mech = ComposedNoisyMechanism(
+            noise_scale=self.noise_scale, 
+            mechanism_list=mechanism_list, 
+            coeff_list=[1]*len(mechanism_list)
+        )
+
+        with console.status('calibrating noise to privacy budget...'):
+            noise_scale = composed_mech.calibrate(eps=self.epsilon, delta=self.delta)
+            logging.info(f'noise scale: {noise_scale:.4f}\n')
+
+
     def fit(self, data):
-        self.data = data
+        self.data = NeighborSampler(self.max_degree)(data)
+
+        ### initialize privacy mechanism ###
+        dataset_size = len(self.train_dataloader().dataset)
+        self.init_privacy_mechanisms(dataset_size)
 
         ### pretraining encoder module ###
         if self.encoder_layers > 0:
@@ -230,7 +292,7 @@ class GAP(Module):
 
         ### training classification module ###
         logging.info('training classification module...')
-        return self.train_model()
+        return self.train_classifier()
 
     def pretrain_encoder(self):
         self.set_training_state(pre_train=True)
@@ -239,7 +301,8 @@ class GAP(Module):
             epochs=self.pre_epochs, 
             use_amp=self.use_amp, 
             monitor='val/loss', monitor_mode='min', 
-            device=self.device
+            device=self.device,
+            dp_mechanism=self.pretraining_noisy_sgd if self.dp_level == 'node' else None,
         )
 
         trainer.fit(
@@ -257,31 +320,14 @@ class GAP(Module):
         data = self.data
 
         if self.perturbation == 'graph':
-            data.adj_t = self.base_mechanism.perturb(data.adj_t, num_nodes=data.num_nodes)
+            data = self.graph_mechanism(data)
 
         h = self.encoder.encode([data.x])
-
-        if self.perturbation == 'aggr':
-            h = self.base_mechanism.normalize(h)
-
+        h = F.normalize(h, p=2, dim=-1)
         data.x_list = [h]
+        self.data = self.pma_mechanism(data)
 
-        for _ in range(1, self.hops + 1):
-
-            # aggregate
-            h = data.adj_t.matmul(h)
-
-            if self.perturbation == 'aggr':
-
-                # perturb
-                h = self.base_mechanism.perturb(h, sensitivity=1)
-
-                # normalize
-                h = self.base_mechanism.normalize(h)    
-
-            data.x_list.append(h)
-
-    def train_model(self):
+    def train_classifier(self):
         self.set_training_state(pre_train=False)
 
         trainer = Trainer(
@@ -289,6 +335,7 @@ class GAP(Module):
             use_amp=self.use_amp, 
             monitor='val/loss', monitor_mode='min', 
             device=self.device,
+            dp_mechanism=self.training_noisy_sgd if self.dp_level == 'node' else None,
         )
 
         metrics = trainer.fit(
@@ -305,7 +352,6 @@ class GAP(Module):
         train_idx = self.data.train_mask.nonzero(as_tuple=False).view(-1)
         return self.index_loader(train_idx)
 
-
     def val_dataloader(self):
         val_idx = self.data.val_mask.nonzero(as_tuple=False).view(-1)
         return self.index_loader(val_idx)
@@ -314,11 +360,11 @@ class GAP(Module):
         test_idx = self.data.test_mask.nonzero(as_tuple=False).view(-1)
         return self.index_loader(test_idx)
 
-    def index_loader(self, idx):        
+    def index_loader(self, idx):
         if self.batch_size <= 0:
-            return [idx]
+            return TensorDataset(idx)
         else:
-            return DataLoader(idx, batch_size=self.batch_size, shuffle=True)
+            return DataLoader(TensorDataset(idx), batch_size=self.batch_size, shuffle=True)
 
     def aggregate_metrics(self, stage='train'):
         metrics = {}
@@ -335,7 +381,6 @@ class GAP(Module):
         return metrics
 
     def step(self, batch, stage):
-
         if self._pre_train_flag:
             preds = self.encoder([self.data.x[batch]])
         else:
@@ -350,27 +395,3 @@ class GAP(Module):
             self.metrics[f'{stage}/loss'].update(loss, weight=len(batch))
 
         return loss
-
-    def build_mechanism(self, noise_scale=None):
-        if noise_scale is None:
-            noise_scale = self.base_mechanism.noise_scale
-
-        if self.hops == 0 or noise_scale == 0.0:
-            return NullMechanism()
-
-        self.base_mechanism.update(noise_scale=noise_scale)
-
-        if self.perturbation == 'graph':
-            return self.base_mechanism
-        else:
-            compose = ComposeGaussian()
-            composed_mech = compose([self.base_mechanism], [self.hops])
-            return composed_mech
-
-
-    def calibrate(self, epsilon, delta):
-        mechanism_builder = lambda noise_scale: self.build_mechanism(noise_scale=noise_scale)
-        noise_scale = Calibrator(mechanism_builder).calibrate(eps=epsilon, delta=delta)
-        logging.info(f'noise scale: {noise_scale:.4f}\n')
-        self.base_mechanism.update(noise_scale=noise_scale)
-        return self
