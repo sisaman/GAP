@@ -119,7 +119,9 @@ class Trainer:
         return self.best_metrics
 
     def train_loop(self, dataloader, optimizer, scaler):
+        self.model.train()
         self.progress.update('train', visible=len(dataloader) > 1)
+
         for batch in dataloader:
             batch = batch[0].to(self.device)  # [0] is due to TensorDataset
             self.train_step(batch, optimizer, scaler)
@@ -128,7 +130,9 @@ class Trainer:
         self.progress.reset('train', visible=False)
 
     def validation_loop(self, dataloader, stage):
+        self.model.eval()
         self.progress.update(stage, visible=len(dataloader) > 1)
+        
         for batch in dataloader:
             batch = batch[0].to(self.device)
             self.validation_step(batch, stage)
@@ -137,7 +141,6 @@ class Trainer:
         self.progress.reset(stage, visible=False)
 
     def train_step(self, batch, optimizer, scaler):
-        self.model.train()
         optimizer.zero_grad(set_to_none=True)
 
         with torch.cuda.amp.autocast(enabled=self.use_amp):
@@ -150,7 +153,6 @@ class Trainer:
 
     @torch.no_grad()
     def validation_step(self, batch, stage='val'):
-        self.model.eval()
         with torch.cuda.amp.autocast(enabled=self.use_amp):
             self.model.step(batch, stage=stage)
 
