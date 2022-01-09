@@ -112,23 +112,23 @@ class TopMFilter(NoisyMechanism):
         
         self.set_all_representation(mech)
  
-    def __call__(self, edge_index_or_adj_t, num_nodes):
+    def __call__(self, data):
         if self.params['noise_scale'] == 0.0:
-            return edge_index_or_adj_t
+            return data
 
-        is_sparse = isinstance(edge_index_or_adj_t, SparseTensor)
+        is_sparse = hasattr(data, 'adj_t')
         if is_sparse:
-            adj_t = edge_index_or_adj_t
+            adj_t = data.adj_t
             edge_index = torch.cat(adj_t.coo()[:-1]).view(2,-1)
         else:
-            edge_index = edge_index_or_adj_t
+            edge_index = data.edge_index
 
         # if the graph has self loops, we need to remove them to exclude them from edge count
         has_self_loops = contains_self_loops(edge_index)
         if has_self_loops:
             edge_index, _ = remove_self_loops(edge_index)
 
-        n = num_nodes
+        n = data.num_nodes
         m = edge_index.shape[1]
         m_pert = self.mech_count.perturb(m, sensitivity=1)
         m_pert = round(m_pert.item())
@@ -171,9 +171,11 @@ class TopMFilter(NoisyMechanism):
             edge_index, _ = remove_self_loops(edge_index)
 
         if is_sparse:
-            return SparseTensor.from_edge_index(edge_index, sparse_sizes=(num_nodes, num_nodes))
+            data.adj_t = SparseTensor.from_edge_index(edge_index, sparse_sizes=(n, n))
         else:
-            return edge_index
+            data.edge_index = edge_index
+
+        return data
 
     @staticmethod
     def to_sparse_adjacency(edge_index, num_nodes):
