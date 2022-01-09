@@ -188,7 +188,7 @@ class TopMFilter(NoisyMechanism):
 
 
 class NoisySGD(NoisyMechanism):
-    def __init__(self, noise_scale, dataset_size, batch_size, epochs):
+    def __init__(self, noise_scale, dataset_size, batch_size, epochs, max_grad_norm):
         super().__init__(noise_scale)
         self.name = 'NoisySGD'
         self.params = {
@@ -196,6 +196,7 @@ class NoisySGD(NoisyMechanism):
             'dataset_size': dataset_size, 
             'batch_size': batch_size, 
             'epochs': epochs,
+            'max_grad_norm': max_grad_norm,
         }
 
         if epochs == 0:
@@ -212,7 +213,7 @@ class NoisySGD(NoisyMechanism):
         
         self.set_all_representation(mech)
 
-    def __call__(self, module, optimizer, data_loader, max_grad_norm):
+    def __call__(self, module, optimizer, data_loader):
         if self.params['noise_scale'] == 0.0 or self.params['epochs'] == 0:
             return module, optimizer, data_loader
 
@@ -221,7 +222,7 @@ class NoisySGD(NoisyMechanism):
             optimizer=optimizer,
             data_loader=data_loader,
             noise_multiplier=self.params['noise_scale'],
-            max_grad_norm=max_grad_norm,
+            max_grad_norm=self.params['max_grad_norm'],
         )
 
 
