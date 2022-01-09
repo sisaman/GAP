@@ -70,7 +70,8 @@ class NoisyMechanism(mechanisms.Mechanism):
         return self
 
     def calibrate(self, eps, delta):
-        self.update(noise_scale=1)
+        if self.params['noise_scale'] == 0:
+            self.update(noise_scale=1)  # to avoid is_inf being true
 
         if eps == np.inf or self.is_inf() or self.is_zero():
             return 0.0
@@ -85,9 +86,18 @@ class NoisyMechanism(mechanisms.Mechanism):
                 raise RuntimeError(f"eps_delta_calibrator fails to find a parameter:\n{results}")
 
 
+class ComposedNoisyMechanism(NoisyMechanism):
+    def __init__(self, noise_scale, mechanism_list, coeff_list):
+        super().__init__(noise_scale)
+        self.params = {'noise_scale': noise_scale, 'mechanism_list': mechanism_list, 'coeff_list': coeff_list}
+        mechanism_list = [mech.update(noise_scale) for mech in mechanism_list]
+        mech = Composition()(mechanism_list, coeff_list)
+        self.set_all_representation(mech)
+
+
 class TopMFilter(NoisyMechanism):
     def __init__(self, noise_scale):
-        super().__init__()
+        super().__init__(noise_scale)
         self.name = 'TopMFilter'
         self.params = {'noise_scale': noise_scale}
 
@@ -177,7 +187,7 @@ class TopMFilter(NoisyMechanism):
 
 class NoisySGD(NoisyMechanism):
     def __init__(self, noise_scale, dataset_size, batch_size, epochs):
-        super().__init__()
+        super().__init__(noise_scale)
         self.name = 'NoisySGD'
         self.params = {
             'noise_scale': noise_scale, 
@@ -188,6 +198,7 @@ class NoisySGD(NoisyMechanism):
 
         if epochs == 0:
             mech = ZeroMechanism()
+            self.params['noise_scale'] = 0.0
         elif noise_scale == 0.0:
             mech = InfMechanism()
         else:
@@ -214,13 +225,14 @@ class NoisySGD(NoisyMechanism):
 
 class PMA(NoisyMechanism):
     def __init__(self, noise_scale, hops):
-        super().__init__()
+        super().__init__(noise_scale)
         self.name = 'PMA'
         self.params = {'noise_scale': noise_scale, 'hops': hops}
         self.gm = GaussianMechanism(noise_scale=noise_scale)
 
         if hops == 0:
             mech = ZeroMechanism()
+            self.params['noise_scale'] = 0.0
         elif noise_scale == 0.0:
             mech = InfMechanism()
         else:
