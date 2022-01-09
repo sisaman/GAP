@@ -4,7 +4,7 @@ import torch
 from args import support_args
 from loggers import Logger
 from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn, TextColumn
-    
+
 
 @support_args
 class Trainer:
@@ -14,8 +14,9 @@ class Trainer:
                  val_interval:  dict(help='number of epochs to wait for validation', type=int) = 1,
                  use_amp:       dict(help='use automatic mixed precision training') = False,
                  monitor:       dict(help='metric to monitor') = 'val/acc',
-                 monitor_mode:   dict(help='monitor mode', choices=['min', 'max']) = 'max',
+                 monitor_mode:  dict(help='monitor mode', choices=['min', 'max']) = 'max',
                  device = 'cuda',
+                 dp_mechanism = None,
                  ):
 
         self.epochs = epochs
@@ -25,6 +26,7 @@ class Trainer:
         self.monitor = monitor
         self.monitor_mode = monitor_mode
         self.device = device
+        self.dp_mechanism = dp_mechanism
         self.logger = Logger.get_instance()
         self.reset()
 
@@ -51,10 +53,19 @@ class Trainer:
             raise Exception('No checkpoint found')
 
     def fit(self, model, train_dataloader, val_dataloader, test_dataloader=[], checkpoint=False):
-        # data = data.to(self.device)
         self.model = model.to(self.device)
         optimizer = self.model.configure_optimizers()
         scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+
+        if self.dp_mechanism:
+            model, optimizer, train_dataloader = self.dp_mechanism(
+                module=self.model,
+                optimizer=optimizer,
+                data_loader=train_dataloader,
+            )
+            model.step = self.model.step
+            model.aggregate_metrics = self.model.aggregate_metrics
+            self.model = model
 
         if checkpoint:
             os.makedirs('checkpoints', exist_ok=True)
@@ -68,43 +79,41 @@ class Trainer:
             num_test_steps=len(test_dataloader)
         )
         
-        self.progress.start()
+        with self.progress:
 
-        num_epochs_without_improvement = 0
-        
-        for epoch in range(1, self.epochs + 1):
-            metrics = {'epoch': epoch}
+            num_epochs_without_improvement = 0
+            
+            for epoch in range(1, self.epochs + 1):
+                metrics = {'epoch': epoch}
 
-            # train loop
-            self.train_loop(train_dataloader, optimizer, scaler)
-            metrics.update(self.model.aggregate_metrics(stage='train'))
-                
-            if self.val_interval:
-                if epoch % self.val_interval == 0:
-                    self.validation_loop(val_dataloader, 'val')
-                    metrics.update(self.model.aggregate_metrics(stage='val'))
+                # train loop
+                self.train_loop(train_dataloader, optimizer, scaler)
+                metrics.update(self.model.aggregate_metrics(stage='train'))
+                    
+                if self.val_interval:
+                    if epoch % self.val_interval == 0:
+                        self.validation_loop(val_dataloader, 'val')
+                        metrics.update(self.model.aggregate_metrics(stage='val'))
 
-                    if test_dataloader:
-                        self.validation_loop(test_dataloader, 'test')
-                        metrics.update(**self.model.aggregate_metrics(stage='test'))
+                        if test_dataloader:
+                            self.validation_loop(test_dataloader, 'test')
+                            metrics.update(**self.model.aggregate_metrics(stage='test'))
 
-                    if self.performs_better(metrics):
-                        self.best_metrics = metrics
-                        num_epochs_without_improvement = 0
+                        if self.performs_better(metrics):
+                            self.best_metrics = metrics
+                            num_epochs_without_improvement = 0
 
-                        if checkpoint:
-                            torch.save(self.model.state_dict(), self.checkpoint_path)
-                    else:
-                        num_epochs_without_improvement += 1
-                        if num_epochs_without_improvement >= self.patience > 0:
-                            break
-            else:
-                self.best_metrics = metrics
+                            if checkpoint:
+                                torch.save(self.model.state_dict(), self.checkpoint_path)
+                        else:
+                            num_epochs_without_improvement += 1
+                            if num_epochs_without_improvement >= self.patience > 0:
+                                break
+                else:
+                    self.best_metrics = metrics
 
-            if self.logger: self.logger.log(metrics)
-            self.progress.update('epoch', metrics=metrics, advance=1)
-
-        self.progress.stop()
+                if self.logger: self.logger.log(metrics)
+                self.progress.update('epoch', metrics=metrics, advance=1)
         
         if self.logger: self.logger.log_summary(self.best_metrics)
         return self.best_metrics
@@ -112,7 +121,7 @@ class Trainer:
     def train_loop(self, dataloader, optimizer, scaler):
         self.progress.update('train', visible=len(dataloader) > 1)
         for batch in dataloader:
-            batch = batch.to(self.device)
+            batch = batch[0].to(self.device)  # [0] is due to TensorDataset
             self.train_step(batch, optimizer, scaler)
             self.progress.update('train', advance=1)
 
@@ -121,7 +130,7 @@ class Trainer:
     def validation_loop(self, dataloader, stage):
         self.progress.update(stage, visible=len(dataloader) > 1)
         for batch in dataloader:
-            batch = batch.to(self.device)
+            batch = batch[0].to(self.device)
             self.validation_step(batch, stage)
             self.progress.update(stage, advance=1)
 
