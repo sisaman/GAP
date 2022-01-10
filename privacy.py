@@ -213,7 +213,7 @@ class NoisySGD(NoisyMechanism):
         
         self.set_all_representation(mech)
 
-    def __call__(self, module, optimizer, data_loader):
+    def __call__(self, module, optimizer, data_loader, **kwargs):
         if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
             _, optimizer, data_loader = PrivacyEngine().make_private(
                 module=module,
@@ -221,6 +221,7 @@ class NoisySGD(NoisyMechanism):
                 data_loader=data_loader,
                 noise_multiplier=self.params['noise_scale'],
                 max_grad_norm=self.params['max_grad_norm'],
+                **kwargs
             )
 
         return module, optimizer, data_loader
@@ -246,13 +247,8 @@ class PMA(NoisyMechanism):
     def __call__(self, data, sensitivity):
         assert hasattr(data, 'adj_t')
 
-        if hasattr(data, 'x_list'):
-            x = data.x_list[0]
-        else:
-            x = data.x
-
-        x = F.normalize(x, p=2, dim=-1)
-        data.x_list = [x]
+        x = F.normalize(data.x, p=2, dim=-1)
+        x_list = [x]
 
         for _ in range(1, self.params['hops'] + 1):
             # aggregate
@@ -262,6 +258,7 @@ class PMA(NoisyMechanism):
             # normalize
             x = x = F.normalize(x, p=2, dim=-1)
 
-            data.x_list.append(x)
+            x_list.append(x)
 
+        data.x_stack = torch.stack(x_list, dim=-1)
         return data
