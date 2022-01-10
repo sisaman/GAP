@@ -214,16 +214,16 @@ class NoisySGD(NoisyMechanism):
         self.set_all_representation(mech)
 
     def __call__(self, module, optimizer, data_loader):
-        if self.params['noise_scale'] == 0.0 or self.params['epochs'] == 0:
-            return module, optimizer, data_loader
+        if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
+            _, optimizer, data_loader = PrivacyEngine().make_private(
+                module=module,
+                optimizer=optimizer,
+                data_loader=data_loader,
+                noise_multiplier=self.params['noise_scale'],
+                max_grad_norm=self.params['max_grad_norm'],
+            )
 
-        return PrivacyEngine().make_private(
-            module=module,
-            optimizer=optimizer,
-            data_loader=data_loader,
-            noise_multiplier=self.params['noise_scale'],
-            max_grad_norm=self.params['max_grad_norm'],
-        )
+        return module, optimizer, data_loader
 
 
 class PMA(NoisyMechanism):
