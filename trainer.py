@@ -76,20 +76,17 @@ class Trainer:
         else:
             raise Exception('No checkpoint found')
 
-    def fit(self, model, train_dataloader, val_dataloader, test_dataloader=[], checkpoint=False):
+    def fit(self, model, optimizer, train_dataloader, val_dataloader, test_dataloader=None, checkpoint=False):
         self.reset()
         self.model = model.to(self.device)
-        optimizer = self.model.configure_optimizers()
         scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
         if self.dp_mechanism:
-            model, optimizer, train_dataloader = self.dp_mechanism(
+            self.model, optimizer, train_dataloader = self.dp_mechanism(
                 module=self.model,
                 optimizer=optimizer,
                 data_loader=train_dataloader,
             )
-            model.step = self.model.step
-            self.model = model
 
         if checkpoint:
             os.makedirs('checkpoints', exist_ok=True)
@@ -99,11 +96,10 @@ class Trainer:
             num_epochs=self.epochs, 
             num_train_steps=len(train_dataloader), 
             num_val_steps=len(val_dataloader), 
-            num_test_steps=len(test_dataloader)
+            num_test_steps=len(test_dataloader) if test_dataloader else 0,
         )
         
         with self.progress:
-
             num_epochs_without_improvement = 0
             
             for epoch in range(1, self.epochs + 1):
@@ -146,7 +142,6 @@ class Trainer:
         self.progress.update('train', visible=len(dataloader) > 1)
 
         for batch in dataloader:
-            batch = batch[0].to(self.device)  # [0] is due to TensorDataset
             metrics = self.train_step(batch, optimizer, scaler)
             for item in metrics:
                 self.metrics[item].update(metrics[item], weight=len(batch))
@@ -159,7 +154,6 @@ class Trainer:
         self.progress.update(stage, visible=len(dataloader) > 1)
 
         for batch in dataloader:
-            batch = batch[0].to(self.device)
             metrics = self.validation_step(batch, stage)
             for item in metrics:
                 self.metrics[item].update(metrics[item], weight=len(batch))

@@ -70,13 +70,10 @@ class MultiStageClassifier(Module):
     }
 
     def __init__(self, num_stages, hidden_dim, output_dim, pre_layers, post_layers, 
-                 combination_type, activation, dropout, batchnorm, learning_rate, weight_decay, optimizer):
+                 combination_type, activation, dropout, batchnorm):
 
         super().__init__()
         self.combination_type = combination_type
-        self.learning_rate = learning_rate
-        self.weight_decay = weight_decay
-        self.optimizer_name = optimizer
 
         self.pre_mlps = ModuleList([
             MLP(
@@ -146,10 +143,6 @@ class MultiStageClassifier(Module):
 
         return loss, metrics
 
-    def configure_optimizers(self):
-        Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
-        return Optim(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
-
     def reset_parameters(self):
         if self.bn:
             self.bn.reset_parameters()
@@ -207,6 +200,9 @@ class GAP:
         self.max_degree = max_degree
         self.encoder_layers = encoder_layers
         self.device = 'cpu' if cpu else 'cuda'
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.optimizer_name = optimizer
         self.pre_epochs = pre_epochs
         self.epochs = epochs
         self.batch_size = batch_size
@@ -224,9 +220,6 @@ class GAP:
             activation=activation,
             dropout=dropout,
             batchnorm=batchnorm,
-            learning_rate=learning_rate,
-            weight_decay=weight_decay,
-            optimizer=optimizer,
         )
 
         self.classifier = MultiStageClassifier(
@@ -239,9 +232,6 @@ class GAP:
             activation=activation,
             dropout=dropout,
             batchnorm=batchnorm,
-            learning_rate=learning_rate,
-            weight_decay=weight_decay,
-            optimizer=optimizer,
         )
 
         self.reset_parameters()
@@ -320,7 +310,8 @@ class GAP:
         )
 
         trainer.fit(
-            model=self.encoder, 
+            model=self.encoder,
+            optimizer=self.configure_optimizers(self.encoder), 
             train_dataloader=self.data_loader('train'), 
             val_dataloader=self.data_loader('val'),
             test_dataloader=None,
@@ -351,6 +342,7 @@ class GAP:
 
         metrics = trainer.fit(
             model=self.classifier, 
+            optimizer=self.configure_optimizers(self.classifier),
             train_dataloader=self.data_loader('train'), 
             val_dataloader=self.data_loader('val'),
             test_dataloader=self.data_loader('test'),
@@ -369,3 +361,7 @@ class GAP:
         else:
             dataset = TensorDataset(x_stack, y)
             return DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+
+    def configure_optimizers(self, model):
+        Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
+        return Optim(model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
