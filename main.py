@@ -15,14 +15,14 @@ with console.status('importing modules...'):
 
 @timeit
 def run(args):
-    with console.status('loading dataset...'):
-        data_initial = Dataset.from_args(args).load(verbose=True)
-
-    num_classes = data_initial.y.max().item() + 1
     device = 'cpu' if args.cpu else 'cuda'
+
+    with console.status('loading dataset...'):
+        data_initial = Dataset.from_args(args).load(verbose=True).to(device)
 
     test_acc = []
     run_metrics = {}
+    num_classes = data_initial.y.max().item() + 1
     logger = Logger.from_args(args, enabled=args.debug, config=args)
 
     ### initiallize model ###
@@ -31,9 +31,6 @@ def run(args):
     ### run experiment ###
     for iteration in range(args.repeats):
         data = Data(**data_initial.to_dict())
-
-        with console.status(f'moving data to {device}...'):
-            data = data.to(device)
 
         model.reset_parameters()
         best_metrics = model.fit(data)
