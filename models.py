@@ -69,10 +69,14 @@ class MultiStageClassifier(Module):
         'cat', 'sum', 'max', 'mean', 'att'   ### TODO implement attention
     }
 
-    def __init__(self, num_stages, hidden_dim, output_dim, pre_layers, post_layers, combination_type, activation, dropout, batchnorm):
+    def __init__(self, num_stages, hidden_dim, output_dim, pre_layers, post_layers, 
+                 combination_type, activation, dropout, batchnorm, learning_rate, weight_decay, optimizer):
 
         super().__init__()
         self.combination_type = combination_type
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.optimizer_name = optimizer
 
         self.pre_mlps = ModuleList([
             MLP(
@@ -98,8 +102,9 @@ class MultiStageClassifier(Module):
             batchnorm=batchnorm,
         )
 
-    def forward(self, x_list):
-        h_list = [mlp(x) for x, mlp in zip(x_list, self.pre_mlps)]
+    def forward(self, x_stack):
+        x_stack = x_stack.permute(2, 0, 1) # (hop, batch, input_dim)
+        h_list = [mlp(x) for x, mlp in zip(x_stack, self.pre_mlps)]
         h = self.combine(h_list)
         h = F.normalize(h, p=2, dim=-1)
         h = self.bn(h) if self.bn else h
@@ -121,11 +126,29 @@ class MultiStageClassifier(Module):
             raise ValueError(f'Unknown combination type {self.combination_type}')
 
     @torch.no_grad()
-    def encode(self, x_list):
+    def encode(self, x_stack):
         self.eval()
-        h_list = [mlp(x) for x, mlp in zip(x_list, self.pre_mlps)]
+        x_stack = x_stack.permute(2, 0, 1) # (hop, batch, input_dim)
+        h_list = [mlp(x) for x, mlp in zip(x_stack, self.pre_mlps)]
         h_combined = self.combine(h_list)
         return h_combined
+
+    def step(self, batch, stage):
+        x_stack, y = batch
+        preds = self(x_stack)
+        acc = (preds.argmax(dim=1) == y).float().mean() * 100
+        metrics = {f'{stage}/acc': acc}
+
+        loss = None
+        if stage != 'test':
+            loss = F.nll_loss(input=preds, target=y)
+            metrics[f'{stage}/loss'] = loss.detach()
+
+        return loss, metrics
+
+    def configure_optimizers(self):
+        Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
+        return Optim(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
 
     def reset_parameters(self):
         if self.bn:
@@ -138,7 +161,7 @@ class MultiStageClassifier(Module):
 
 
 @support_args
-class GAP(Module):
+class GAP:
     supported_dp_levels = {'edge', 'node'}
     supported_perturbations = {'aggr', 'graph'}
 
@@ -183,9 +206,6 @@ class GAP(Module):
         self.hops = hops
         self.max_degree = max_degree
         self.encoder_layers = encoder_layers
-        self.weight_decay = weight_decay
-        self.learning_rate = learning_rate
-        self.optimizer_name = optimizer
         self.device = 'cpu' if cpu else 'cuda'
         self.pre_epochs = pre_epochs
         self.epochs = epochs
@@ -203,7 +223,10 @@ class GAP(Module):
             combination_type='cat',
             activation=activation,
             dropout=dropout,
-            batchnorm=batchnorm
+            batchnorm=batchnorm,
+            learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            optimizer=optimizer,
         )
 
         self.classifier = MultiStageClassifier(
@@ -215,7 +238,10 @@ class GAP(Module):
             combination_type=combine,
             activation=activation,
             dropout=dropout,
-            batchnorm=batchnorm
+            batchnorm=batchnorm,
+            learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            optimizer=optimizer,
         )
 
         self.reset_parameters()
@@ -223,11 +249,6 @@ class GAP(Module):
     def reset_parameters(self):
         self.encoder.reset_parameters()
         self.classifier.reset_parameters()
-
-    def configure_optimizers(self):
-        Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
-        parameters = self.encoder.parameters() if self._pre_train_flag else self.classifier.parameters()
-        return Optim(parameters, lr=self.learning_rate, weight_decay=self.weight_decay)
 
     def set_training_state(self, pre_train):
         self._pre_train_flag = pre_train
@@ -274,25 +295,22 @@ class GAP(Module):
     def fit(self, data):
         self.data = NeighborSampler(self.max_degree)(data)
 
-        ### initialize privacy mechanism ###
         self.init_privacy_mechanisms()
 
-        ### pretraining encoder module ###
         if self.encoder_layers > 0:
             logging.info('pretraining encoder module...')
             self.pretrain_encoder()
 
-        ### precompute aggregation module ###
         with console.status('precomputing aggregation module...'):
             self.precompute_aggregations()
 
-        ### training classification module ###
         logging.info('training classification module...')
         return self.train_classifier()
 
     def pretrain_encoder(self):
         self.set_training_state(pre_train=True)
-        
+        self.data.x_stack = torch.stack([self.data.x], dim=-1)
+
         trainer = Trainer(
             epochs=self.pre_epochs, 
             use_amp=self.use_amp, 
@@ -302,28 +320,23 @@ class GAP(Module):
         )
 
         trainer.fit(
-            model=self, 
-            train_dataloader=self.train_dataloader(), 
-            val_dataloader=self.val_dataloader(),
-            test_dataloader=self.test_dataloader(),
+            model=self.encoder, 
+            train_dataloader=self.data_loader('train'), 
+            val_dataloader=self.data_loader('val'),
+            test_dataloader=None,
             checkpoint=True
         )
 
-        self.encoder = trainer.load_best_model().encoder
+        self.encoder = trainer.load_best_model()
+        self.data.x = self.encoder.encode(self.data.x_stack)
 
     @torch.no_grad()
     def precompute_aggregations(self):
-        data = self.data
-
         if self.perturbation == 'graph':
-            data = self.graph_mechanism(data)
-
-        h = self.encoder.encode([data.x])
-        h = F.normalize(h, p=2, dim=-1)
-        data.x_list = [h]
+            self.data = self.graph_mechanism(self.data)
 
         sensitivity = 1 if self.dp_level == 'edge' else np.sqrt(self.max_degree)
-        self.data = self.pma_mechanism(data, sensitivity=sensitivity)
+        self.data = self.pma_mechanism(self.data, sensitivity=sensitivity)
 
     def train_classifier(self):
         self.set_training_state(pre_train=False)
@@ -337,46 +350,22 @@ class GAP(Module):
         )
 
         metrics = trainer.fit(
-            model=self, 
-            train_dataloader=self.train_dataloader(), 
-            val_dataloader=self.val_dataloader(),
-            test_dataloader=self.test_dataloader(),
+            model=self.classifier, 
+            train_dataloader=self.data_loader('train'), 
+            val_dataloader=self.data_loader('val'),
+            test_dataloader=self.data_loader('test'),
             checkpoint=False,
         )
 
         return metrics
 
-    def train_dataloader(self):
-        train_idx = self.data.train_mask.nonzero(as_tuple=False).view(-1)
-        return self.index_loader(train_idx)
+    def data_loader(self, stage):
+        mask = self.data[f'{stage}_mask']
+        x_stack = self.data.x_stack[mask]
+        y = self.data.y[mask]
 
-    def val_dataloader(self):
-        val_idx = self.data.val_mask.nonzero(as_tuple=False).view(-1)
-        return self.index_loader(val_idx)
-
-    def test_dataloader(self):
-        test_idx = self.data.test_mask.nonzero(as_tuple=False).view(-1)
-        return self.index_loader(test_idx)
-
-    def index_loader(self, idx):
-        if self.batch_size <= 0:
-            return TensorDataset(idx.view(1, -1))
+        if self.batch_size == 0:
+            return TensorDataset(x_stack.unsqueeze(0), y.unsqueeze(0))
         else:
-            return DataLoader(TensorDataset(idx), batch_size=self.batch_size, shuffle=True)
-
-    def step(self, batch, stage):
-        if self._pre_train_flag:
-            preds = self.encoder([self.data.x[batch]])
-        else:
-            preds = self.classifier([x[batch] for x in self.data.x_list])
-
-        target = self.data.y[batch]
-        acc = (preds.argmax(dim=1) == target).float().mean() * 100
-        metrics = {f'{stage}/acc': acc}
-
-        loss = None
-        if stage != 'test':
-            loss = F.nll_loss(input=preds, target=target)
-            metrics[f'{stage}/loss'] = loss.detach()
-
-        return loss, metrics
+            dataset = TensorDataset(x_stack, y)
+            return DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
