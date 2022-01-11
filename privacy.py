@@ -260,5 +260,5 @@ class PMA(NoisyMechanism):
 
             x_list.append(x)
 
-        data.x_stack = torch.stack(x_list, dim=-1)
+        data.x = torch.stack(x_list, dim=-1)
         return data

@@ -252,7 +252,7 @@ class GAP:
         elif self.dp_level == 'edge':
             mechanism_list = [self.pma_mechanism]
         elif self.dp_level == 'node':
-            dataset_size = len(self.train_dataloader().dataset)
+            dataset_size = len(self.data_loader('train').dataset)
 
             self.pretraining_noisy_sgd = NoisySGD(
                 noise_scale=self.noise_scale, 
@@ -299,7 +299,7 @@ class GAP:
 
     def pretrain_encoder(self):
         self.set_training_state(pre_train=True)
-        self.data.x_stack = torch.stack([self.data.x], dim=-1)
+        self.data.x = torch.stack([self.data.x], dim=-1)
 
         trainer = Trainer(
             epochs=self.pre_epochs, 
@@ -319,7 +319,7 @@ class GAP:
         )
 
         self.encoder = trainer.load_best_model()
-        self.data.x = self.encoder.encode(self.data.x_stack)
+        self.data.x = self.encoder.encode(self.data.x)
 
     @torch.no_grad()
     def precompute_aggregations(self):
@@ -353,13 +353,13 @@ class GAP:
 
     def data_loader(self, stage):
         mask = self.data[f'{stage}_mask']
-        x_stack = self.data.x_stack[mask]
+        x = self.data.x[mask]
         y = self.data.y[mask]
 
         if self.batch_size == 0:
-            return TensorDataset(x_stack.unsqueeze(0), y.unsqueeze(0))
+            return TensorDataset(x.unsqueeze(0), y.unsqueeze(0))
         else:
-            dataset = TensorDataset(x_stack, y)
+            dataset = TensorDataset(x, y)
             return DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
     def configure_optimizers(self, model):
