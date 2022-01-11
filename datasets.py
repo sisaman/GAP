@@ -6,18 +6,15 @@ from rich import box
 from console import console
 from rich.table import Table
 import torch
-import torch.nn.functional as F
-from torch_geometric.utils import remove_self_loops, subgraph
-from torch_geometric.datasets import FacebookPagePage, LastFMAsia, Reddit2
-from torch_geometric.transforms import RandomNodeSplit, Compose, BaseTransform, RemoveIsolatedNodes, ToSparseTensor
+from torch_geometric.utils import remove_self_loops, subgraph, from_scipy_sparse_matrix, add_remaining_self_loops
+from torch_geometric.datasets import Reddit
+from torch_geometric.transforms import Compose, BaseTransform, RemoveIsolatedNodes, ToSparseTensor, RandomNodeSplit
 from ogb.nodeproppred import PygNodePropPredDataset
 import pandas as pd
 from scipy.io import loadmat
 from torch_geometric.data import Data, InMemoryDataset, download_url
 from torch_geometric.loader import NeighborLoader
 from sklearn.preprocessing import LabelEncoder
-from sklearn.random_projection import GaussianRandomProjection
-from torch_geometric.utils import from_scipy_sparse_matrix
 from args import support_args
 
 
@@ -51,7 +48,7 @@ class NeighborSampler(BaseTransform):
         return data
 
 
-class FilterClass(BaseTransform):
+class FilterTopClass(BaseTransform):
     def __init__(self, top_k=None, include=None):
         assert top_k is None or top_k > 0
         assert include is None or len(include) > 0
@@ -78,6 +75,80 @@ class FilterClass(BaseTransform):
             data.train_mask = data.train_mask[idx]
             data.val_mask = data.val_mask[idx]
             data.test_mask = data.test_mask[idx]
+
+        return data
+
+
+class FilterClassCount(BaseTransform):
+    def __init__(self, min_count):
+        self.min_count = min_count
+
+    def __call__(self, data):
+        assert hasattr(data, 'y') and hasattr(data, 'train_mask')
+
+        y = torch.nn.functional.one_hot(data.y)
+        counts = y.sum(dim=0)
+        y = y[:, counts >= self.min_count]
+        mask = y.sum(dim=1).bool()        # nodes to keep
+        data.y = y.argmax(dim=1)
+        data.y[~mask] = -1                # set filtered nodes as unlabeled
+        data.train_mask = data.train_mask & mask
+        data.val_mask = data.val_mask & mask
+        data.test_mask = data.test_mask & mask
+
+        return data
+
+
+class RemoveSelfLoops(BaseTransform):
+    def __call__(self, data):
+        if hasattr(data, 'edge_index') and data.edge_index is not None:
+            data.edge_index, _ = remove_self_loops(data.edge_index)
+        if hasattr(data, 'adj_t'):
+            data.adj_t = data.adj_t.remove_diag()
+        return data
+
+
+class AddSelfLoops(BaseTransform):
+    def __call__(self, data):
+        if hasattr(data, 'edge_index') and data.edge_index is not None:
+            data.edge_index, _ = add_remaining_self_loops(data.edge_index, num_nodes=data.num_nodes)
+        if hasattr(data, 'adj_t'):
+            data.adj_t = data.adj_t.fill_diag(1)
+        return data
+
+
+class CustomRandomNodeSplit(BaseTransform):
+    def __init__(self, num_nodes_per_class=1000, num_val=0.05, num_test=0.15):
+        self.num_nodes_per_class = num_nodes_per_class
+        self.num_val = num_val if isinstance(num_val, int) else int(num_val * num_nodes_per_class)
+        self.num_test = num_test if isinstance(num_test, int) else int(num_test * num_nodes_per_class)
+
+    def __call__(self, data):
+        assert hasattr(data, 'y')
+
+        counts = data.y.unique(return_counts=True)[1]
+        labeled_mask = torch.zeros(data.num_nodes, dtype=bool)
+        data.val_mask = torch.zeros(data.num_nodes, dtype=bool)
+        data.test_mask = torch.zeros(data.num_nodes, dtype=bool)
+        data.train_mask = torch.zeros(data.num_nodes, dtype=bool)
+
+        for i,c in enumerate(counts):
+            if c >= self.num_nodes_per_class:
+                nodes = (data.y == i).nonzero().squeeze()
+                perm = torch.randperm(len(nodes))
+                val_nodes = nodes[perm[:self.num_val]]
+                test_nodes = nodes[perm[self.num_val:self.num_val+self.num_test]]
+                train_nodes = nodes[perm[self.num_val+self.num_test:self.num_nodes_per_class]]
+                labeled_nodes = nodes[perm[:self.num_nodes_per_class]]
+                
+                labeled_mask[labeled_nodes] = True
+                data.val_mask[val_nodes] = True
+                data.test_mask[test_nodes] = True
+                data.train_mask[train_nodes] = True
+
+        y = torch.nn.functional.one_hot(data.y)
+        data.y = y[:, counts >= self.num_nodes_per_class].argmax(dim=1)
+        data.y[~labeled_mask] = -1  # mark as unlabeled
 
         return data
 
@@ -161,13 +232,20 @@ class Facebook100(InMemoryDataset):
 class Dataset:
     supported_datasets = {
         # main datasets
-        'reddit': partial(Reddit2, transform=FilterClass(6)),
-        'facebook': partial(Facebook100, name='UIllinois20', target='year', transform=FilterClass(5)),
-        'products': partial(load_ogb, name='ogbn-products', transform=FilterClass(include=[7,  6,  3, 12,  2])),
-
+        'reddit': partial(Reddit, 
+            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassCount(min_count=10000)])
+        ),
+        'amazon': partial(load_ogb, name='ogbn-products', 
+            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassCount(min_count=100000)])
+        ),
+        'facebook': partial(Facebook100, name='UIllinois20', target='year', 
+            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassCount(min_count=1000)])
+        ),
+        
         # backup datasets
-        'fb-pages': FacebookPagePage,
-        'lastfm': partial(LastFMAsia, transform=FilterClass(10)),
+        # 'reddit2': partial(Reddit2, transform=FilterClass(6)),
+        # 'fb-pages': FacebookPagePage,
+        # 'lastfm': partial(LastFMAsia, transform=FilterClass(10)),
         # 'amz-comp': partial(Amazon, name='computers'),
         # 'amz-photo': partial(Amazon, name='photo'),
         # 'fb-penn': partial(Facebook100, name='UPenn7', target='status'),
@@ -193,7 +271,7 @@ class Dataset:
         # 'Twitter': partial(AttributedGraphDataset, name='Twitter'),
         # 'TWeibo': partial(AttributedGraphDataset, name='TWeibo'),
         # 'arxiv': partial(load_ogb, name='ogbn-arxiv', transform=ToUndirected()),
-        # 'deezer': DeezerEurope,
+        # 'deezer': partial(DeezerEurope, transform=RandomNodeSplit(num_val=0.05, num_test=0.1)),
         # 'twitch-de': partial(Twitch, name='DE'),
     }
 
@@ -202,40 +280,24 @@ class Dataset:
     def __init__(self,
                  dataset:    dict(help='name of the dataset', choices=supported_datasets) = 'facebook',
                  data_dir:   dict(help='directory to store the dataset') = './datasets',
-                 normalize:  dict(help='if set to true, row-normalizes features') = False,
-                 features:   dict(help='features to use', choices=supported_features) = 'original',
                  ):
 
         self.name = dataset
         self.data_dir = data_dir
-        self.normalize = normalize
-        self.features = features
 
     def load(self, verbose=False):
         data = self.supported_datasets[self.name](root=os.path.join(self.data_dir, self.name))[0]
-        data.edge_index, _ = remove_self_loops(data.edge_index)
-
-        transforms = [RemoveIsolatedNodes(), RandomNodeSplit(split='train_rest'), ToSparseTensor()]
-        data = Compose(transforms)(data)
-
-        if self.features.startswith('randproj'):
-            dim = int(self.features[8:])
-            transformer = GaussianRandomProjection(n_components=dim)
-            x = transformer.fit_transform(data.x)
-            data.x = torch.tensor(x, dtype=torch.float)
-
-        if self.normalize:
-            data.x = F.normalize(data.x, p=2., dim=-1)
+        data = Compose([RemoveSelfLoops(), RemoveIsolatedNodes(), ToSparseTensor()])(data)
 
         if verbose:
             self.print_stats(data)
 
-        data.adj_t = data.adj_t.fill_diag(1)
+        data = AddSelfLoops()(data)
         return data
 
     def print_stats(self, data):
         nodes_degree = data.adj_t.sum(dim=1)
-        baseline = (data.y.unique(return_counts=True)[1].max().item() * 100 / data.num_nodes)
+        baseline = (data.y[data.test_mask].unique(return_counts=True)[1].max().item() * 100 / data.test_mask.sum().item())
         train_ratio = data.train_mask.sum().item() / data.num_nodes * 100
         val_ratio = data.val_mask.sum().item() / data.num_nodes * 100
         test_ratio = data.test_mask.sum().item() / data.num_nodes * 100
