@@ -48,7 +48,7 @@ class NeighborSampler(BaseTransform):
         return data
 
 
-class FilterClassCount(BaseTransform):
+class FilterClassByCount(BaseTransform):
     def __init__(self, min_count):
         self.min_count = min_count
 
@@ -202,13 +202,13 @@ class Dataset:
     supported_datasets = {
         # main datasets
         'reddit': partial(Reddit, 
-            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassCount(min_count=10000)])
+            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassByCount(min_count=10000)])
         ),
         'amazon': partial(load_ogb, name='ogbn-products', 
-            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassCount(min_count=100000)])
+            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassByCount(min_count=100000)])
         ),
         'facebook': partial(Facebook100, name='UIllinois20', target='year', 
-            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassCount(min_count=1000)])
+            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassByCount(min_count=1000)])
         ),
         
         # backup datasets
