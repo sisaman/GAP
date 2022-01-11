@@ -164,14 +164,14 @@ class GAP:
                  perturbation:  dict(help='perturbation method', option='-p', choices=supported_perturbations) = 'aggr',
                  epsilon:       dict(help='DP epsilon parameter', option='-e') = np.inf,
                  delta:         dict(help='DP delta parameter', option='-d') = 1e-6,
-                 hops:          dict(help='number of hops', option='-k') = 1,
+                 hops:          dict(help='number of hops', option='-k') = 2,
                  max_degree:    dict(help='max degree per each node') = 0,
                  hidden_dim:    dict(help='dimension of the hidden layers') = 16,
                  encoder_layers:dict(help='number of encoder MLP layers') = 2,
                  pre_layers:    dict(help='number of pre-combination MLP layers') = 1,
                  post_layers:   dict(help='number of post-combination MLP layers') = 1,
                  combine:       dict(help='combination type of transformed hops', choices=MultiStageClassifier.supported_combinations) = 'cat',
-                 activation:    dict(help='type of activation function', choices=supported_activations) = 'relu',
+                 activation:    dict(help='type of activation function', choices=supported_activations) = 'selu',
                  dropout:       dict(help='dropout rate (between zero and one)') = 0.0,
                  batchnorm:     dict(help='if True, then model uses batch normalization') = True,
                  optimizer:     dict(help='optimization algorithm', choices=['sgd', 'adam']) = 'adam',
@@ -321,7 +321,6 @@ class GAP:
         self.encoder = trainer.load_best_model()
         self.data.x = self.encoder.encode(self.data.x)
 
-    @torch.no_grad()
     def precompute_aggregations(self):
         if self.perturbation == 'graph':
             self.data = self.graph_mechanism(self.data)
