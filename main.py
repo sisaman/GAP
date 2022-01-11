@@ -18,7 +18,10 @@ def run(args):
     device = 'cpu' if args.cpu else 'cuda'
 
     with console.status('loading dataset...'):
-        data_initial = Dataset.from_args(args).load(verbose=True).to(device)
+        data_initial = Dataset.from_args(args).load(verbose=True)
+
+    with console.status(f'moving data to {device}...'):
+        data_initial = data_initial.to(device)
 
     test_acc = []
     run_metrics = {}
