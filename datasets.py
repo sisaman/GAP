@@ -48,37 +48,6 @@ class NeighborSampler(BaseTransform):
         return data
 
 
-class FilterTopClass(BaseTransform):
-    def __init__(self, top_k=None, include=None):
-        assert top_k is None or top_k > 0
-        assert include is None or len(include) > 0
-        self.top_k = top_k
-        self.include = include
-
-    def __call__(self, data):
-        num_classes = data.y.max() + 1
-        include = list(range(num_classes)) if self.include is None else self.include
-        top_k = len(include) if self.top_k is None else self.top_k
-
-        y = torch.nn.functional.one_hot(data.y)
-        y = y[:, include]
-        c = y.sum(dim=0).sort(descending=True)
-        y = y[:, c.indices[:top_k]]
-        idx = y.sum(dim=1).bool()
-
-        data.x = data.x[idx]
-        data.y = y[idx].argmax(dim=1)
-        # data.num_nodes = data.y.size(0)
-        data.edge_index, data.edge_attr = subgraph(idx, data.edge_index, data.edge_attr, relabel_nodes=True)
-
-        if 'train_mask' in data:
-            data.train_mask = data.train_mask[idx]
-            data.val_mask = data.val_mask[idx]
-            data.test_mask = data.test_mask[idx]
-
-        return data
-
-
 class FilterClassCount(BaseTransform):
     def __init__(self, min_count):
         self.min_count = min_count
