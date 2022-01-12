@@ -57,20 +57,28 @@ def run(args):
 def main():
     init_parser = ArgumentParser(add_help=False, conflict_handler='resolve')
 
-    # dataset args
-    group_dataset = init_parser.add_argument_group('dataset arguments')
-    Dataset.add_args(group_dataset)
+    command_subparser = init_parser.add_subparsers(dest='command', required=True, title='model architecture')
+    command_parser = {
+        'gap': command_subparser.add_parser('gap', help='GAP model'),
+        'sage': command_subparser.add_parser('sage', help='GraphSAGE model')
+    }
 
-    # model args
-    group_model = init_parser.add_argument_group('model arguments')
-    GAP.add_args(group_model)
+    for parser_name, parser in command_parser.items():
+        # dataset args
+        group_dataset = parser.add_argument_group('dataset arguments')
+        Dataset.add_args(group_dataset)
 
-    # experiment args
-    group_expr = init_parser.add_argument_group('experiment arguments')
-    group_expr.add_argument('-n', '--name', type=str, default=None, help='experiment name')
-    group_expr.add_argument('-s', '--seed', type=int, default=12345, help='initial random seed')
-    group_expr.add_argument('-r', '--repeats', type=int, default=1, help="number of times the experiment is repeated")
-    Logger.add_args(group_expr)
+        # model args
+        group_model = parser.add_argument_group('model arguments')
+        if parser_name == 'gap':
+            GAP.add_args(group_model)
+
+        # experiment args
+        group_expr = parser.add_argument_group('experiment arguments')
+        group_expr.add_argument('-n', '--name', type=str, default=None, help='experiment name')
+        group_expr.add_argument('-s', '--seed', type=int, default=12345, help='initial random seed')
+        group_expr.add_argument('-r', '--repeats', type=int, default=1, help="number of times the experiment is repeated")
+        Logger.add_args(group_expr)
 
     parser = ArgumentParser(parents=[init_parser], formatter_class=ArgumentDefaultsHelpFormatter)
     args = parser.parse_args()
