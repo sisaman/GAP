@@ -20,9 +20,6 @@ def run(args):
     with console.status('loading dataset...'):
         data_initial = Dataset.from_args(args).load(verbose=True)
 
-    with console.status(f'moving data to {device}...'):
-        data_initial = data_initial.to(device)
-
     test_acc = []
     run_metrics = {}
     num_classes = data_initial.y.max().item() + 1
@@ -33,7 +30,7 @@ def run(args):
 
     ### run experiment ###
     for iteration in range(args.repeats):
-        data = Data(**data_initial.to_dict())
+        data = Data(**data_initial.to_dict())#.to(device)
 
         model.reset_parameters()
         best_metrics = model.fit(data)
