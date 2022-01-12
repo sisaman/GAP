@@ -139,8 +139,11 @@ class GAP:
 
         with console.status('calibrating noise to privacy budget'):
             if self.delta == 'auto':
-                data_size = self.data.num_edges if self.dp_level == 'edge' else self.data.num_nodes
-                self.delta = 1. / (10 ** len(str(data_size)))
+                if np.isinf(self.epsilon):
+                    self.delta = 0.0
+                else:
+                    data_size = self.data.num_edges if self.dp_level == 'edge' else self.data.num_nodes
+                    self.delta = 1. / (10 ** len(str(data_size)))
                 logging.info('delta = %e', self.delta)
             noise_scale = composed_mech.calibrate(eps=self.epsilon, delta=self.delta)
             logging.info(f'noise scale: {noise_scale:.4f}\n')
