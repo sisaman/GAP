@@ -149,10 +149,11 @@ class GAP:
             logging.info(f'noise scale: {noise_scale:.4f}\n')
 
     def fit(self, data):
+        self.data = data
         self.init_privacy_mechanisms()
         
         with console.status(f'moving data to {self.device}'):
-            self.data = data.to(self.device)
+            self.data.to(self.device)
 
         logging.info('pretraining encoder module...')
         self.pretrain_encoder()
