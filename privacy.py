@@ -30,7 +30,7 @@ class GaussianMechanism(mechanisms.ExactGaussianMechanism):
         super().__init__(sigma=noise_scale)
 
     def perturb(self, data, sensitivity):
-        std = self.params['sigma'] * sensitivity
+        std = self.noise_scale * sensitivity
         return torch.normal(mean=data, std=std) if std else data
 
     def __call__(self, data, sensitivity):
@@ -43,7 +43,7 @@ class LaplaceMechanism(mechanisms.LaplaceMechanism):
         super().__init__(b=noise_scale)
 
     def perturb(self, data, sensitivity):
-        scale = self.params['b'] * sensitivity
+        scale = self.noise_scale * sensitivity
         return torch.distributions.Laplace(loc=data, scale=scale).sample() if scale else data
 
     def __call__(self, data, sensitivity):
