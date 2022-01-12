@@ -57,7 +57,7 @@ def run(args):
 def main():
     init_parser = ArgumentParser(add_help=False, conflict_handler='resolve')
 
-    command_subparser = init_parser.add_subparsers(dest='command', required=True, title='model architecture')
+    command_subparser = init_parser.add_subparsers(dest='model', required=True, title='model architecture')
     command_parser = {
         'gap': command_subparser.add_parser('gap', help='GAP model'),
         'sage': command_subparser.add_parser('sage', help='GraphSAGE model')
