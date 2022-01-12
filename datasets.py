@@ -6,7 +6,7 @@ from rich import box
 from console import console
 from rich.table import Table
 import torch
-from torch_geometric.utils import remove_self_loops, subgraph, from_scipy_sparse_matrix, add_remaining_self_loops
+from torch_geometric.utils import remove_self_loops, subgraph, from_scipy_sparse_matrix
 from torch_geometric.datasets import Reddit
 from torch_geometric.transforms import Compose, BaseTransform, RemoveIsolatedNodes, ToSparseTensor, RandomNodeSplit
 from ogb.nodeproppred import PygNodePropPredDataset
@@ -84,51 +84,6 @@ class RemoveSelfLoops(BaseTransform):
             data.edge_index, _ = remove_self_loops(data.edge_index)
         if hasattr(data, 'adj_t'):
             data.adj_t = data.adj_t.remove_diag()
-        return data
-
-
-class AddSelfLoops(BaseTransform):
-    def __call__(self, data):
-        if hasattr(data, 'edge_index') and data.edge_index is not None:
-            data.edge_index, _ = add_remaining_self_loops(data.edge_index, num_nodes=data.num_nodes)
-        if hasattr(data, 'adj_t'):
-            data.adj_t = data.adj_t.fill_diag(1)
-        return data
-
-
-class CustomRandomNodeSplit(BaseTransform):
-    def __init__(self, num_nodes_per_class=1000, num_val=0.05, num_test=0.15):
-        self.num_nodes_per_class = num_nodes_per_class
-        self.num_val = num_val if isinstance(num_val, int) else int(num_val * num_nodes_per_class)
-        self.num_test = num_test if isinstance(num_test, int) else int(num_test * num_nodes_per_class)
-
-    def __call__(self, data):
-        assert hasattr(data, 'y')
-
-        counts = data.y.unique(return_counts=True)[1]
-        labeled_mask = torch.zeros(data.num_nodes, dtype=bool)
-        data.val_mask = torch.zeros(data.num_nodes, dtype=bool)
-        data.test_mask = torch.zeros(data.num_nodes, dtype=bool)
-        data.train_mask = torch.zeros(data.num_nodes, dtype=bool)
-
-        for i,c in enumerate(counts):
-            if c >= self.num_nodes_per_class:
-                nodes = (data.y == i).nonzero().squeeze()
-                perm = torch.randperm(len(nodes))
-                val_nodes = nodes[perm[:self.num_val]]
-                test_nodes = nodes[perm[self.num_val:self.num_val+self.num_test]]
-                train_nodes = nodes[perm[self.num_val+self.num_test:self.num_nodes_per_class]]
-                labeled_nodes = nodes[perm[:self.num_nodes_per_class]]
-                
-                labeled_mask[labeled_nodes] = True
-                data.val_mask[val_nodes] = True
-                data.test_mask[test_nodes] = True
-                data.train_mask[train_nodes] = True
-
-        y = torch.nn.functional.one_hot(data.y)
-        data.y = y[:, counts >= self.num_nodes_per_class].argmax(dim=1)
-        data.y[~labeled_mask] = -1  # mark as unlabeled
-
         return data
 
 
@@ -220,38 +175,6 @@ class Dataset:
         'facebook': partial(Facebook100, name='UIllinois20', target='year', 
             transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassByCount(min_count=1000, remove_unlabeled=True)])
         ),
-        
-        # backup datasets
-        # 'reddit2': partial(Reddit2, transform=FilterClass(6)),
-        # 'fb-pages': FacebookPagePage,
-        # 'lastfm': partial(LastFMAsia, transform=FilterClass(10)),
-        # 'amz-comp': partial(Amazon, name='computers'),
-        # 'amz-photo': partial(Amazon, name='photo'),
-        # 'fb-penn': partial(Facebook100, name='UPenn7', target='status'),
-        # 'fb-texas': partial(Facebook100, name='Texas84', target='gender'),
-
-        # other datasets
-        # 'co-ph': partial(Coauthor, name='physics'),
-        # 'co-cs': partial(Coauthor, name='cs'),
-        # 'wiki': WikiCS,
-        # 'fb-indiana': partial(Facebook100, name='Indiana69', target='major', transform=FilterClass(10)),
-        # 'fb-harvard': partial(Facebook100, name='Harvard1', target='housing', transform=FilterClass(12)),
-        # 'pubmed': partial(CitationFull, name='pubmed'),
-        # 'cora': partial(CitationFull, name='cora'),
-        # 'citeseer': partial(CitationFull, name='citeseer'),
-        # 'github': GitHub,
-        # 'flickr': Flickr,
-        # 'pattern': partial(load_gnn_benchmark, name='PATTERN'),
-        # 'cluster': partial(load_gnn_benchmark, name='CLUSTER'),
-        # 'imdb': load_imdb,
-        # 'BlogCatalog': partial(AttributedGraphDataset, name='BlogCatalog'),
-        # 'Flickr': partial(AttributedGraphDataset, name='Flickr'),
-        # 'Facebook': partial(AttributedGraphDataset, name='Facebook'),
-        # 'Twitter': partial(AttributedGraphDataset, name='Twitter'),
-        # 'TWeibo': partial(AttributedGraphDataset, name='TWeibo'),
-        # 'arxiv': partial(load_ogb, name='ogbn-arxiv', transform=ToUndirected()),
-        # 'deezer': partial(DeezerEurope, transform=RandomNodeSplit(num_val=0.05, num_test=0.1)),
-        # 'twitch-de': partial(Twitch, name='DE'),
     }
 
     supported_features = {'original', 'randproj16', 'randproj32', 'randproj64'}
@@ -271,7 +194,6 @@ class Dataset:
         if verbose:
             self.print_stats(data)
 
-        data = AddSelfLoops()(data)
         return data
 
     def print_stats(self, data):
