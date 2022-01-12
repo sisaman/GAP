@@ -4,7 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 import autodp.mechanism_zoo as mechanisms
 from autodp.transformer_zoo import ComposeGaussian, Composition, AmplificationBySampling
-from torch_geometric.utils import remove_self_loops, add_self_loops, contains_self_loops
+from torch_geometric.utils import remove_self_loops, add_self_loops, contains_self_loops, coalesce
 from scipy.optimize import minimize_scalar
 from torch_sparse import SparseTensor
 
@@ -111,7 +111,7 @@ class TopMFilter(NoisyMechanism):
             mech = Composition()([self.mech_edges, self.mech_count], [1,1])
         
         self.set_all_representation(mech)
- 
+
     def __call__(self, data):
         if self.params['noise_scale'] == 0.0:
             return data
@@ -140,32 +140,24 @@ class TopMFilter(NoisyMechanism):
 
         loc = torch.ones_like(edge_index[0]).float()
         sample = self.mech_edges.perturb(loc, sensitivity=1)
-        edges_to_be_removed = edge_index[:, sample < theta]
+        edges_to_be_kept = edge_index[:, sample > theta]
 
         # we add self loops to the graph to exclude them from perturbation
-        edge_index_with_self_loops, _ = add_self_loops(edge_index, num_nodes=n)
-        # adjmat will have m+n entries after adding self loops
-        adjmat = self.to_sparse_adjacency(edge_index_with_self_loops, num_nodes=n)
+        # so we will have extra n edges
+        edges_with_self_loops, _ = add_self_loops(edges_to_be_kept, num_nodes=n)
 
+        # we aim to have m_pert + n edges, so we keep adding edges until we have that many.
         while True:
-            adjmat = adjmat.coalesce()
-            nnz = adjmat.values().size(0)
-
-            # we want the adjacency matrix to have (m_pert + n + num_edges_to_be_removed) non-zero entries,
-            #   so we keep adding edges until we have that many.
-            #   we later remove (n + num_edges_to_be_removed) edges so the final graph has exactly m_pert edges
-            num_remaining_edges = m_pert + n + edges_to_be_removed.size(1) - nnz
+            num_remaining_edges = m_pert + n - edges_with_self_loops.size(1)
 
             if num_remaining_edges <= 0:
                 break
 
-            edges_to_be_added = torch.randint(n, size=(2, num_remaining_edges), device=adjmat.device)
-            adjmat = adjmat + self.to_sparse_adjacency(edges_to_be_added, num_nodes=n)
+            edges_to_be_added = torch.randint(n, size=(2, num_remaining_edges), device=edge_index.device)
+            edges_with_self_loops = torch.cat([edges_with_self_loops, edges_to_be_added], dim=1)
+            edges_with_self_loops = coalesce(edges_with_self_loops, num_nodes=n, reduce='max')
 
-        # remove edges to be removed: the graph will have m_pert + n edges
-        adjmat = (adjmat.bool().to(torch.int8) - self.to_sparse_adjacency(edges_to_be_removed, num_nodes=n)).coalesce()
-        edge_index, values = adjmat.indices(), adjmat.values()
-        edge_index = edge_index[:, values > 0].contiguous()
+        edge_index = edges_with_self_loops
         # if the input graph did not initially have self loops, we need to remove them
         if not has_self_loops: 
             edge_index, _ = remove_self_loops(edge_index)
