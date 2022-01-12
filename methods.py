@@ -43,8 +43,6 @@ class GAP:
                  use_amp:       dict(help='use automatic mixed precision training') = False,
                  ):
 
-        super().__init__()
-
         assert dp_level == 'edge' or perturbation == 'aggr'
         assert dp_level == 'edge' or max_degree > 0 
         assert dp_level == 'edge' or batch_size > 0
