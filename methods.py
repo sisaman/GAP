@@ -20,7 +20,7 @@ class GAP:
                  num_classes,
                  dp_level:      dict(help='level of privacy protection', choices=supported_dp_levels) = 'edge',
                  epsilon:       dict(help='DP epsilon parameter', option='-e') = np.inf,
-                 delta:         dict(help='DP delta parameter', option='-d') = 1e-6,
+                 delta:         dict(help='DP delta parameter; if "auto", sets a proper value based on data size', option='-d') = 'auto',
                  perturbation:  dict(help='perturbation method', option='-p', choices=supported_perturbations) = 'aggr',
                  hops:          dict(help='number of hops', option='-k') = 2,
                  max_degree:    dict(help='max degree per each node') = 0,
@@ -138,6 +138,10 @@ class GAP:
         )
 
         with console.status('calibrating noise to privacy budget...'):
+            if self.delta == 'auto':
+                data_size = self.data.num_edges if self.dp_level == 'edge' else self.data.num_nodes
+                self.delta = 1. / (10 ** len(str(data_size)))
+                logging.info('delta = %e', self.delta)
             noise_scale = composed_mech.calibrate(eps=self.epsilon, delta=self.delta)
             logging.info(f'noise scale: {noise_scale:.4f}\n')
 
