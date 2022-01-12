@@ -1,10 +1,6 @@
 import random
-import time
-import functools
-import logging
 import numpy as np
 import torch
-import colorama
 from itertools import tee
 
 
@@ -43,9 +39,3 @@ def confidence_interval(data, func=np.mean, size=1000, ci=95, seed=12345):
     bounds = np.nanpercentile(bs_replicates, p)
     return (bounds[1] - bounds[0]) / 2
 
-
-def colored_text(msg, color, style='normal'):
-    color = colorama.Fore.__dict__[color.upper()]
-    style = colorama.Style.__dict__[style.upper()]
-    text = style + color + msg + colorama.Style.RESET_ALL
-    return text
