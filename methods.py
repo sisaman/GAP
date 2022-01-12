@@ -146,17 +146,16 @@ class GAP:
             logging.info(f'noise scale: {noise_scale:.4f}\n')
 
     def fit(self, data):
-        self.data = NeighborSampler(self.max_degree)(data)
-        # self.data.to(self.device, 'adj_t')
+        with console.status(f'moving data to {self.device}'):
+            self.data = data.to(self.device)
+
+        
         self.init_privacy_mechanisms()
         
         if self.perturbation == 'graph':
             self.pma_mechanism.update(noise_scale=0)
             with console.status('applying adjacency matrix perturbations'):
                 self.data = self.graph_mechanism(self.data)
-
-        with console.status(f'moving data to {self.device}'):
-            self.data.to(self.device)
 
         logging.info('pretraining encoder module...')
         self.pretrain_encoder()
@@ -193,6 +192,9 @@ class GAP:
             self.data.x = self.encoder.encode(self.data.x)
 
     def precompute_aggregations(self):
+        if self.dp_level == 'node':
+            self.data = NeighborSampler(self.max_degree)(self.data)
+
         sensitivity = 1 if self.dp_level == 'edge' else np.sqrt(self.max_degree)
         self.data = self.pma_mechanism(self.data, sensitivity=sensitivity)
 
