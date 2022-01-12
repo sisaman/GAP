@@ -45,6 +45,7 @@ class GAP:
 
         super().__init__()
 
+        assert dp_level == 'edge' or perturbation == 'aggr'
         assert dp_level == 'edge' or max_degree > 0 
         assert dp_level == 'edge' or batch_size > 0
         assert encoder_layers == 0 or pre_epochs > 0
@@ -145,7 +146,7 @@ class GAP:
         self.data.to(self.device, 'adj_t')
         self.init_privacy_mechanisms()
         
-        if self.adj_pert:
+        if self.perturbation == 'graph':
             self.pma_mechanism.update(noise_scale=0)
             with console.status('applying adjacency matrix perturbations...'):
                 self.data = self.graph_mechanism(self.data)
