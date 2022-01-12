@@ -2,10 +2,11 @@ import os
 import rich
 from rich.console import Console, NewLine
 from rich.logging import RichHandler
-from rich.padding import Padding
 from rich.scope import render_scope
 from rich.segment import Segment
+from rich.spinner import Spinner
 from rich.styled import Styled
+from rich.table import Table
 from rich.traceback import install
 import warnings
 import logging
@@ -96,4 +97,46 @@ def log(
         for line in Segment.split_and_crop_lines(new_segments, console.width, pad=False):
             buffer_extend(line)
 
+with console.status(''): pass
+class LogStatus(rich.status.Status):
+    def __init__(self,
+        status,
+        console,
+        level=logging.INFO,
+        speed: float = 1.0,
+        refresh_per_second: float = 12.5,
+    ):
+        super().__init__(status, 
+            console=console, 
+            spinner='simpleDots', 
+            speed=speed, 
+            refresh_per_second=refresh_per_second
+        )
+        
+        self.status = status
+        self.level = level
+        spinner = Spinner('simpleDots', style='status.spinner', speed=speed)
+        record = logging.LogRecord(name=None, level=level, pathname=None, lineno=None, msg=None, args=None, exc_info=None)
+        handler = RichHandler(console=console)
+        table = Table.grid()
+        table.add_row(self.status, spinner)
+        
+        self._spinner = rich.logging.LogRender(show_level=True, time_format='[%X]')(
+            console=console, 
+            level=handler.get_level_text(record),
+            renderables=[table]
+        )
+        self._live = rich.live.Live(
+            self.renderable,
+            console=console,
+            refresh_per_second=refresh_per_second,
+            transient=True,
+        )
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
+        self.console.log(self.status+'...done', level=self.level)
+
+
 console.log = log
+console.status = lambda status, level=logging.INFO: LogStatus(status, console, level)

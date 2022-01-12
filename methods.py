@@ -18,7 +18,7 @@ class GAP:
 
     def __init__(self,
                  num_classes,
-                 dp_level:      dict(help='level of privacy protection', choices=supported_dp_levels) = 'edge',
+                 dp_level:      dict(help='level of privacy protection', option='-l', choices=supported_dp_levels) = 'edge',
                  epsilon:       dict(help='DP epsilon parameter', option='-e') = np.inf,
                  delta:         dict(help='DP delta parameter; if "auto", sets a proper value based on data size', option='-d') = 'auto',
                  perturbation:  dict(help='perturbation method', option='-p', choices=supported_perturbations) = 'aggr',
@@ -137,7 +137,7 @@ class GAP:
             coeff_list=[1]*len(mechanism_list)
         )
 
-        with console.status('calibrating noise to privacy budget...'):
+        with console.status('calibrating noise to privacy budget'):
             if self.delta == 'auto':
                 data_size = self.data.num_edges if self.dp_level == 'edge' else self.data.num_nodes
                 self.delta = 1. / (10 ** len(str(data_size)))
@@ -147,22 +147,22 @@ class GAP:
 
     def fit(self, data):
         self.data = NeighborSampler(self.max_degree)(data)
-        self.data.to(self.device, 'adj_t')
+        # self.data.to(self.device, 'adj_t')
         self.init_privacy_mechanisms()
         
         if self.perturbation == 'graph':
             self.pma_mechanism.update(noise_scale=0)
-            with console.status('applying adjacency matrix perturbations...'):
+            with console.status('applying adjacency matrix perturbations'):
                 self.data = self.graph_mechanism(self.data)
 
-        with console.status(f'moving data to {self.device}...'):
+        with console.status(f'moving data to {self.device}'):
             self.data.to(self.device)
 
         logging.info('pretraining encoder module...')
         self.pretrain_encoder()
 
-        logging.info('precomputing aggregation module...')
-        self.precompute_aggregations()
+        with console.status('precomputing aggregation module'):
+            self.precompute_aggregations()
 
         logging.info('training classification module...')
         return self.train_classifier()

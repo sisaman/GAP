@@ -1,6 +1,6 @@
 import time
 from console import console
-with console.status('importing modules...'):
+with console.status('importing modules'):
     import logging
     import sys
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
@@ -10,13 +10,12 @@ with console.status('importing modules...'):
     from datasets import Dataset
     from loggers import Logger
     from methods import GAP
-    from utils import timeit, seed_everything, confidence_interval
+    from utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
 
 
-@timeit
 def run(args):
-    with console.status('loading dataset...'):
+    with console.status('loading dataset'):
         data_initial = Dataset.from_args(args).load(verbose=True)
 
     test_acc = []
@@ -97,7 +96,7 @@ def main():
             logging.info(f'Max GPU memory used = {gpu_mem:.2f} GB\n')
     except KeyboardInterrupt:
         print('\n')
-        logging.warn('Graceful Shutdown...')
+        logging.warn('Graceful Shutdown')
 
 
 if __name__ == '__main__':
