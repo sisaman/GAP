@@ -1,3 +1,4 @@
+import time
 from console import console
 with console.status('importing modules...'):
     import logging
@@ -15,8 +16,6 @@ with console.status('importing modules...'):
 
 @timeit
 def run(args):
-    device = 'cpu' if args.cpu else 'cuda'
-
     with console.status('loading dataset...'):
         data_initial = Dataset.from_args(args).load(verbose=True)
 
@@ -30,7 +29,7 @@ def run(args):
 
     ### run experiment ###
     for iteration in range(args.repeats):
-        data = Data(**data_initial.to_dict())#.to(device)
+        data = Data(**data_initial.to_dict())
 
         model.reset_parameters()
         best_metrics = model.fit(data)
@@ -84,11 +83,15 @@ def main():
         seed_everything(args.seed)
 
     if not args.cpu and not torch.cuda.is_available():
-        logging.warn('CUDA is not available, running on CPU') 
+        logging.warn('CUDA is not available, proceeding with CPU') 
         args.cpu = True
 
     try:
+        start = time.time()
         run(args)
+        end = time.time()
+        logging.info(f'Total running time: {(end - start):.2f} seconds.')
+        
         if not args.cpu:    
             gpu_mem = torch.cuda.max_memory_allocated() / 1024 ** 3
             logging.info(f'Max GPU memory used = {gpu_mem:.2f} GB\n')

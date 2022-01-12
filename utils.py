@@ -44,18 +44,6 @@ def confidence_interval(data, func=np.mean, size=1000, ci=95, seed=12345):
     return (bounds[1] - bounds[0]) / 2
 
 
-def timeit(func):
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        start = time.time()
-        out = func(*args, **kwargs)
-        end = time.time()
-        logging.info(f'Total time spent in {str(func.__name__)}: {(end - start):.2f} seconds.')
-        return out
-
-    return wrapper
-
-
 def colored_text(msg, color, style='normal'):
     color = colorama.Fore.__dict__[color.upper()]
     style = colorama.Style.__dict__[style.upper()]
