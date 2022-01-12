@@ -8,7 +8,7 @@ with console.status('importing modules...'):
     from args import print_args
     from datasets import Dataset
     from loggers import Logger
-    from models import GAP
+    from methods import GAP
     from utils import timeit, seed_everything, confidence_interval
     from torch_geometric.data import Data
 
