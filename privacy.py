@@ -163,7 +163,7 @@ class TopMFilter(NoisyMechanism):
             adjmat = adjmat + self.to_sparse_adjacency(edges_to_be_added, num_nodes=n)
 
         # remove edges to be removed: the graph will have m_pert + n edges
-        adjmat = (adjmat.bool().int() - self.to_sparse_adjacency(edges_to_be_removed, num_nodes=n)).coalesce()
+        adjmat = (adjmat.bool().to(torch.int8) - self.to_sparse_adjacency(edges_to_be_removed, num_nodes=n)).coalesce()
         edge_index, values = adjmat.indices(), adjmat.values()
         edge_index = edge_index[:, values > 0].contiguous()
         # if the input graph did not initially have self loops, we need to remove them
@@ -181,9 +181,10 @@ class TopMFilter(NoisyMechanism):
     def to_sparse_adjacency(edge_index, num_nodes):
         return torch.sparse_coo_tensor(
             indices=edge_index,
-            values=torch.ones_like(edge_index[0]).float(),
+            values=torch.ones_like(edge_index[0], dtype=torch.int8),
             size=(num_nodes, num_nodes),
-            device=edge_index.device
+            device=edge_index.device,
+            dtype=torch.int8
         )
 
 
