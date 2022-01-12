@@ -49,8 +49,9 @@ class NeighborSampler(BaseTransform):
 
 
 class FilterClassByCount(BaseTransform):
-    def __init__(self, min_count):
+    def __init__(self, min_count, remove_unlabeled=False):
         self.min_count = min_count
+        self.remove_unlabeled = remove_unlabeled
 
     def __call__(self, data):
         assert hasattr(data, 'y') and hasattr(data, 'train_mask')
@@ -60,10 +61,19 @@ class FilterClassByCount(BaseTransform):
         y = y[:, counts >= self.min_count]
         mask = y.sum(dim=1).bool()        # nodes to keep
         data.y = y.argmax(dim=1)
-        data.y[~mask] = -1                # set filtered nodes as unlabeled
-        data.train_mask = data.train_mask & mask
-        data.val_mask = data.val_mask & mask
-        data.test_mask = data.test_mask & mask
+
+        if self.remove_unlabeled:
+            data.x = data.x[mask]
+            data.y = data.y[mask]
+            data.train_mask = data.train_mask[mask]
+            data.val_mask = data.val_mask[mask]
+            data.test_mask = data.test_mask[mask]
+            data.edge_index, _ = subgraph(subset=mask, edge_index=data.edge_index, relabel_nodes=True, num_nodes=data.num_nodes)
+        else:
+            data.y[~mask] = -1                # set filtered nodes as unlabeled
+            data.train_mask = data.train_mask & mask
+            data.val_mask = data.val_mask & mask
+            data.test_mask = data.test_mask & mask
 
         return data
 
@@ -202,13 +212,13 @@ class Dataset:
     supported_datasets = {
         # main datasets
         'reddit': partial(Reddit, 
-            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassByCount(min_count=10000)])
+            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassByCount(min_count=10000, remove_unlabeled=True)])
         ),
         'amazon': partial(load_ogb, name='ogbn-products', 
-            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassByCount(min_count=100000)])
+            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassByCount(min_count=100000, remove_unlabeled=True)])
         ),
         'facebook': partial(Facebook100, name='UIllinois20', target='year', 
-            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassByCount(min_count=1000)])
+            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassByCount(min_count=1000, remove_unlabeled=True)])
         ),
         
         # backup datasets
