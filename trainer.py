@@ -1,3 +1,7 @@
+from typing import Text
+from rich.console import Group
+from rich.padding import Padding
+from rich.table import Column, Table
 from console import console
 import os, uuid
 import torch
@@ -185,7 +189,6 @@ class TrainerProgress(Progress):
     def __init__(self, num_epochs, num_train_steps, num_val_steps, num_test_steps):
 
         progress_bar = [
-            TextColumn('                 '),
             SpinnerColumn(),
             "{task.description}",
             "{task.completed:>3}/{task.total}",
@@ -193,17 +196,19 @@ class TrainerProgress(Progress):
             BarColumn(),
             "{task.percentage:>3.0f}%",
             TimeElapsedColumn(),
-            "{task.fields[metrics]}"
+            # "{task.fields[metrics]}"
         ]
 
         super().__init__(*progress_bar, console=console)
 
         self.trainer_tasks = {
             'epoch': self.add_task(total=num_epochs, metrics='', unit='epochs', description='overal progress'),
-            'train': self.add_task(total=num_train_steps, metrics='', unit='steps', description='training       ', visible=False),
-            'val':   self.add_task(total=num_val_steps, metrics='', unit='steps', description='validation     ', visible=False),
-            'test':  self.add_task(total=num_test_steps, metrics='', unit='steps', description='testing        ', visible=False),
+            'train': self.add_task(total=num_train_steps, metrics='', unit='steps', description='training', visible=False),
+            'val':   self.add_task(total=num_val_steps, metrics='', unit='steps', description='validation', visible=False),
+            'test':  self.add_task(total=num_test_steps, metrics='', unit='steps', description='testing', visible=False),
         }
+
+        self.max_rows = 0
 
     def update(self, task, **kwargs):
         if 'metrics' in kwargs:
@@ -221,3 +226,48 @@ class TrainerProgress(Progress):
             out.append(metric_str)
         
         return '  '.join(out)
+
+    def make_tasks_table(self, tasks):
+        """Get a table to render the Progress display.
+
+        Args:
+            tasks (Iterable[Task]): An iterable of Task instances, one per row of the table.
+
+        Returns:
+            Table: A table instance.
+        """
+        table_columns = (
+            (
+                Column(no_wrap=True)
+                if isinstance(_column, str)
+                else _column.get_table_column().copy()
+            )
+            for _column in self.columns
+        )
+
+        table = Table.grid(*table_columns, padding=(0, 1), expand=self.expand)
+
+        if tasks:
+            epoch_task = tasks[0]
+            metrics = epoch_task.fields['metrics']
+
+            for task in tasks:
+                if task.visible:
+                    table.add_row(
+                        *(
+                            (
+                                column.format(task=task)
+                                if isinstance(column, str)
+                                else column(task)
+                            )
+                            for column in self.columns
+                        )
+                    )
+
+            self.max_rows = max(self.max_rows, table.row_count)
+            pad_top = 0 if epoch_task.finished else self.max_rows - table.row_count
+            group = Group(table, Padding(Text(metrics), pad=(pad_top,0,0,2)))
+            return Padding(group, pad=(0,0,1,18))
+
+        else:
+            return table
