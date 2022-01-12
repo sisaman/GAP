@@ -14,13 +14,14 @@ from models import MultiStageClassifier, supported_activations
 @support_args
 class GAP:
     supported_dp_levels = {'edge', 'node'}
+    supported_perturbations = {'aggr', 'graph'}
 
     def __init__(self,
                  num_classes,
                  dp_level:      dict(help='level of privacy protection', choices=supported_dp_levels) = 'edge',
                  epsilon:       dict(help='DP epsilon parameter', option='-e') = np.inf,
                  delta:         dict(help='DP delta parameter', option='-d') = 1e-6,
-                 adj_pert:      dict(help='if True, applies graph adjacency perturbation') = False,
+                 perturbation:  dict(help='perturbation method', option='-p', choices=supported_perturbations) = 'aggr',
                  hops:          dict(help='number of hops', option='-k') = 2,
                  max_degree:    dict(help='max degree per each node') = 0,
                  hidden_dim:    dict(help='dimension of the hidden layers') = 16,
@@ -51,7 +52,7 @@ class GAP:
         self.dp_level = dp_level
         self.epsilon = epsilon
         self.delta = delta
-        self.adj_pert = adj_pert
+        self.perturbation = perturbation
         self.hops = hops
         self.max_degree = max_degree
         self.encoder_layers = encoder_layers
@@ -101,13 +102,13 @@ class GAP:
 
     def init_privacy_mechanisms(self):
         self.pma_mechanism = PMA(noise_scale=self.noise_scale, hops=self.hops)
-        mechanism_list = [self.pma_mechanism]
 
-        if self.adj_pert:
+        if self.perturbation == 'graph':
             self.graph_mechanism = TopMFilter(noise_scale=self.noise_scale)
-            mechanism_list += [self.graph_mechanism]
-    
-        if self.dp_level == 'node':
+            mechanism_list = [self.graph_mechanism]
+        elif self.dp_level == 'edge':
+            mechanism_list = [self.pma_mechanism]
+        elif self.dp_level == 'node':
             dataset_size = len(self.data_loader('train').dataset)
 
             self.pretraining_noisy_sgd = NoisySGD(
@@ -126,7 +127,8 @@ class GAP:
                 max_grad_norm=self.max_grad_norm,
             )
 
-            mechanism_list += [self.pretraining_noisy_sgd, self.training_noisy_sgd]
+            mechanism_list = [self.pretraining_noisy_sgd, self.pma_mechanism, self.training_noisy_sgd]
+
 
         composed_mech = ComposedNoisyMechanism(
             noise_scale=self.noise_scale, 
@@ -144,6 +146,7 @@ class GAP:
         self.init_privacy_mechanisms()
         
         if self.adj_pert:
+            self.pma_mechanism.update(noise_scale=0)
             with console.status('applying adjacency matrix perturbations...'):
                 self.data = self.graph_mechanism(self.data)
 
