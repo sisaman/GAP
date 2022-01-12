@@ -22,7 +22,7 @@ def compute_lazy_linear_grad_sample(layer, activations, backprops):
 
 
 class MLP(torch.nn.Module):
-    def __init__(self, hidden_dim, output_dim, num_layers, dropout, activation, batchnorm):
+    def __init__(self, hidden_dim, output_dim, num_layers, dropout, activation, batch_norm):
         super().__init__()
         self.num_layers = num_layers
         self.dropout = Dropout(dropout, inplace=True)
@@ -31,8 +31,8 @@ class MLP(torch.nn.Module):
         dimensions = [hidden_dim] * (num_layers - 1) + [output_dim] * (num_layers > 0)
         self.layers = ModuleList([LazyLinear(dim) for dim in dimensions])
         
-        num_bns = batchnorm * (num_layers - 1)
-        self.bns = ModuleList([LazyBatchNorm1d() for _ in range(num_bns)]) if batchnorm else []
+        num_bns = batch_norm * (num_layers - 1)
+        self.bns = ModuleList([LazyBatchNorm1d() for _ in range(num_bns)]) if batch_norm else []
         
         self.reset_parameters()
 
@@ -61,7 +61,7 @@ class MultiStageClassifier(Module):
     }
 
     def __init__(self, num_stages, hidden_dim, output_dim, pre_layers, post_layers, 
-                 combination_type, activation, dropout, batchnorm):
+                 combination_type, activation, dropout, batch_norm):
 
         super().__init__()
         self.combination_type = combination_type
@@ -73,11 +73,11 @@ class MultiStageClassifier(Module):
                 num_layers=pre_layers,
                 dropout=dropout,
                 activation=activation,
-                batchnorm=batchnorm,
+                batch_norm=batch_norm,
             )] * num_stages
         )
 
-        self.bn = LazyBatchNorm1d() if batchnorm else False
+        self.bn = LazyBatchNorm1d() if batch_norm else False
         self.dropout = Dropout(dropout, inplace=True)
         self.activation = supported_activations[activation]()
 
@@ -87,7 +87,7 @@ class MultiStageClassifier(Module):
             num_layers=post_layers,
             activation=activation,
             dropout=dropout,
-            batchnorm=batchnorm,
+            batch_norm=batch_norm,
         )
 
     def forward(self, x_stack):

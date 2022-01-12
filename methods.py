@@ -31,7 +31,7 @@ class GAP:
                  combine:       dict(help='combination type of transformed hops', choices=MultiStageClassifier.supported_combinations) = 'cat',
                  activation:    dict(help='type of activation function', choices=supported_activations) = 'selu',
                  dropout:       dict(help='dropout rate (between zero and one)') = 0.0,
-                 batchnorm:     dict(help='if True, then model uses batch normalization') = True,
+                 batch_norm:     dict(help='if True, then model uses batch normalization') = True,
                  optimizer:     dict(help='optimization algorithm', choices=['sgd', 'adam']) = 'adam',
                  learning_rate: dict(help='learning rate', option='--lr') = 0.01,
                  weight_decay:  dict(help='weight decay (L2 penalty)') = 0.0,
@@ -77,7 +77,7 @@ class GAP:
             combination_type='cat',
             activation=activation,
             dropout=dropout,
-            batchnorm=batchnorm,
+            batch_norm=batch_norm,
         )
 
         self.classifier = MultiStageClassifier(
@@ -89,7 +89,7 @@ class GAP:
             combination_type=combine,
             activation=activation,
             dropout=dropout,
-            batchnorm=batchnorm,
+            batch_norm=batch_norm,
         )
 
         self.reset_parameters()
