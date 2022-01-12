@@ -144,7 +144,7 @@ class GAP:
                 else:
                     data_size = self.data.num_edges if self.dp_level == 'edge' else self.data.num_nodes
                     self.delta = 1. / (10 ** len(str(data_size)))
-                logging.info('delta = %e', self.delta)
+                logging.info('delta = %.0e', self.delta)
             noise_scale = composed_mech.calibrate(eps=self.epsilon, delta=self.delta)
             logging.info(f'noise scale: {noise_scale:.4f}\n')
 
