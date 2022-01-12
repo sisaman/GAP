@@ -196,8 +196,7 @@ class GAP:
             self.data = NeighborSampler(self.max_degree)(self.data)
         elif self.perturbation == 'graph':
             self.pma_mechanism.update(noise_scale=0)
-            with console.status('applying adjacency matrix perturbations'):
-                self.data = self.graph_mechanism(self.data)
+            self.data = self.graph_mechanism(self.data)
 
         sensitivity = 1 if self.dp_level == 'edge' else np.sqrt(self.max_degree)
         self.data = self.pma_mechanism(self.data, sensitivity=sensitivity)
