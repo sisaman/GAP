@@ -21,9 +21,6 @@ logging.basicConfig(
     handlers=[RichHandler(console=console, omit_repeated_times=True)]
 )
 
-# def log(msg):
-#     logging.info('')
-#     console.print(Padding(msg, (0, 0, 0, 18)))
 
 def log(
     *objects,
@@ -60,13 +57,7 @@ def log(
 
     with console:
         renderables = console._collect_renderables(
-            objects,
-            sep,
-            end,
-            justify=justify,
-            emoji=emoji,
-            markup=markup,
-            highlight=highlight,
+            objects, sep, end, justify=justify, emoji=emoji, markup=markup, highlight=highlight
         )
         if style is not None:
             renderables = [Styled(renderable, style) for renderable in renderables]
@@ -75,11 +66,7 @@ def log(
         link_path = None if filename.startswith("<") else os.path.abspath(filename)
         path = filename.rpartition(os.sep)[-1]
         if log_locals:
-            locals_map = {
-                key: value
-                for key, value in locals.items()
-                if not key.startswith("__")
-            }
+            locals_map = {key: value for key, value in locals.items() if not key.startswith("__")}
             renderables.append(render_scope(locals_map, title="[i]locals"))
 
         record = logging.LogRecord(name=None, level=level, pathname=None, lineno=None, msg=None, args=None, exc_info=None)
@@ -106,9 +93,7 @@ def log(
         for renderable in renderables:
             extend(render(renderable, render_options))
         buffer_extend = console._buffer.extend
-        for line in Segment.split_and_crop_lines(
-            new_segments, console.width, pad=False
-        ):
+        for line in Segment.split_and_crop_lines(new_segments, console.width, pad=False):
             buffer_extend(line)
 
 console.log = log

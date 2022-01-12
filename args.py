@@ -137,5 +137,6 @@ def print_args(args, num_cols=4):
     table = Table(title='program arguments', show_header=False, box=box.HORIZONTALS)
     table.add_row(highlighter(message))
 
-    print()
+    console.print()
     console.log(table)
+    console.print()
