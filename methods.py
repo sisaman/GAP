@@ -294,8 +294,7 @@ class GraphSAGEModel:
                 if np.isinf(self.epsilon):
                     self.delta = 0.0
                 else:
-                    data_size = self.data.num_edges if self.dp_level == 'edge' else self.data.num_nodes
-                    self.delta = 1. / (10 ** len(str(data_size)))
+                    self.delta = 1. / (10 ** len(str(self.data.num_edges)))
                 logging.info('delta = %.0e', self.delta)
             noise_scale = self.graph_mechanism.calibrate(eps=self.epsilon, delta=self.delta)
             logging.info(f'noise scale: {noise_scale:.4f}\n')
