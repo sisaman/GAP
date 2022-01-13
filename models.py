@@ -144,6 +144,11 @@ class MultiStageClassifier(Module):
         
         self.post_mlp.reset_parameters()
 
+        if hasattr(self, 'autograd_grad_sample_hooks'):
+            for hook in self.autograd_grad_sample_hooks:
+                hook.remove()
+            del self.autograd_grad_sample_hooks
+
 
 class GraphSAGEClassifier(Module):
     supported_combinations = {

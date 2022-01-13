@@ -83,6 +83,7 @@ class Trainer:
     def fit(self, model, optimizer, train_dataloader, val_dataloader, test_dataloader=None, checkpoint=False):
         self.reset()
         self.model = model.to(self.device)
+        self.model.train()
         scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
         if self.dp_mechanism:
