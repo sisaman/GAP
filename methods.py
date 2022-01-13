@@ -5,7 +5,7 @@ import logging
 from torch.optim import Adam, SGD
 from args import support_args
 from privacy import TopMFilter, NoisySGD, PMA, ComposedNoisyMechanism
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import TensorDataset
 from trainer import Trainer
 from datasets import NeighborSampler, PoissonDataLoader
 from models import GraphSAGEClassifier, MultiStageClassifier, supported_activations
@@ -23,7 +23,7 @@ class GAP:
                  delta:         dict(help='DP delta parameter; if "auto", sets a proper value based on data size', option='-d') = 'auto',
                  perturbation:  dict(help='perturbation method', option='-p', choices=supported_perturbations) = 'aggr',
                  hops:          dict(help='number of hops', option='-k') = 2,
-                 max_degree:    dict(help='max degree per each node') = 0,
+                 max_degree:    dict(help='max degree per each node (ignored for edge-level DP)') = 10,
                  hidden_dim:    dict(help='dimension of the hidden layers') = 16,
                  encoder_layers:dict(help='number of encoder MLP layers') = 2,
                  pre_layers:    dict(help='number of pre-combination MLP layers') = 1,
@@ -31,7 +31,7 @@ class GAP:
                  combine:       dict(help='combination type of transformed hops', choices=MultiStageClassifier.supported_combinations) = 'cat',
                  activation:    dict(help='type of activation function', choices=supported_activations) = 'selu',
                  dropout:       dict(help='dropout rate (between zero and one)') = 0.0,
-                 batch_norm:     dict(help='if True, then model uses batch normalization') = True,
+                 batch_norm:    dict(help='if True, then model uses batch normalization') = True,
                  optimizer:     dict(help='optimization algorithm', choices=['sgd', 'adam']) = 'adam',
                  learning_rate: dict(help='learning rate', option='--lr') = 0.01,
                  weight_decay:  dict(help='weight decay (L2 penalty)') = 0.0,
@@ -39,7 +39,7 @@ class GAP:
                  pre_epochs:    dict(help='number of epochs for pre-training') = 100,
                  epochs:        dict(help='number of epochs for training') = 100,
                  batch_size:    dict(help='batch size (if zero, performs full-batch training)') = 0,
-                 max_grad_norm: dict(help='maximum norm of the per-sample gradients (ignored when using edge-level DP)') = 1.0,
+                 max_grad_norm: dict(help='maximum norm of the per-sample gradients (ignored for edge-level DP)') = 1.0,
                  use_amp:       dict(help='use automatic mixed precision training') = False,
                  ):
 
@@ -194,7 +194,7 @@ class GAP:
             self.encoder.to('cpu')
 
     def precompute_aggregations(self):
-        if self.dp_level == 'node':
+        if self.dp_level == 'node' and self.hops > 0:
             self.data = NeighborSampler(self.max_degree)(self.data)
         elif self.perturbation == 'graph':
             self.pma_mechanism.update(noise_scale=0)
