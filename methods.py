@@ -170,7 +170,7 @@ class GAP:
             trainer = Trainer(
                 epochs=self.pre_epochs, 
                 use_amp=self.use_amp, 
-                monitor='val/loss', monitor_mode='min', 
+                monitor='val/acc', monitor_mode='max', 
                 device=self.device,
                 dp_mechanism=self.pretraining_noisy_sgd if self.dp_level == 'node' else None,
             )
@@ -206,7 +206,7 @@ class GAP:
         trainer = Trainer(
             epochs=self.epochs, 
             use_amp=self.use_amp, 
-            monitor='val/loss', monitor_mode='min', 
+            monitor='val/acc', monitor_mode='max', 
             device=self.device,
             dp_mechanism=self.training_noisy_sgd if self.dp_level == 'node' else None,
         )
@@ -318,7 +318,7 @@ class GraphSAGEModel:
         trainer = Trainer(
             epochs=self.epochs, 
             use_amp=self.use_amp, 
-            monitor='val/loss', monitor_mode='min', 
+            monitor='val/acc', monitor_mode='max', 
             device=self.device,
         )
 
