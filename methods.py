@@ -256,12 +256,9 @@ class GraphSAGEModel:
                  learning_rate: dict(help='learning rate', option='--lr') = 0.01,
                  weight_decay:  dict(help='weight decay (L2 penalty)') = 0.0,
                  cpu:           dict(help='if True, then model is trained on CPU') = False,
-                 pre_epochs:    dict(help='number of epochs for pre-training') = 100,
                  epochs:        dict(help='number of epochs for training') = 100,
                  use_amp:       dict(help='use automatic mixed precision training') = False,
                  ):
-
-        assert encoder_layers == 0 or pre_epochs > 0
 
         self.epsilon = epsilon
         self.delta = delta
@@ -270,25 +267,13 @@ class GraphSAGEModel:
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.optimizer_name = optimizer
-        self.pre_epochs = pre_epochs
         self.epochs = epochs
         self.use_amp = use_amp
-
-        self.encoder = MultiStageClassifier(
-            num_stages=1,
-            hidden_dim=hidden_dim,
-            output_dim=num_classes,
-            pre_layers=encoder_layers,
-            post_layers=1,
-            combination_type='cat',
-            activation=activation,
-            dropout=dropout,
-            batch_norm=batch_norm,
-        )
 
         self.classifier = GraphSAGEClassifier(
             hidden_dim=hidden_dim, 
             output_dim=num_classes, 
+            pre_layers=encoder_layers,
             mp_layers=mp_layers, 
             post_layers=post_layers, 
             activation=activation, 
@@ -299,11 +284,7 @@ class GraphSAGEModel:
         self.reset_parameters()
 
     def reset_parameters(self):
-        self.encoder.reset_parameters()
         self.classifier.reset_parameters()
-
-    def set_training_state(self, pre_train):
-        self._pre_train_flag = pre_train
 
     def init_privacy_mechanisms(self):
         self.graph_mechanism = TopMFilter(noise_scale=0)
@@ -326,43 +307,13 @@ class GraphSAGEModel:
         with console.status(f'moving data to {self.device}'):
             self.data.to(self.device)
 
-        logging.info('pretraining encoder...')
-        self.pretrain_encoder()
-
         with console.status('perturbing graph structure'):
             self.data = self.graph_mechanism(self.data)
 
         logging.info('training classifier...')
         return self.train_classifier()
 
-    def pretrain_encoder(self):
-        if self.encoder_layers > 0:
-            self.set_training_state(pre_train=True)
-            self.encoder.to(self.device)
-            self.data.x = torch.stack([self.data.x], dim=-1)
-
-            trainer = Trainer(
-                epochs=self.pre_epochs, 
-                use_amp=self.use_amp, 
-                monitor='val/loss', monitor_mode='min', 
-                device=self.device,
-            )
-
-            trainer.fit(
-                model=self.encoder,
-                optimizer=self.configure_optimizers(self.encoder), 
-                train_dataloader=self.encoder_data_loader('train'), 
-                val_dataloader=self.encoder_data_loader('val'),
-                test_dataloader=None,
-                checkpoint=True
-            )
-
-            self.encoder = trainer.load_best_model()
-            self.data.x = self.encoder.encode(self.data.x)
-            self.encoder.to('cpu')
-
     def train_classifier(self):
-        self.set_training_state(pre_train=False)
         self.classifier.to(self.device)
 
         trainer = Trainer(
@@ -375,23 +326,13 @@ class GraphSAGEModel:
         metrics = trainer.fit(
             model=self.classifier, 
             optimizer=self.configure_optimizers(self.classifier),
-            train_dataloader=self.classifier_data_loader('train'), 
-            val_dataloader=self.classifier_data_loader('val'),
-            test_dataloader=self.classifier_data_loader('test'),
+            train_dataloader=[self.data], 
+            val_dataloader=[self.data],
+            test_dataloader=[self.data],
             checkpoint=False,
         )
 
-        self.classifier.to('cpu')
         return metrics
-
-    def encoder_data_loader(self, stage):
-        mask = self.data[f'{stage}_mask']
-        x = self.data.x[mask]
-        y = self.data.y[mask]
-        return TensorDataset(x.unsqueeze(0), y.unsqueeze(0))
-
-    def classifier_data_loader(self, stage):
-        return [self.data]
 
     def configure_optimizers(self, model):
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]

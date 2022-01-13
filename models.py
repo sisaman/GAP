@@ -150,10 +150,25 @@ class GraphSAGEClassifier(Module):
         'cat', 'sum', 'max', 'mean', 'att'   ### TODO implement attention
     }
 
-    def __init__(self, hidden_dim, output_dim, mp_layers, post_layers, 
+    def __init__(self, hidden_dim, output_dim, pre_layers, mp_layers, post_layers, 
                  activation, dropout, batch_norm):
 
         super().__init__()
+
+        self.pre_mlp = MLP(
+            hidden_dim=hidden_dim,
+            output_dim=hidden_dim,
+            num_layers=pre_layers,
+            activation=activation,
+            dropout=dropout,
+            batch_norm=batch_norm,
+        )
+
+        self.batch_norm = batch_norm
+        self.bn1 = LazyBatchNorm1d() if batch_norm else False
+        self.dropout1 = Dropout(dropout, inplace=True)
+        self.activation1 = supported_activations[activation]()
+        self.pre_layers = pre_layers
 
         self.gnn = GraphSAGE(
             in_channels=-1,
@@ -166,9 +181,9 @@ class GraphSAGEClassifier(Module):
             jk='cat'
         )
 
-        self.bn = LazyBatchNorm1d() if batch_norm else False
-        self.dropout = Dropout(dropout, inplace=True)
-        self.activation = supported_activations[activation]()
+        self.bn2 = LazyBatchNorm1d() if batch_norm else False
+        self.dropout2 = Dropout(dropout, inplace=True)
+        self.activation2 = supported_activations[activation]()
         self.post_layers = post_layers
 
         self.post_mlp = MLP(
@@ -181,12 +196,20 @@ class GraphSAGEClassifier(Module):
         )
 
     def forward(self, x, adj_t):
+        if self.pre_layers > 0:
+            x = self.pre_mlp(x)
+            x = self.bn1(x) if self.batch_norm else x
+            x = self.dropout1(x)
+            x = self.activation1(x)
+
         h = self.gnn(x, adj_t)
+
         if self.post_layers > 0:
-            h = self.bn(h) if self.bn else h
-            h = self.dropout(h)
-            h = self.activation(h)
+            h = self.bn2(h) if self.batch_norm else h
+            h = self.dropout2(h)
+            h = self.activation2(h)
             h = self.post_mlp(h)
+
         return F.log_softmax(h, dim=-1)
 
     def step(self, data, stage):
@@ -204,8 +227,10 @@ class GraphSAGEClassifier(Module):
         return loss, metrics
 
     def reset_parameters(self):
-        if self.bn:
-            self.bn.reset_parameters()
+        if self.batch_norm:
+            self.bn1.reset_parameters()
+            self.bn2.reset_parameters()
 
+        self.pre_mlp.reset_parameters()
         self.gnn.reset_parameters()
         self.post_mlp.reset_parameters()
