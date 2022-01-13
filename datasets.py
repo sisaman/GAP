@@ -34,7 +34,7 @@ def load_ogb(name, transform=None, **kwargs):
     return [data]
 
 
-class NeighborSampler:
+class NeighborSampler(BaseTransform):
     def __init__(self, max_out_degree: int, replace: bool = False, directed: bool = True):
         self.num_neighbors = max_out_degree
         self.replace = replace
@@ -42,7 +42,7 @@ class NeighborSampler:
 
     def __call__(self, data):
         data.adj_t = data.adj_t.t()
-        self.colptr, self.row, self.perm = to_csc(data, device=data.x.device)
+        self.colptr, self.row, self.perm = to_csc(data, device='cpu')
         index = torch.range(0, data.num_nodes-1, dtype=int)
         sample_fn = torch.ops.torch_sparse.neighbor_sample
         node, row, col, edge = sample_fn(
