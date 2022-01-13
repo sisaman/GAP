@@ -68,6 +68,7 @@ class GAP:
         self.batch_size = batch_size
         self.use_amp = use_amp
         self.max_grad_norm = max_grad_norm
+        self.noise_scale = 0.0 # used to save noise calibration results
 
         self.encoder = MultiStageClassifier(
             num_stages=1,
@@ -103,10 +104,10 @@ class GAP:
         self._pre_train_flag = pre_train
 
     def init_privacy_mechanisms(self):
-        self.pma_mechanism = PMA(noise_scale=0, hops=self.hops)
+        self.pma_mechanism = PMA(noise_scale=self.noise_scale, hops=self.hops)
 
         if self.perturbation == 'graph':
-            self.graph_mechanism = TopMFilter(noise_scale=0)
+            self.graph_mechanism = TopMFilter(noise_scale=self.noise_scale)
             mechanism_list = [self.graph_mechanism]
         elif self.dp_level == 'edge':
             mechanism_list = [self.pma_mechanism]
@@ -114,7 +115,7 @@ class GAP:
             dataset_size = len(self.data_loader('train').dataset)
 
             self.pretraining_noisy_sgd = NoisySGD(
-                noise_scale=0, 
+                noise_scale=self.noise_scale, 
                 dataset_size=dataset_size, 
                 batch_size=self.batch_size, 
                 epochs=self.pre_epochs,
@@ -122,7 +123,7 @@ class GAP:
             )
 
             self.training_noisy_sgd = NoisySGD(
-                noise_scale=0, 
+                noise_scale=self.noise_scale, 
                 dataset_size=dataset_size, 
                 batch_size=self.batch_size, 
                 epochs=self.epochs,
@@ -133,7 +134,7 @@ class GAP:
 
 
         composed_mech = ComposedNoisyMechanism(
-            noise_scale=1, # temporary 
+            noise_scale=self.noise_scale,
             mechanism_list=mechanism_list, 
             coeff_list=[1]*len(mechanism_list)
         )
@@ -146,8 +147,8 @@ class GAP:
                     data_size = self.data.num_edges if self.dp_level == 'edge' else self.data.num_nodes
                     self.delta = 1. / (10 ** len(str(data_size)))
                 logging.info('delta = %.0e', self.delta)
-            noise_scale = composed_mech.calibrate(eps=self.epsilon, delta=self.delta)
-            logging.info(f'noise scale: {noise_scale:.4f}\n')
+            self.noise_scale = composed_mech.calibrate(eps=self.epsilon, delta=self.delta)
+            logging.info(f'noise scale: {self.noise_scale:.4f}\n')
 
     def fit(self, data):
         self.data = data

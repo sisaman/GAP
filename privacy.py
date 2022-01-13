@@ -78,6 +78,11 @@ class NoisyMechanism(mechanisms.Mechanism):
             return 0.0
         else:
             fn_err = lambda x: abs(eps - self.update(x).get_approxDP(delta))
+
+            # check if the mechanism is already calibrated
+            if fn_err(self.params['noise_scale']) < 1e-3:
+                return self.params['noise_scale']
+
             results = minimize_scalar(fn_err, method='bounded', bounds=[0,1000], tol=1e-8, options={'maxiter': 1000000})
 
             if results.success and results.fun < 1e-3:
