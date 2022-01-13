@@ -48,6 +48,10 @@ class GAP:
         assert dp_level == 'edge' or batch_size > 0
         assert encoder_layers == 0 or pre_epochs > 0
 
+        if dp_level == 'node' and batch_norm:
+            logging.warn('batch normalization is not supported for node-level DP, setting it to False')
+            batch_norm = False
+
         self.dp_level = dp_level
         self.epsilon = epsilon
         self.delta = delta
