@@ -8,6 +8,8 @@ from torch_geometric.utils import remove_self_loops, add_self_loops, contains_se
 from scipy.optimize import minimize_scalar
 from torch_sparse import SparseTensor
 
+from datasets import PoissonDataLoader
+
 
 class ZeroMechanism(mechanisms.Mechanism):
     def __init__(self):
@@ -208,7 +210,7 @@ class NoisySGD(NoisyMechanism):
             compose = Composition()
             gm = GaussianMechanism(noise_scale=noise_scale)
             subsampled_gm = subsample(gm, prob=batch_size/dataset_size, improved_bound_flag=True)
-            mech = compose([subsampled_gm],[epochs * dataset_size / batch_size])
+            mech = compose([subsampled_gm],[epochs * dataset_size // batch_size])
         
         self.set_all_representation(mech)
 
@@ -220,6 +222,7 @@ class NoisySGD(NoisyMechanism):
                 data_loader=data_loader,
                 noise_multiplier=self.params['noise_scale'],
                 max_grad_norm=self.params['max_grad_norm'],
+                poisson_sampling=not isinstance(data_loader, PoissonDataLoader),
                 **kwargs
             )
 

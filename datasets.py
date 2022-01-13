@@ -7,13 +7,13 @@ from console import console
 from rich.table import Table
 import torch
 from torch_geometric.utils import remove_self_loops, subgraph, from_scipy_sparse_matrix
+from torch_geometric.loader.utils import to_csc, filter_data
 from torch_geometric.datasets import Reddit
 from torch_geometric.transforms import Compose, BaseTransform, RemoveIsolatedNodes, ToSparseTensor, RandomNodeSplit
 from ogb.nodeproppred import PygNodePropPredDataset
 import pandas as pd
 from scipy.io import loadmat
 from torch_geometric.data import Data, InMemoryDataset, download_url
-from torch_geometric.loader import NeighborLoader
 from sklearn.preprocessing import LabelEncoder
 from args import support_args
 
@@ -34,17 +34,27 @@ def load_ogb(name, transform=None, **kwargs):
     return [data]
 
 
-class NeighborSampler(BaseTransform):
-    def __init__(self, max_out_degree):
-        super().__init__()
-        self.max_out_degree = max_out_degree
+class NeighborSampler:
+    def __init__(self, max_out_degree: int, replace: bool = False, directed: bool = True):
+        self.num_neighbors = max_out_degree
+        self.replace = replace
+        self.directed = directed
 
     def __call__(self, data):
-        if self.max_out_degree > 0:
-            data.adj_t = data.adj_t.t()
-            loader = NeighborLoader(data, num_neighbors=[self.max_out_degree], batch_size=data.num_nodes)
-            data = next(iter(loader))
-            data.adj_t = data.adj_t.t()
+        data.adj_t = data.adj_t.t()
+        self.colptr, self.row, self.perm = to_csc(data, device=data.x.device)
+        index = torch.range(0, data.num_nodes-1, dtype=int)
+        sample_fn = torch.ops.torch_sparse.neighbor_sample
+        node, row, col, edge = sample_fn(
+            self.colptr,
+            self.row,
+            index,
+            [self.num_neighbors],
+            self.replace,
+            self.directed,
+        )
+        data = filter_data(data, node, row, col, edge, self.perm)
+        data.adj_t = data.adj_t.t()
         return data
 
 
@@ -160,6 +170,27 @@ class Facebook100(InMemoryDataset):
 
     def __repr__(self):
         return f'Facebook100-{self.name}()'
+
+
+class PoissonDataLoader:
+    def __init__(self, dataset, batch_size):
+        self.dataset = dataset
+        self.dataset_size = len(dataset)
+        self.batch_size = batch_size
+        self.prob = batch_size / self.dataset_size
+        self.sampler = torch.empty(
+            self.dataset_size, 
+            dtype=bool, 
+            device=dataset.tensors[0].device
+        ).bernoulli_(self.prob).bool()
+
+    def __iter__(self):
+        for _ in range(0, self.dataset_size, self.batch_size):
+            yield self.dataset[self.sampler]
+            self.sampler.bernoulli_(self.prob).bool()
+            
+    def __len__(self):
+        return self.dataset_size // self.batch_size
 
 
 @support_args

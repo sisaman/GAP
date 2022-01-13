@@ -7,7 +7,7 @@ from args import support_args
 from privacy import TopMFilter, NoisySGD, PMA, ComposedNoisyMechanism
 from torch.utils.data import DataLoader, TensorDataset
 from trainer import Trainer
-from datasets import NeighborSampler
+from datasets import NeighborSampler, PoissonDataLoader
 from models import GraphSAGEClassifier, MultiStageClassifier, supported_activations
 
 
@@ -232,12 +232,9 @@ class GAP:
         mask = self.data[f'{stage}_mask']
         x = self.data.x[mask]
         y = self.data.y[mask]
-
-        if self.batch_size == 0:
-            return TensorDataset(x.unsqueeze(0), y.unsqueeze(0))
-        else:
-            dataset = TensorDataset(x, y)
-            return DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+        dataset = TensorDataset(x, y)
+        batch_size = len(dataset) if self.batch_size == 0 else self.batch_size
+        return PoissonDataLoader(dataset, batch_size=batch_size)
 
     def configure_optimizers(self, model):
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
