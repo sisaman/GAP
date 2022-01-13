@@ -1,5 +1,6 @@
 import time
 from console import console
+from methods import GraphSAGEModel
 with console.status('importing modules'):
     import logging
     import sys
@@ -24,7 +25,10 @@ def run(args):
     logger = Logger.from_args(args, enabled=args.debug, config=args)
 
     ### initiallize model ###
-    model: GAP = GAP.from_args(args, num_classes=num_classes)
+    model = {
+        'gap': GAP,
+        'sage': GraphSAGEModel,
+    }[args.model].from_args(args, num_classes=num_classes)
 
     ### run experiment ###
     for iteration in range(args.repeats):
@@ -72,6 +76,8 @@ def main():
         group_model = parser.add_argument_group('model arguments')
         if parser_name == 'gap':
             GAP.add_args(group_model)
+        elif parser_name == 'sage':
+            GraphSAGEModel.add_args(group_model)
 
         # experiment args
         group_expr = parser.add_argument_group('experiment arguments')

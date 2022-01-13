@@ -1,8 +1,9 @@
 from functools import partial
 import torch
 import torch.nn.functional as F
-from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear, Module, LazyBatchNorm1d
+from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear, Module, LazyBatchNorm1d, BatchNorm1d
 from opacus.grad_sample import register_grad_sampler
+from torch_geometric.nn import GraphSAGE
 
 
 supported_activations = {
@@ -144,3 +145,67 @@ class MultiStageClassifier(Module):
         self.post_mlp.reset_parameters()
 
 
+class GraphSAGEClassifier(Module):
+    supported_combinations = {
+        'cat', 'sum', 'max', 'mean', 'att'   ### TODO implement attention
+    }
+
+    def __init__(self, hidden_dim, output_dim, mp_layers, post_layers, 
+                 activation, dropout, batch_norm):
+
+        super().__init__()
+
+        self.gnn = GraphSAGE(
+            in_channels=-1,
+            hidden_channels=hidden_dim,
+            num_layers=mp_layers,
+            out_channels=output_dim,
+            dropout=dropout,
+            act=supported_activations[activation](),
+            norm=BatchNorm1d(hidden_dim) if batch_norm else None,
+            jk='cat'
+        )
+
+        self.bn = LazyBatchNorm1d() if batch_norm else False
+        self.dropout = Dropout(dropout, inplace=True)
+        self.activation = supported_activations[activation]()
+        self.post_layers = post_layers
+
+        self.post_mlp = MLP(
+            hidden_dim=hidden_dim,
+            output_dim=output_dim,
+            num_layers=post_layers,
+            activation=activation,
+            dropout=dropout,
+            batch_norm=batch_norm,
+        )
+
+    def forward(self, x, adj_t):
+        h = self.gnn(x, adj_t)
+        if self.post_layers > 0:
+            h = self.bn(h) if self.bn else h
+            h = self.dropout(h)
+            h = self.activation(h)
+            h = self.post_mlp(h)
+        return F.log_softmax(h, dim=-1)
+
+    def step(self, data, stage):
+        mask = data[f'{stage}_mask']
+        target = data.y[mask]
+        preds = self(data.x, data.adj_t)[mask]
+        acc = (preds.argmax(dim=1) == target).float().mean() * 100
+        metrics = {f'{stage}/acc': acc}
+
+        loss = None
+        if stage != 'test':
+            loss = F.nll_loss(input=preds, target=target)
+            metrics[f'{stage}/loss'] = loss.detach()
+
+        return loss, metrics
+
+    def reset_parameters(self):
+        if self.bn:
+            self.bn.reset_parameters()
+
+        self.gnn.reset_parameters()
+        self.post_mlp.reset_parameters()
