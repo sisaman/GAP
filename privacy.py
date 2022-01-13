@@ -74,6 +74,7 @@ class NoisyMechanism(mechanisms.Mechanism):
             self.update(noise_scale=1)  # to avoid is_inf being true
 
         if eps == np.inf or self.is_inf() or self.is_zero():
+            self.update(noise_scale=0)
             return 0.0
         else:
             fn_err = lambda x: abs(eps - self.update(x).get_approxDP(delta))
