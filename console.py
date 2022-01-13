@@ -34,7 +34,7 @@ def log(
     markup = None,
     highlight = None,
     log_locals: bool = False,
-    _stack_offset: int = 1,
+    _stack_offset: int = 2,
 ) -> None:
     """Log rich content to the terminal.
     Args:
