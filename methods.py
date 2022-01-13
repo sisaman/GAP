@@ -271,6 +271,7 @@ class GraphSAGEModel:
         self.optimizer_name = optimizer
         self.epochs = epochs
         self.use_amp = use_amp
+        self.noise_scale = 0.0 # used to save noise calibration results
 
         self.classifier = GraphSAGEClassifier(
             hidden_dim=hidden_dim, 
@@ -289,7 +290,7 @@ class GraphSAGEModel:
         self.classifier.reset_parameters()
 
     def init_privacy_mechanisms(self):
-        self.graph_mechanism = TopMFilter(noise_scale=0)
+        self.graph_mechanism = TopMFilter(noise_scale=self.noise_scale)
 
         with console.status('calibrating noise to privacy budget'):
             if self.delta == 'auto':
@@ -298,8 +299,8 @@ class GraphSAGEModel:
                 else:
                     self.delta = 1. / (10 ** len(str(self.data.num_edges)))
                 logging.info('delta = %.0e', self.delta)
-            noise_scale = self.graph_mechanism.calibrate(eps=self.epsilon, delta=self.delta)
-            logging.info(f'noise scale: {noise_scale:.4f}\n')
+            self.noise_scale = self.graph_mechanism.calibrate(eps=self.epsilon, delta=self.delta)
+            logging.info(f'noise scale: {self.noise_scale:.4f}\n')
 
     def fit(self, data):
         self.data = data

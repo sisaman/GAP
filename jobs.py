@@ -53,13 +53,13 @@ class JobManager:
                 f'#$ -N {self.name}-{begin}-{end}\n',
                 f'#$ -S /bin/bash\n',
                 f'#$ -P ai4media\n',
-                f'#$ -l pytorch,sgpu,gpumem=16\n',
+                f'#$ -l pytorch,sgpu,gpumem=10\n',
                 f'#$ -t {begin}-{end}\n',
                 f'#$ -o {self.output_dir}\n',
                 f'#$ -e {self.output_dir}\n',
                 f'#$ -cwd\n',
                 f'#$ -V\n',
-                f'export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:10240\n',
+                # f'export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:10240\n',
                 f'python jobs.py -f {self.file} exec --id $SGE_TASK_ID \n'
             ]
 
