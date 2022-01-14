@@ -44,7 +44,7 @@ class GAP:
                  ):
 
         assert dp_level == 'edge' or perturbation == 'aggr'
-        assert dp_level == 'edge' or max_degree > 0 
+        assert dp_level == 'edge' or hops == 0 or max_degree > 0 
         assert dp_level == 'edge' or batch_size > 0
         assert encoder_layers == 0 or pre_epochs > 0
 
