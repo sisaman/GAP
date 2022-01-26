@@ -127,7 +127,7 @@ class TopMFilter(NoisyMechanism):
         is_sparse = hasattr(data, 'adj_t')
         if is_sparse:
             adj_t = data.adj_t
-            edge_index = torch.cat(adj_t.coo()[:-1]).view(2,-1)
+            edge_index = torch.cat(adj_t.t().coo()[:-1]).view(2,-1)
         else:
             edge_index = data.edge_index
 
@@ -176,16 +176,6 @@ class TopMFilter(NoisyMechanism):
             data.edge_index = edge_index
 
         return data
-
-    @staticmethod
-    def to_sparse_adjacency(edge_index, num_nodes):
-        return torch.sparse_coo_tensor(
-            indices=edge_index,
-            values=torch.ones_like(edge_index[0], dtype=torch.int8),
-            size=(num_nodes, num_nodes),
-            device=edge_index.device,
-            dtype=torch.int8
-        )
 
 
 class NoisySGD(NoisyMechanism):
