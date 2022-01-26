@@ -7,7 +7,7 @@ from args import support_args
 from privacy import TopMFilter, NoisySGD, PMA, ComposedNoisyMechanism
 from torch.utils.data import TensorDataset
 from trainer import Trainer
-from datasets import NeighborSampler, PoissonDataLoader
+from data import NeighborSampler, PoissonDataLoader
 from models import GraphSAGEClassifier, MultiStageClassifier, supported_activations
 
 

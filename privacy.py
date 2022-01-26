@@ -8,7 +8,7 @@ from torch_geometric.utils import remove_self_loops, add_self_loops, contains_se
 from scipy.optimize import minimize_scalar
 from torch_sparse import SparseTensor
 
-from datasets import PoissonDataLoader
+from data import PoissonDataLoader
 
 
 class ZeroMechanism(mechanisms.Mechanism):

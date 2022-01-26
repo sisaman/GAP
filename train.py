@@ -8,7 +8,7 @@ with console.status('importing modules'):
     import numpy as np
     import torch
     from args import print_args
-    from datasets import Dataset
+    from data import Dataset
     from loggers import Logger
     from methods import GAP
     from utils import seed_everything, confidence_interval
