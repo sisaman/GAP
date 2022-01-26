@@ -171,7 +171,7 @@ class TopMFilter(NoisyMechanism):
             edge_index, _ = remove_self_loops(edge_index)
 
         if is_sparse:
-            data.adj_t = SparseTensor.from_edge_index(edge_index, sparse_sizes=(n, n))
+            data.adj_t = SparseTensor.from_edge_index(edge_index, sparse_sizes=(n, n)).t()
         else:
             data.edge_index = edge_index
 
