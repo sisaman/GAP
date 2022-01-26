@@ -35,26 +35,24 @@ def load_ogb(name, transform=None, **kwargs):
 
 
 class NeighborSampler(BaseTransform):
-    def __init__(self, max_out_degree: int, replace: bool = False, directed: bool = True):
-        self.num_neighbors = max_out_degree
-        self.replace = replace
-        self.directed = directed
+    def __init__(self, max_degree: int, with_replacement: bool = False):
+        self.num_neighbors = max_degree
+        self.replace = with_replacement
 
     def __call__(self, data):
         data.adj_t = data.adj_t.t()
-        self.colptr, self.row, self.perm = to_csc(data, device='cpu')
+        data = self.sample(data)
+        data.adj_t = data.adj_t.t()
+        return data
+
+    def sample(self, data):
+        colptr, row, perm = to_csc(data, device='cpu')
         index = torch.range(0, data.num_nodes-1, dtype=int)
         sample_fn = torch.ops.torch_sparse.neighbor_sample
         node, row, col, edge = sample_fn(
-            self.colptr,
-            self.row,
-            index,
-            [self.num_neighbors],
-            self.replace,
-            self.directed,
+            colptr, row, index, [self.num_neighbors], self.replace, True
         )
-        data = filter_data(data, node, row, col, edge, self.perm)
-        data.adj_t = data.adj_t.t()
+        data = filter_data(data, node, row, col, edge, perm)
         return data
 
 
