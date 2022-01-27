@@ -110,6 +110,12 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+# c++
+.ninja_deps
+.ninja_log
+build.ninja
+*.o
+
 # Pyre type checker
 .pyre/
 
