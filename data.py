@@ -15,6 +15,7 @@ import pandas as pd
 from scipy.io import loadmat
 from torch_geometric.data import Data, InMemoryDataset, download_url
 from sklearn.preprocessing import LabelEncoder
+from torch_sparse import SparseTensor
 from args import support_args
 
 
@@ -35,25 +36,19 @@ def load_ogb(name, transform=None, **kwargs):
 
 
 class NeighborSampler(BaseTransform):
-    def __init__(self, max_degree: int, with_replacement: bool = False):
-        self.num_neighbors = max_degree
-        self.replace = with_replacement
+    def __init__(self, max_degree: int):
+        self.max_deg = max_degree
 
     def __call__(self, data):
-        data.adj_t = data.adj_t.t()
-        data = self.sample(data)
-        data.adj_t = data.adj_t.t()
-        return data
-
-    def sample(self, data):
-        colptr, row, perm = to_csc(data, device='cpu')
-        index = torch.range(0, data.num_nodes-1, dtype=int)
-        sample_fn = torch.ops.torch_sparse.neighbor_sample
-        node, row, col, edge = sample_fn(
-            colptr, row, index, [self.num_neighbors], self.replace, True
-        )
-        data = filter_data(data, node, row, col, edge, perm)
-        return data
+        N = data.num_nodes
+        E = data.num_edges
+        adj = data.adj_t.t()
+        row, col, _ = adj.coo()
+        perm = torch.randperm(E)
+        row, col = row[perm], col[perm]
+        row, col = torch.ops.my_ops.sample_edge(row.tolist(), col.tolist(), N, self.max_deg)
+        adj = SparseTensor(row=row, col=col)
+        data.adj_t = adj.t()
 
 
 class FilterClassByCount(BaseTransform):
