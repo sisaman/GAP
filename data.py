@@ -57,12 +57,14 @@ class NeighborSampler(BaseTransform):
         N = data.num_nodes
         E = data.num_edges
         adj = data.adj_t.t()
+        device = adj.device()
         row, col, _ = adj.coo()
         perm = torch.randperm(E)
         row, col = row[perm], col[perm]
         row, col = self.edge_sampler(row.tolist(), col.tolist(), N, self.max_deg)
-        adj = SparseTensor(row=row, col=col)
+        adj = SparseTensor(row=row, col=col).to(device)
         data.adj_t = adj.t()
+        return data
 
 
 class FilterClassByCount(BaseTransform):
