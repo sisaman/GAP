@@ -200,7 +200,7 @@ class GAP:
             self.pma_mechanism.update(noise_scale=0)
             self.data = self.graph_mechanism(self.data)
 
-        sensitivity = 1 if self.dp_level == 'edge' else np.sqrt(self.max_degree+1)
+        sensitivity = 1 if self.dp_level == 'edge' else np.sqrt(self.max_degree)
         self.data = self.pma_mechanism(self.data, sensitivity=sensitivity)
         self.data.to('cpu', 'adj_t')
 
