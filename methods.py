@@ -52,6 +52,9 @@ class GAP:
             logging.warn('batch normalization is not supported for node-level DP, setting it to False')
             batch_norm = False
 
+        if encoder_layers == 0:
+            pre_epochs = 0
+
         self.dp_level = dp_level
         self.epsilon = epsilon
         self.delta = delta
