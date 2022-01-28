@@ -7,7 +7,6 @@ from console import console
 from rich.table import Table
 import torch
 from torch_geometric.utils import remove_self_loops, subgraph, from_scipy_sparse_matrix
-from torch_geometric.loader.utils import to_csc, filter_data
 from torch_geometric.datasets import Reddit
 from torch_geometric.transforms import Compose, BaseTransform, RemoveIsolatedNodes, ToSparseTensor, RandomNodeSplit
 from ogb.nodeproppred import PygNodePropPredDataset
@@ -17,6 +16,7 @@ from torch_geometric.data import Data, InMemoryDataset, download_url
 from sklearn.preprocessing import LabelEncoder
 from torch_sparse import SparseTensor
 from args import support_args
+import torch.utils.cpp_extension
 
 
 def load_ogb(name, transform=None, **kwargs):
@@ -38,6 +38,20 @@ def load_ogb(name, transform=None, **kwargs):
 class NeighborSampler(BaseTransform):
     def __init__(self, max_degree: int):
         self.max_deg = max_degree
+        
+        try:
+            edge_sampler = torch.ops.my_ops.sample_edge
+        except RuntimeError:
+            torch.utils.cpp_extension.load(
+                name="sample",
+                sources=['csrc/sample.cpp'],
+                build_directory='csrc',
+                is_python_module=False,
+                verbose=True,
+            )
+            edge_sampler = torch.ops.my_ops.sample_edge
+        
+        self.edge_sampler = edge_sampler
 
     def __call__(self, data):
         N = data.num_nodes
@@ -46,7 +60,7 @@ class NeighborSampler(BaseTransform):
         row, col, _ = adj.coo()
         perm = torch.randperm(E)
         row, col = row[perm], col[perm]
-        row, col = torch.ops.my_ops.sample_edge(row.tolist(), col.tolist(), N, self.max_deg)
+        row, col = self.edge_sampler(row.tolist(), col.tolist(), N, self.max_deg)
         adj = SparseTensor(row=row, col=col)
         data.adj_t = adj.t()
 
