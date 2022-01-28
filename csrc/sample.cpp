@@ -14,7 +14,7 @@ sample_edge(const vector<int64_t>& row, const vector<int64_t>& col, const int64_
   vector<int64_t> row_sampled; row_sampled.reserve(num_nodes * max_deg);
   vector<int64_t> col_sampled; col_sampled.reserve(num_nodes * max_deg);
   
-  for (int i = 0; i < num_edges; i++)
+  for (int i = 0; i < num_edges; ++i)
   {
     int u = row[i];
     int v = col[i];
@@ -23,8 +23,8 @@ sample_edge(const vector<int64_t>& row, const vector<int64_t>& col, const int64_
     {
       row_sampled.push_back(u);
       col_sampled.push_back(v);
-      deg[v]++;
-      deg[u]++;
+      ++deg[v];
+      ++deg[u];
     }
   }
 
