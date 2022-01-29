@@ -82,12 +82,7 @@ class FilterClassByCount(BaseTransform):
         data.y = y.argmax(dim=1)
 
         if self.remove_unlabeled:
-            data.x = data.x[mask]
-            data.y = data.y[mask]
-            data.train_mask = data.train_mask[mask]
-            data.val_mask = data.val_mask[mask]
-            data.test_mask = data.test_mask[mask]
-            data.edge_index, _ = subgraph(subset=mask, edge_index=data.edge_index, relabel_nodes=True, num_nodes=data.num_nodes)
+            data = data.subgraph(mask)
         else:
             data.y[~mask] = -1                # set filtered nodes as unlabeled
             data.train_mask = data.train_mask & mask
