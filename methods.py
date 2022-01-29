@@ -4,11 +4,12 @@ import numpy as np
 import logging
 from torch.optim import Adam, SGD
 from args import support_args
-from privacy import TopMFilter, NoisySGD, PMA, ComposedNoisyMechanism
+from privacy import GNNBasedNoisySGD, TopMFilter, NoisySGD, PMA, ComposedNoisyMechanism
 from torch.utils.data import TensorDataset
 from trainer import Trainer
 from data import NeighborSampler, PoissonDataLoader
 from models import GraphSAGEClassifier, MultiStageClassifier, supported_activations
+from torch_geometric.loader import NeighborLoader
 
 
 @support_args
@@ -246,13 +247,17 @@ class GAP:
 
 @support_args
 class GraphSAGEModel:
+    supported_dp_levels = {'edge', 'node'}
+
     def __init__(self,
                  num_classes,
+                 dp_level:      dict(help='level of privacy protection', option='-l', choices=supported_dp_levels) = 'edge',
                  epsilon:       dict(help='DP epsilon parameter', option='-e') = np.inf,
                  delta:         dict(help='DP delta parameter; if "auto", sets a proper value based on data size', option='-d') = 'auto',
+                 max_degree:    dict(help='max degree per each node (ignored for edge-level DP)') = 0,
                  hidden_dim:    dict(help='dimension of the hidden layers') = 16,
                  encoder_layers:dict(help='number of encoder MLP layers') = 2,
-                 mp_layers:     dict(help='number of GNN layers') = 2,
+                 mp_layers:     dict(help='number of GNN layers') = 1,
                  post_layers:   dict(help='number of post-processing MLP layers') = 1,
                  activation:    dict(help='type of activation function', choices=supported_activations) = 'selu',
                  dropout:       dict(help='dropout rate (between zero and one)') = 0.0,
@@ -262,17 +267,34 @@ class GraphSAGEModel:
                  weight_decay:  dict(help='weight decay (L2 penalty)') = 0.0,
                  cpu:           dict(help='if True, then model is trained on CPU') = False,
                  epochs:        dict(help='number of epochs for training') = 100,
+                 batch_size:    dict(help='batch size (if zero, performs full-batch training)') = 0,
+                 max_grad_norm: dict(help='maximum norm of the per-sample gradients (ignored for edge-level DP)') = 1.0,
                  use_amp:       dict(help='use automatic mixed precision training') = False,
                  ):
 
+        assert mp_layers >= 1
+        assert dp_level == 'edge' or mp_layers == 1
+        assert dp_level == 'edge' or max_degree > 0 
+        assert dp_level == 'edge' or batch_size > 0
+
+        if dp_level == 'node' and batch_norm:
+            logging.warn('batch normalization is not supported for node-level DP, setting it to False')
+            batch_norm = False
+
+        self.dp_level = dp_level
         self.epsilon = epsilon
         self.delta = delta
+        self.max_degree = max_degree
         self.encoder_layers = encoder_layers
+        self.mp_layers = mp_layers
+        self.post_layers = post_layers
         self.device = 'cpu' if cpu else 'cuda'
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.optimizer_name = optimizer
         self.epochs = epochs
+        self.batch_size = batch_size
+        self.max_grad_norm = max_grad_norm
         self.use_amp = use_amp
         self.noise_scale = 0.0 # used to save noise calibration results
 
@@ -293,7 +315,19 @@ class GraphSAGEModel:
         self.classifier.reset_parameters()
 
     def init_privacy_mechanisms(self):
-        self.graph_mechanism = TopMFilter(noise_scale=self.noise_scale)
+        if self.dp_level == 'edge':
+            mech = TopMFilter(noise_scale=self.noise_scale)
+            self.graph_mechanism = mech
+        else:
+            mech = GNNBasedNoisySGD(
+                noise_scale=self.noise_scale, 
+                dataset_size=self.data.train_mask.sum().item(),
+                batch_size=self.batch_size, 
+                epochs=self.epochs,
+                max_grad_norm=self.max_grad_norm,
+                max_degree=self.max_degree,
+            )
+            self.training_noisy_sgd = mech
 
         with console.status('calibrating noise to privacy budget'):
             if self.delta == 'auto':
@@ -302,7 +336,7 @@ class GraphSAGEModel:
                 else:
                     self.delta = 1. / (10 ** len(str(self.data.num_edges)))
                 logging.info('delta = %.0e', self.delta)
-            self.noise_scale = self.graph_mechanism.calibrate(eps=self.epsilon, delta=self.delta)
+            self.noise_scale = mech.calibrate(eps=self.epsilon, delta=self.delta)
             logging.info(f'noise scale: {self.noise_scale:.4f}\n')
 
     def fit(self, data):
@@ -312,8 +346,12 @@ class GraphSAGEModel:
         with console.status(f'moving data to {self.device}'):
             self.data.to(self.device)
 
-        with console.status('perturbing graph structure'):
-            self.data = self.graph_mechanism(self.data)
+        if self.dp_level == 'node':
+            with console.status('bounding the number of neighbors per node'):
+                self.data = NeighborSampler(self.max_degree)(self.data)
+        else:
+            with console.status('perturbing graph structure'):
+                self.data = self.graph_mechanism(self.data)
 
         logging.info('training classifier...')
         return self.train_classifier()
@@ -326,18 +364,36 @@ class GraphSAGEModel:
             use_amp=self.use_amp, 
             monitor='val/acc', monitor_mode='max', 
             device=self.device,
+            dp_mechanism=self.training_noisy_sgd if self.dp_level == 'node' else None,
         )
 
         metrics = trainer.fit(
             model=self.classifier, 
             optimizer=self.configure_optimizers(self.classifier),
-            train_dataloader=[self.data], 
-            val_dataloader=[self.data],
-            test_dataloader=[self.data],
+            train_dataloader=self.data_loader('train'), 
+            val_dataloader=self.data_loader('val'),
+            test_dataloader=self.data_loader('test'),
             checkpoint=False,
         )
 
         return metrics
+
+    def data_loader(self, stage):
+        if self.batch_size == 0:
+            self.data.batch_size = self.data.num_nodes
+            return [self.data]
+        else:
+            num_neighbors = self.max_degree if self.max_degree > 0 else -1
+            return NeighborLoader(
+                data=self.data, 
+                num_neighbors=[num_neighbors]*self.mp_layers, 
+                input_nodes=self.data[f'{stage}_mask'],
+                replace=False,
+                batch_size=self.batch_size,
+                shuffle=True,
+                num_workers=6,
+            )
+
 
     def configure_optimizers(self, model):
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
