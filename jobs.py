@@ -96,7 +96,7 @@ class JobManager:
 
     def status(self):
         refresh_interval = 5
-        with console.status('looking for failed jobs ...'):
+        with console.status('looking for failed jobs'):
             try:
                 failed_ids = set()
                 while True:
