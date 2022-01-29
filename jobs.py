@@ -1,3 +1,4 @@
+from email.policy import default
 from console import console
 import logging
 import os
@@ -53,7 +54,7 @@ class JobManager:
                 f'#$ -N {self.name}-{begin}-{end}\n',
                 f'#$ -S /bin/bash\n',
                 f'#$ -P ai4media\n',
-                f'#$ -l pytorch,sgpu,gpumem=16\n',
+                f'#$ -l sgpu,gpumem={self.args.gpumem}\n',
                 f'#$ -t {begin}-{end}\n',
                 f'#$ -o {self.output_dir}\n',
                 f'#$ -e {self.output_dir}\n',
@@ -141,7 +142,8 @@ class JobManager:
         parser.add_argument('-f', '--file', type=str, required=True, help='jobs file name')
         command_subparser = parser.add_subparsers(dest='command')
 
-        command_subparser.add_parser('submit')
+        parser_command = command_subparser.add_parser('submit')
+        parser_command.add_argument('--gpumem', type=int, required=False, default=10, help='minimum required GPU memory in GB')
         command_subparser.add_parser('status')
 
         parser_resubmit = command_subparser.add_parser('resubmit')
