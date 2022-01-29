@@ -28,6 +28,7 @@ class InfMechanism(mechanisms.Mechanism):
 
 class GaussianMechanism(mechanisms.ExactGaussianMechanism):
     def __init__(self, noise_scale):
+        # "noise_scale" is the std of the noise divide by the L2 sensitivity
         self.noise_scale = noise_scale
         super().__init__(sigma=noise_scale)
 
@@ -41,6 +42,7 @@ class GaussianMechanism(mechanisms.ExactGaussianMechanism):
 
 class LaplaceMechanism(mechanisms.LaplaceMechanism):
     def __init__(self, noise_scale):
+        # "noise_scale" is the Laplace scale parameter divided by the L1 sensitivity
         self.noise_scale = noise_scale
         super().__init__(b=noise_scale)
 
@@ -54,6 +56,7 @@ class LaplaceMechanism(mechanisms.LaplaceMechanism):
 
 class NoisyMechanism(mechanisms.Mechanism):
     def __init__(self, noise_scale):
+        # "noise_scale" is the std of the noise divide by the sensitivity
         super().__init__()
         self.name = 'NoisyMechanism'
         self.params = {'noise_scale': noise_scale}
@@ -213,6 +216,65 @@ class NoisySGD(NoisyMechanism):
                 noise_multiplier=self.params['noise_scale'],
                 max_grad_norm=self.params['max_grad_norm'],
                 poisson_sampling=not isinstance(data_loader, PoissonDataLoader),
+                **kwargs
+            )
+
+        return module, optimizer, data_loader
+
+
+class GNNBasedNoisySGD(NoisyMechanism):
+    def __init__(self, noise_scale, dataset_size, batch_size, epochs, max_grad_norm, max_degree):
+        super().__init__(noise_scale)
+        self.name = 'NoisySGD'
+        self.params = {
+            'noise_scale': noise_scale, 
+            'dataset_size': dataset_size, 
+            'batch_size': batch_size, 
+            'epochs': epochs,
+            'max_grad_norm': max_grad_norm,
+            'max_degree': max_degree,
+        }
+
+        if epochs == 0:
+            mech = ZeroMechanism()
+            self.params['noise_scale'] = 0.0
+            self.set_all_representation(mech)
+        elif noise_scale == 0.0:
+            mech = InfMechanism()
+            self.set_all_representation(mech)
+        else:
+            N = self.params['dataset_size']
+            K = self.params['max_degree']
+            m = self.params['batch_size']
+            C = self.params['max_grad_norm']
+            T = self.params['epochs']
+            DeltaK = 2 * (K + 1) * C
+            
+            if not hasattr(self, 'rho'):
+                self.rho = np.random.hypergeometric(ngood=K+1, nbad=N-K-1, nsample=m, size=1000000)
+
+            def RDP(alpha):
+                sigma = self.params['noise_scale'] * DeltaK
+                expected_rho = np.exp(alpha * (alpha-1) * 2 * self.rho**2 * C**2 / sigma**2).mean()
+                gamma = np.log(expected_rho) / (alpha - 1)
+                return gamma * T
+
+            self.propagate_updates(RDP, type_of_update='RDP')
+
+    def __call__(self, module, optimizer, data_loader, **kwargs):
+        if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
+            
+            K = self.params['max_degree']
+            C = self.params['max_grad_norm']
+            DeltaK = 2 * (K + 1) * C
+
+            _, optimizer, data_loader = PrivacyEngine().make_private(
+                module=module,
+                optimizer=optimizer,
+                data_loader=data_loader,
+                noise_multiplier=self.params['noise_scale'],
+                max_grad_norm=DeltaK,
+                poisson_sampling=False,
                 **kwargs
             )
 
