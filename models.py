@@ -3,7 +3,8 @@ import torch
 import torch.nn.functional as F
 from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear, Module, LazyBatchNorm1d, BatchNorm1d
 from opacus.grad_sample import register_grad_sampler
-from torch_geometric.nn import GraphSAGE
+import torch_geometric
+from torch_geometric.nn import GraphSAGE as PyGraphSAGE
 
 
 supported_activations = {
@@ -14,6 +15,14 @@ supported_activations = {
 
 
 @register_grad_sampler(LazyLinear)
+def compute_lazy_linear_grad_sample(layer, activations, backprops):
+    gs = torch.einsum("n...i,n...j->nij", backprops, activations)
+    ret = {layer.weight: gs}
+    if layer.bias is not None:
+        ret[layer.bias] = torch.einsum("n...k->nk", backprops)
+    return ret
+
+@register_grad_sampler(torch_geometric.nn.Linear)
 def compute_lazy_linear_grad_sample(layer, activations, backprops):
     gs = torch.einsum("n...i,n...j->nij", backprops, activations)
     ret = {layer.weight: gs}
@@ -150,11 +159,18 @@ class MultiStageClassifier(Module):
             del self.autograd_grad_sample_hooks
 
 
-class GraphSAGEClassifier(Module):
-    supported_combinations = {
-        'cat', 'sum', 'max', 'mean', 'att'   ### TODO implement attention
-    }
+class GraphSAGE(PyGraphSAGE):
+    def __init__(self, in_channels, hidden_channels, num_layers, out_channels=None, 
+                 dropout=0.0, act=ReLU(inplace=True), norm=None, jk='last', **kwargs):
+        super().__init__(in_channels=in_channels, hidden_channels=hidden_channels, num_layers=num_layers, 
+                         out_channels=out_channels, dropout=dropout, act=act, norm=norm, jk=jk, **kwargs)
+        if num_layers == 1:
+            self.convs = ModuleList([
+                self.init_conv(in_channels, out_channels, **kwargs)
+            ])
 
+
+class GraphSAGEClassifier(Module):
     def __init__(self, hidden_dim, output_dim, pre_layers, mp_layers, post_layers, 
                  activation, dropout, batch_norm):
 
@@ -183,7 +199,10 @@ class GraphSAGEClassifier(Module):
             dropout=dropout,
             act=supported_activations[activation](),
             norm=BatchNorm1d(hidden_dim) if batch_norm else None,
-            jk='cat'
+            jk='last',
+            aggr='add',
+            root_weight=True,
+            normalize=True,
         )
 
         self.bn2 = LazyBatchNorm1d() if batch_norm else False
@@ -219,8 +238,9 @@ class GraphSAGEClassifier(Module):
 
     def step(self, data, stage):
         mask = data[f'{stage}_mask']
-        target = data.y[mask]
-        preds = self(data.x, data.adj_t)[mask]
+        target = data.y[mask][:data.batch_size]
+        adj_t = data.adj_t[:data.num_nodes, :data.num_nodes]
+        preds = self(data.x, adj_t)[mask][:data.batch_size]
         acc = (preds.argmax(dim=1) == target).float().mean() * 100
         metrics = {f'{stage}/acc': acc}
 
@@ -239,3 +259,8 @@ class GraphSAGEClassifier(Module):
         self.pre_mlp.reset_parameters()
         self.gnn.reset_parameters()
         self.post_mlp.reset_parameters()
+
+        if hasattr(self, 'autograd_grad_sample_hooks'):
+            for hook in self.autograd_grad_sample_hooks:
+                hook.remove()
+            del self.autograd_grad_sample_hooks
