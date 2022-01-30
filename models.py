@@ -1,10 +1,10 @@
 from functools import partial
 import torch
 import torch.nn.functional as F
-from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, LazyLinear, Module, LazyBatchNorm1d, BatchNorm1d
+from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, Module, LazyBatchNorm1d, BatchNorm1d
 from opacus.grad_sample import register_grad_sampler
 import torch_geometric
-from torch_geometric.nn import GraphSAGE as PyGraphSAGE
+from torch_geometric.nn import GraphSAGE as PyGraphSAGE, Linear
 
 
 supported_activations = {
@@ -14,13 +14,13 @@ supported_activations = {
 }
 
 
-@register_grad_sampler(LazyLinear)
-def compute_lazy_linear_grad_sample(layer, activations, backprops):
-    gs = torch.einsum("n...i,n...j->nij", backprops, activations)
-    ret = {layer.weight: gs}
-    if layer.bias is not None:
-        ret[layer.bias] = torch.einsum("n...k->nk", backprops)
-    return ret
+# @register_grad_sampler(LazyLinear)
+# def compute_lazy_linear_grad_sample(layer, activations, backprops):
+#     gs = torch.einsum("n...i,n...j->nij", backprops, activations)
+#     ret = {layer.weight: gs}
+#     if layer.bias is not None:
+#         ret[layer.bias] = torch.einsum("n...k->nk", backprops)
+#     return ret
 
 @register_grad_sampler(torch_geometric.nn.Linear)
 def compute_lazy_linear_grad_sample(layer, activations, backprops):
@@ -39,7 +39,7 @@ class MLP(torch.nn.Module):
         self.activation = supported_activations[activation]()
 
         dimensions = [hidden_dim] * (num_layers - 1) + [output_dim] * (num_layers > 0)
-        self.layers = ModuleList([LazyLinear(dim) for dim in dimensions])
+        self.layers = ModuleList([Linear(-1, dim) for dim in dimensions])
         
         num_bns = batch_norm * (num_layers - 1)
         self.bns = ModuleList([LazyBatchNorm1d() for _ in range(num_bns)]) if batch_norm else []
@@ -116,6 +116,8 @@ class MultiStageClassifier(Module):
             return torch.cat(h_list, dim=-1)
         elif self.combination_type == 'sum':
             return torch.stack(h_list, dim=0).sum(dim=0)
+        elif self.combination_type == 'mean':
+            return torch.stack(h_list, dim=0).mean(dim=0)
         elif self.combination_type == 'max':
             return torch.stack(h_list, dim=0).max(dim=0).values
         elif self.combination_type == 'att':
