@@ -7,6 +7,7 @@ from autodp.transformer_zoo import ComposeGaussian, Composition, AmplificationBy
 from torch_geometric.utils import remove_self_loops, add_self_loops, contains_self_loops, coalesce
 from scipy.optimize import minimize_scalar
 from torch_sparse import SparseTensor
+from scipy.stats import hypergeom
 
 from data import PoissonDataLoader
 
@@ -243,37 +244,35 @@ class GNNBasedNoisySGD(NoisyMechanism):
             mech = InfMechanism()
             self.set_all_representation(mech)
         else:
-            N = self.params['dataset_size']
-            K = self.params['max_degree']
-            m = self.params['batch_size']
-            C = self.params['max_grad_norm']
-            T = self.params['epochs']
+            N = dataset_size
+            K = max_degree
+            m = batch_size
+            C = max_grad_norm
+            T = epochs * dataset_size // batch_size
             DeltaK = 2 * (K + 1) * C
             
-            if not hasattr(self, 'rho'):
-                self.rho = np.random.hypergeometric(ngood=K+1, nbad=N-K-1, nsample=m, size=1000000)
-
             def RDP(alpha):
-                sigma = self.params['noise_scale'] * DeltaK
-                expected_rho = np.exp(alpha * (alpha-1) * 2 * self.rho**2 * C**2 / sigma**2).mean()
+                sigma = noise_scale * DeltaK
+                expected_fn = lambda rho: np.exp(alpha * (alpha-1) * 2 * rho**2 * C**2 / sigma**2)
+                expected_rho = hypergeom(N, K+1, m).expect(expected_fn)
                 gamma = np.log(expected_rho) / (alpha - 1)
                 return gamma * T
 
             self.propagate_updates(RDP, type_of_update='RDP')
 
     def __call__(self, module, optimizer, data_loader, **kwargs):
-        if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
-            
-            K = self.params['max_degree']
-            C = self.params['max_grad_norm']
-            DeltaK = 2 * (K + 1) * C
+        noise_scale = self.params['noise_scale']
+        epochs = self.params['epochs']
+        K = self.params['max_degree']
+        C = self.params['max_grad_norm']
 
+        if noise_scale > 0.0 and epochs > 0:
             _, optimizer, data_loader = PrivacyEngine().make_private(
                 module=module,
                 optimizer=optimizer,
                 data_loader=data_loader,
-                noise_multiplier=self.params['noise_scale'],
-                max_grad_norm=DeltaK,
+                noise_multiplier=noise_scale * 2 * (K + 1),
+                max_grad_norm=C,
                 poisson_sampling=False,
                 **kwargs
             )
