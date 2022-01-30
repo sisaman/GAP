@@ -279,8 +279,8 @@ class GraphSAGEModel:
 
         assert mp_layers >= 1
         assert dp_level == 'edge' or mp_layers == 1
-        assert dp_level == 'edge' or max_degree > 0 
-        assert dp_level == 'edge' or batch_size > 0
+        assert dp_level == 'edge' or epsilon == np.inf or max_degree > 0 
+        assert dp_level == 'edge' or epsilon == np.inf or batch_size > 0
 
         if dp_level == 'node' and batch_norm:
             logging.warn('batch normalization is not supported for node-level DP, setting it to False')
@@ -352,8 +352,9 @@ class GraphSAGEModel:
             self.data.to(self.device)
 
         if self.dp_level == 'node':
-            with console.status('bounding the number of neighbors per node'):
-                self.data = NeighborSampler(self.max_degree)(self.data)
+            if self.max_degree > 0:
+                with console.status('bounding the number of neighbors per node'):
+                    self.data = NeighborSampler(self.max_degree)(self.data)
         else:
             with console.status('perturbing graph structure'):
                 self.data = self.graph_mechanism(self.data)
