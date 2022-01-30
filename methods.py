@@ -45,11 +45,11 @@ class GAP:
                  ):
 
         assert dp_level == 'edge' or perturbation == 'aggr'
-        assert dp_level == 'edge' or hops == 0 or max_degree > 0 
-        assert dp_level == 'edge' or batch_size > 0
+        assert dp_level == 'edge' or hops == 0 or epsilon == np.inf or max_degree > 0 
+        assert dp_level == 'edge' or epsilon == np.inf or batch_size > 0
         assert encoder_layers == 0 or pre_epochs > 0
 
-        if dp_level == 'node' and batch_norm:
+        if dp_level == 'node' and epsilon < np.inf and batch_norm:
             logging.warn('batch normalization is not supported for node-level DP, setting it to False')
             batch_norm = False
 
@@ -116,12 +116,14 @@ class GAP:
         elif self.dp_level == 'edge':
             mechanism_list = [self.pma_mechanism]
         elif self.dp_level == 'node':
-            dataset_size = len(self.data_loader('train').dataset)
+            dataset = self.data_loader('train').dataset
+            dataset_size = len(dataset)
+            batch_size = len(dataset) if self.batch_size == 0 else self.batch_size
 
             self.pretraining_noisy_sgd = NoisySGD(
                 noise_scale=self.noise_scale, 
                 dataset_size=dataset_size, 
-                batch_size=self.batch_size, 
+                batch_size=batch_size, 
                 epochs=self.pre_epochs,
                 max_grad_norm=self.max_grad_norm,
             )
@@ -129,7 +131,7 @@ class GAP:
             self.training_noisy_sgd = NoisySGD(
                 noise_scale=self.noise_scale, 
                 dataset_size=dataset_size, 
-                batch_size=self.batch_size, 
+                batch_size=batch_size, 
                 epochs=self.epochs,
                 max_grad_norm=self.max_grad_norm,
             )
@@ -161,13 +163,13 @@ class GAP:
         with console.status(f'moving data to {self.device}'):
             self.data.to(self.device)
 
-        logging.info('pretraining encoder module...')
+        logging.info('step 1: encoder module')
         self.pretrain_encoder()
 
-        with console.status('precomputing aggregation module'):
-            self.precompute_aggregations()
+        logging.info('step 2: aggregation module')
+        self.precompute_aggregations()
 
-        logging.info('training classification module...')
+        logging.info('step 3: classification module')
         return self.train_classifier()
 
     def pretrain_encoder(self):
@@ -198,14 +200,17 @@ class GAP:
             self.encoder.to('cpu')
 
     def precompute_aggregations(self):
-        if self.dp_level == 'node' and self.hops > 0:
-            self.data = NeighborSampler(self.max_degree)(self.data)
+        if self.dp_level == 'node' and self.hops > 0 and self.max_degree > 0:
+            with console.status('bounding the number of neighbors per node'):
+                self.data = NeighborSampler(self.max_degree)(self.data)
         elif self.perturbation == 'graph':
             self.pma_mechanism.update(noise_scale=0)
-            self.data = self.graph_mechanism(self.data)
+            with console.status('perturbing graph structure'):
+                self.data = self.graph_mechanism(self.data)
 
         sensitivity = 1 if self.dp_level == 'edge' else np.sqrt(self.max_degree)
-        self.data = self.pma_mechanism(self.data, sensitivity=sensitivity)
+        with console.status('computing aggregations'):
+            self.data = self.pma_mechanism(self.data, sensitivity=sensitivity)
         self.data.to('cpu', 'adj_t')
 
     def train_classifier(self):
