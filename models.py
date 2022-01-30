@@ -168,6 +168,7 @@ class GraphSAGEClassifier(Module):
     def __init__(self, hidden_dim, output_dim, pre_layers, mp_layers, post_layers, 
                  activation, dropout, batch_norm):
 
+        assert mp_layers > 0, 'Must have at least one message passing layer'
         super().__init__()
 
         self.pre_mlp = MLP(
@@ -189,7 +190,7 @@ class GraphSAGEClassifier(Module):
             in_channels=-1,
             hidden_channels=hidden_dim,
             num_layers=mp_layers,
-            out_channels=output_dim,
+            out_channels=output_dim if post_layers == 0 else hidden_dim,
             dropout=dropout,
             act=supported_activations[activation](),
             norm=BatchNorm1d(hidden_dim) if batch_norm else None,
