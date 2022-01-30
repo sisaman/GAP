@@ -1,7 +1,7 @@
 from functools import partial
 import torch
 import torch.nn.functional as F
-from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, Module, LazyBatchNorm1d, BatchNorm1d
+from torch.nn import SELU, ModuleList, Dropout, ReLU, Tanh, Module, BatchNorm1d, BatchNorm1d
 from opacus.grad_sample import register_grad_sampler
 import torch_geometric
 from torch_geometric.nn import GraphSAGE as PyGraphSAGE, Linear
@@ -13,14 +13,6 @@ supported_activations = {
     'tanh': Tanh,
 }
 
-
-# @register_grad_sampler(LazyLinear)
-# def compute_lazy_linear_grad_sample(layer, activations, backprops):
-#     gs = torch.einsum("n...i,n...j->nij", backprops, activations)
-#     ret = {layer.weight: gs}
-#     if layer.bias is not None:
-#         ret[layer.bias] = torch.einsum("n...k->nk", backprops)
-#     return ret
 
 @register_grad_sampler(torch_geometric.nn.Linear)
 def compute_lazy_linear_grad_sample(layer, activations, backprops):
@@ -42,7 +34,7 @@ class MLP(torch.nn.Module):
         self.layers = ModuleList([Linear(-1, dim) for dim in dimensions])
         
         num_bns = batch_norm * (num_layers - 1)
-        self.bns = ModuleList([LazyBatchNorm1d() for _ in range(num_bns)]) if batch_norm else []
+        self.bns = ModuleList([BatchNorm1d(hidden_dim) for _ in range(num_bns)]) if batch_norm else []
         
         self.reset_parameters()
 
@@ -87,7 +79,7 @@ class MultiStageClassifier(Module):
             )] * num_stages
         )
 
-        self.bn = LazyBatchNorm1d() if batch_norm else False
+        self.bn = BatchNorm1d(hidden_dim * num_stages) if batch_norm else False
         self.dropout = Dropout(dropout, inplace=True)
         self.activation = supported_activations[activation]()
 
@@ -188,7 +180,7 @@ class GraphSAGEClassifier(Module):
         )
 
         self.batch_norm = batch_norm
-        self.bn1 = LazyBatchNorm1d() if batch_norm else False
+        self.bn1 = BatchNorm1d(hidden_dim) if batch_norm else False
         self.dropout1 = Dropout(dropout, inplace=True)
         self.activation1 = supported_activations[activation]()
         self.pre_layers = pre_layers
@@ -207,7 +199,7 @@ class GraphSAGEClassifier(Module):
             normalize=True,
         )
 
-        self.bn2 = LazyBatchNorm1d() if batch_norm else False
+        self.bn2 = BatchNorm1d(hidden_dim) if batch_norm else False
         self.dropout2 = Dropout(dropout, inplace=True)
         self.activation2 = supported_activations[activation]()
         self.post_layers = post_layers
