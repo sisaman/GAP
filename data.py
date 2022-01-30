@@ -47,7 +47,7 @@ class NeighborSampler(BaseTransform):
                 sources=['csrc/sample.cpp'],
                 build_directory='csrc',
                 is_python_module=False,
-                verbose=True,
+                verbose=False,
             )
             edge_sampler = torch.ops.my_ops.sample_edge
         
