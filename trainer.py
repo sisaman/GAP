@@ -80,7 +80,7 @@ class Trainer:
         else:
             raise Exception('No checkpoint found')
 
-    def fit(self, model, optimizer, train_dataloader, val_dataloader, test_dataloader=None, checkpoint=False):
+    def fit(self, model, optimizer, train_dataloader, val_dataloader=None, test_dataloader=None, checkpoint=False):
         self.reset()
         self.model = model.to(self.device)
         self.model.train()
@@ -97,11 +97,17 @@ class Trainer:
             os.makedirs('checkpoints', exist_ok=True)
             self.checkpoint_path = os.path.join('checkpoints', f'{uuid.uuid1()}.pt')
 
+        if val_dataloader is None:
+            val_dataloader = []
+
+        if test_dataloader is None:
+            test_dataloader = []
+
         self.progress = TrainerProgress(
             num_epochs=self.epochs, 
             num_train_steps=len(train_dataloader), 
             num_val_steps=len(val_dataloader), 
-            num_test_steps=len(test_dataloader) if test_dataloader else 0,
+            num_test_steps=len(test_dataloader),
         )
         
         with self.progress:
@@ -114,25 +120,28 @@ class Trainer:
                 self.train_loop(train_dataloader, optimizer, scaler)
                 metrics.update(self.aggregate_metrics(stage='train'))
                     
-                if self.val_interval:
-                    if epoch % self.val_interval == 0:
+                if self.val_interval and epoch % self.val_interval == 0:
+
+                    # validation loop
+                    if val_dataloader:
                         self.validation_loop(val_dataloader, 'val')
                         metrics.update(self.aggregate_metrics(stage='val'))
 
-                        if test_dataloader:
-                            self.validation_loop(test_dataloader, 'test')
-                            metrics.update(self.aggregate_metrics(stage='test'))
+                    # test loop
+                    if test_dataloader:
+                        self.validation_loop(test_dataloader, 'test')
+                        metrics.update(self.aggregate_metrics(stage='test'))
 
-                        if self.performs_better(metrics):
-                            self.best_metrics = metrics
-                            num_epochs_without_improvement = 0
+                    if self.performs_better(metrics):
+                        self.best_metrics = metrics
+                        num_epochs_without_improvement = 0
 
-                            if checkpoint:
-                                torch.save(self.model.state_dict(), self.checkpoint_path)
-                        else:
-                            num_epochs_without_improvement += 1
-                            if num_epochs_without_improvement >= self.patience > 0:
-                                break
+                        if checkpoint:
+                            torch.save(self.model.state_dict(), self.checkpoint_path)
+                    else:
+                        num_epochs_without_improvement += 1
+                        if num_epochs_without_improvement >= self.patience > 0:
+                            break
                 else:
                     self.best_metrics = metrics
 
