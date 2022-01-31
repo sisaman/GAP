@@ -21,39 +21,39 @@ class GAP:
                  num_classes,
                  dp_level:      dict(help='level of privacy protection', option='-l', choices=supported_dp_levels) = 'edge',
                  epsilon:       dict(help='DP epsilon parameter', option='-e') = np.inf,
-                 delta:         dict(help='DP delta parameter; if "auto", sets a proper value based on data size', option='-d') = 'auto',
+                 delta:         dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d') = 'auto',
                  perturbation:  dict(help='perturbation method', option='-p', choices=supported_perturbations) = 'aggr',
                  hops:          dict(help='number of hops', option='-k') = 2,
-                 max_degree:    dict(help='max degree per each node (ignored for edge-level DP)') = 10,
+                 max_degree:    dict(help='max degree to sample per each node (if -1, disables degree sampling)') = -1,
                  hidden_dim:    dict(help='dimension of the hidden layers') = 16,
                  encoder_layers:dict(help='number of encoder MLP layers') = 2,
                  pre_layers:    dict(help='number of pre-combination MLP layers') = 1,
                  post_layers:   dict(help='number of post-combination MLP layers') = 1,
                  combine:       dict(help='combination type of transformed hops', choices=MultiStageClassifier.supported_combinations) = 'cat',
                  activation:    dict(help='type of activation function', choices=supported_activations) = 'selu',
-                 dropout:       dict(help='dropout rate (between zero and one)') = 0.0,
-                 batch_norm:    dict(help='if True, then model uses batch normalization') = True,
+                 dropout:       dict(help='dropout rate') = 0.0,
+                 batch_norm:    dict(help='if true, then model uses batch normalization') = True,
                  optimizer:     dict(help='optimization algorithm', choices=['sgd', 'adam']) = 'adam',
                  learning_rate: dict(help='learning rate', option='--lr') = 0.01,
                  weight_decay:  dict(help='weight decay (L2 penalty)') = 0.0,
-                 cpu:           dict(help='if True, then model is trained on CPU') = False,
-                 pre_epochs:    dict(help='number of epochs for pre-training') = 100,
+                 cpu:           dict(help='if true, then model is trained on CPU') = False,
+                 pre_epochs:    dict(help='number of epochs for pre-training (ignored if encoder_layers=0)') = 100,
                  epochs:        dict(help='number of epochs for training') = 100,
-                 batch_size:    dict(help='batch size (if zero, performs full-batch training)') = 0,
-                 max_grad_norm: dict(help='maximum norm of the per-sample gradients (ignored for edge-level DP)') = 1.0,
+                 batch_size:    dict(help='batch size (if -1, performs full-batch training)') = -1,
+                 max_grad_norm: dict(help='maximum norm of the per-sample gradients (ignored if dp_level=edge)') = 1.0,
                  use_amp:       dict(help='use automatic mixed precision training') = False,
                  ):
 
-        assert dp_level == 'edge' or perturbation == 'aggr'
-        assert dp_level == 'edge' or hops == 0 or epsilon == np.inf or max_degree > 0 
-        assert dp_level == 'edge' or epsilon == np.inf or batch_size > 0
-        assert encoder_layers == 0 or pre_epochs > 0
+        assert not (dp_level == 'node' and perturbation == 'graph'), 'graph perturbation is not supported for node-level DP'
+        assert not (dp_level == 'node' and epsilon < np.inf and hops > 0 and max_degree <= 0), 'max_degree must be positive for node-level DP'
+        assert not (dp_level == 'node' and epsilon < np.inf and batch_size <= 0), 'batch_size must be positive for node-level DP'
 
         if dp_level == 'node' and epsilon < np.inf and batch_norm:
-            logging.warn('batch normalization is not supported for node-level DP, setting it to False')
+            logging.warn('batch normalization is not supported for node-level DP, setting batch_norm to False')
             batch_norm = False
 
-        if encoder_layers == 0:
+        if encoder_layers == 0 and pre_epochs > 0:
+            logging.info('encoder is not available, setting pre_epochs to 0')
             pre_epochs = 0
 
         self.dp_level = dp_level
@@ -118,7 +118,7 @@ class GAP:
         elif self.dp_level == 'node':
             dataset = self.data_loader('train').dataset
             dataset_size = len(dataset)
-            batch_size = len(dataset) if self.batch_size == 0 else self.batch_size
+            batch_size = len(dataset) if self.batch_size <= 0 else self.batch_size
 
             self.pretraining_noisy_sgd = NoisySGD(
                 noise_scale=self.noise_scale, 
@@ -137,7 +137,6 @@ class GAP:
             )
 
             mechanism_list = [self.pretraining_noisy_sgd, self.pma_mechanism, self.training_noisy_sgd]
-
 
         composed_mech = ComposedNoisyMechanism(
             noise_scale=self.noise_scale,
@@ -242,7 +241,7 @@ class GAP:
         x = self.data.x[mask]
         y = self.data.y[mask]
         dataset = TensorDataset(x, y)
-        batch_size = len(dataset) if self.batch_size == 0 else self.batch_size
+        batch_size = len(dataset) if self.batch_size <= 0 else self.batch_size
         return PoissonDataLoader(dataset, batch_size=batch_size)
 
     def configure_optimizers(self, model):
@@ -258,29 +257,29 @@ class GraphSAGEModel:
                  num_classes,
                  dp_level:      dict(help='level of privacy protection', option='-l', choices=supported_dp_levels) = 'edge',
                  epsilon:       dict(help='DP epsilon parameter', option='-e') = np.inf,
-                 delta:         dict(help='DP delta parameter; if "auto", sets a proper value based on data size', option='-d') = 'auto',
-                 max_degree:    dict(help='max degree per each node (ignored for edge-level DP)') = 0,
+                 delta:         dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d') = 'auto',
+                 max_degree:    dict(help='max degree to sample per each node (if -1, disables degree sampling)') = -1,
                  hidden_dim:    dict(help='dimension of the hidden layers') = 16,
                  encoder_layers:dict(help='number of encoder MLP layers') = 2,
                  mp_layers:     dict(help='number of GNN layers') = 1,
                  post_layers:   dict(help='number of post-processing MLP layers') = 1,
                  activation:    dict(help='type of activation function', choices=supported_activations) = 'selu',
-                 dropout:       dict(help='dropout rate (between zero and one)') = 0.0,
-                 batch_norm:     dict(help='if True, then model uses batch normalization') = True,
+                 dropout:       dict(help='dropout rate') = 0.0,
+                 batch_norm:     dict(help='if true, then model uses batch normalization') = True,
                  optimizer:     dict(help='optimization algorithm', choices=['sgd', 'adam']) = 'adam',
                  learning_rate: dict(help='learning rate', option='--lr') = 0.01,
                  weight_decay:  dict(help='weight decay (L2 penalty)') = 0.0,
-                 cpu:           dict(help='if True, then model is trained on CPU') = False,
+                 cpu:           dict(help='if true, then model is trained on CPU') = False,
                  epochs:        dict(help='number of epochs for training') = 100,
-                 batch_size:    dict(help='batch size (if zero, performs full-batch training)') = 0,
-                 max_grad_norm: dict(help='maximum norm of the per-sample gradients (ignored for edge-level DP)') = 1.0,
+                 batch_size:    dict(help='batch size (if -1, performs full-batch training)') = -1,
+                 max_grad_norm: dict(help='maximum norm of the per-sample gradients (ignored if dp_level=edge)') = 1.0,
                  use_amp:       dict(help='use automatic mixed precision training') = False,
                  ):
 
-        assert mp_layers >= 1
-        assert dp_level == 'edge' or mp_layers == 1
-        assert dp_level == 'edge' or epsilon == np.inf or max_degree > 0 
-        assert dp_level == 'edge' or epsilon == np.inf or batch_size > 0
+        assert mp_layers >= 1, 'number of message-passing layers must be at least 1'
+        assert not (dp_level == 'node' and epsilon < np.inf and mp_layers > 1), 'node-level DP is not supported for more than one message-passing layer'
+        assert not (dp_level == 'node' and epsilon < np.inf and max_degree <= 0), 'max_degree must be positive for node-level DP'
+        assert not (dp_level == 'node' and epsilon < np.inf and batch_size <= 0), 'batch_size must be positive for node-level DP'
 
         if dp_level == 'node' and batch_norm:
             logging.warn('batch normalization is not supported for node-level DP, setting it to False')
@@ -351,10 +350,9 @@ class GraphSAGEModel:
         with console.status(f'moving data to {self.device}'):
             self.data.to(self.device)
 
-        if self.dp_level == 'node':
-            if self.max_degree > 0:
-                with console.status('bounding the number of neighbors per node'):
-                    self.data = NeighborSampler(self.max_degree)(self.data)
+        if self.dp_level == 'node' and self.max_degree > 0:
+            with console.status('bounding the number of neighbors per node'):
+                self.data = NeighborSampler(self.max_degree)(self.data)
         else:
             with console.status('perturbing graph structure'):
                 self.data = self.graph_mechanism(self.data)
@@ -385,21 +383,19 @@ class GraphSAGEModel:
         return metrics
 
     def data_loader(self, stage):
-        if self.batch_size == 0:
+        if self.batch_size <= 0:
             self.data.batch_size = self.data.num_nodes
             return [self.data]
         else:
-            num_neighbors = self.max_degree if self.max_degree > 0 else -1
             return NeighborLoader(
                 data=self.data, 
-                num_neighbors=[num_neighbors]*self.mp_layers, 
+                num_neighbors=[self.max_degree]*self.mp_layers, 
                 input_nodes=self.data[f'{stage}_mask'],
                 replace=False,
                 batch_size=self.batch_size,
                 shuffle=True,
                 num_workers=6,
             )
-
 
     def configure_optimizers(self, model):
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
