@@ -202,13 +202,13 @@ class Dataset:
     supported_datasets = {
         # main datasets
         'reddit': partial(Reddit, 
-            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassByCount(min_count=10000, remove_unlabeled=True)])
+            transform=Compose([RandomNodeSplit(num_val=0.1, num_test=0.15), FilterClassByCount(min_count=10000, remove_unlabeled=True)])
         ),
         'amazon': partial(load_ogb, name='ogbn-products', 
-            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassByCount(min_count=100000, remove_unlabeled=True)])
+            transform=Compose([RandomNodeSplit(num_val=0.1, num_test=0.15), FilterClassByCount(min_count=100000, remove_unlabeled=True)])
         ),
         'facebook': partial(Facebook100, name='UIllinois20', target='year', 
-            transform=Compose([RandomNodeSplit(num_val=0.05, num_test=0.1), FilterClassByCount(min_count=1000, remove_unlabeled=True)])
+            transform=Compose([RandomNodeSplit(num_val=0.1, num_test=0.15), FilterClassByCount(min_count=1000, remove_unlabeled=True)])
         ),
     }
 
