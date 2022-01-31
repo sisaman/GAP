@@ -8,7 +8,7 @@ import torch
 from args import support_args
 from loggers import Logger
 from torchmetrics import MeanMetric
-from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn
 
 
 @support_args
