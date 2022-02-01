@@ -4,7 +4,7 @@ import numpy as np
 import logging
 from torch.optim import Adam, SGD
 from args import support_args
-from privacy import GNNBasedNoisySGD, TopMFilter, NoisySGD, PMA, ComposedNoisyMechanism
+from privacy import GNNBasedNoisySGD, GaussianMechanism, TopMFilter, NoisySGD, PMA, ComposedNoisyMechanism
 from torch.utils.data import TensorDataset
 from trainer import Trainer
 from data import NeighborSampler, PoissonDataLoader
@@ -317,13 +317,15 @@ class GraphSAGEModel:
 
     def reset_parameters(self):
         self.classifier.reset_parameters()
+        if hasattr(self, 'noisy_aggr_hook'):
+            self.noisy_aggr_hook.remove()
 
     def init_privacy_mechanisms(self):
         if self.dp_level == 'edge':
             mech = TopMFilter(noise_scale=self.noise_scale)
             self.graph_mechanism = mech
         else:
-            mech = GNNBasedNoisySGD(
+            self.training_noisy_sgd = GNNBasedNoisySGD(
                 noise_scale=self.noise_scale, 
                 dataset_size=self.data.train_mask.sum().item(),
                 batch_size=self.batch_size, 
@@ -331,7 +333,16 @@ class GraphSAGEModel:
                 max_grad_norm=self.max_grad_norm,
                 max_degree=self.max_degree,
             )
-            self.training_noisy_sgd = mech
+            self.noisy_aggr_gm = GaussianMechanism(noise_scale=self.noise_scale)
+            mech = ComposedNoisyMechanism(
+                noise_scale=self.noise_scale,
+                mechanism_list=[self.training_noisy_sgd, self.noisy_aggr_gm], 
+                coeff_list=[1,1]
+            )
+            self.noisy_aggr_hook = self.classifier.gnn.convs[0].register_message_and_aggregate_forward_hook(
+                lambda module, inputs, output: 
+                    self.noisy_aggr_gm(data=output, sensitivity=np.sqrt(self.max_degree)) if not module.training else output
+            )
 
         with console.status('calibrating noise to privacy budget'):
             if self.delta == 'auto':
@@ -366,6 +377,7 @@ class GraphSAGEModel:
         trainer = Trainer(
             epochs=self.epochs, 
             use_amp=self.use_amp, 
+            val_interval=not(self.dp_level == 'node' and self.epsilon < np.inf),
             monitor='val/acc', monitor_mode='max', 
             device=self.device,
             dp_mechanism=self.training_noisy_sgd if self.dp_level == 'node' else None,
