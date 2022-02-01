@@ -27,34 +27,6 @@ class InfMechanism(mechanisms.Mechanism):
         self.params = {}
 
 
-class GaussianMechanism(mechanisms.ExactGaussianMechanism):
-    def __init__(self, noise_scale):
-        # "noise_scale" is the std of the noise divide by the L2 sensitivity
-        self.noise_scale = noise_scale
-        super().__init__(sigma=noise_scale)
-
-    def perturb(self, data, sensitivity):
-        std = self.noise_scale * sensitivity
-        return torch.normal(mean=data, std=std) if std else data
-
-    def __call__(self, data, sensitivity):
-        return self.perturb(data, sensitivity)
-
-
-class LaplaceMechanism(mechanisms.LaplaceMechanism):
-    def __init__(self, noise_scale):
-        # "noise_scale" is the Laplace scale parameter divided by the L1 sensitivity
-        self.noise_scale = noise_scale
-        super().__init__(b=noise_scale)
-
-    def perturb(self, data, sensitivity):
-        scale = self.noise_scale * sensitivity
-        return torch.distributions.Laplace(loc=data, scale=scale).sample() if scale else data
-
-    def __call__(self, data, sensitivity):
-        return self.perturb(data, sensitivity)
-
-
 class NoisyMechanism(mechanisms.Mechanism):
     def __init__(self, noise_scale):
         # "noise_scale" is the std of the noise divide by the sensitivity
@@ -98,12 +70,54 @@ class NoisyMechanism(mechanisms.Mechanism):
                 raise RuntimeError(f"eps_delta_calibrator fails to find a parameter:\n{results}")
 
 
+class GaussianMechanism(NoisyMechanism):
+    def __init__(self, noise_scale):
+        # "noise_scale" is the std of the noise divide by the L2 sensitivity
+        super().__init__(noise_scale=noise_scale)
+        gm = mechanisms.ExactGaussianMechanism(sigma=noise_scale)
+        self.name = 'GaussianMechanism'
+        self.set_all_representation(gm)
+
+    def perturb(self, data, sensitivity):
+        std = self.params['noise_scale'] * sensitivity
+        return torch.normal(mean=data, std=std) if std else data
+
+    def __call__(self, data, sensitivity):
+        return self.perturb(data, sensitivity)
+
+
+class LaplaceMechanism(NoisyMechanism):
+    def __init__(self, noise_scale):
+        # "noise_scale" is the Laplace scale parameter divided by the L1 sensitivity
+        super().__init__(noise_scale=noise_scale)
+        lm = mechanisms.LaplaceMechanism(b=noise_scale)
+        self.name = 'LaplaceMechanism'
+        self.set_all_representation(lm)
+
+    def perturb(self, data, sensitivity):
+        scale = self.params['noise_scale'] * sensitivity
+        return torch.distributions.Laplace(loc=data, scale=scale).sample() if scale else data
+
+    def __call__(self, data, sensitivity):
+        return self.perturb(data, sensitivity)
+
+
 class ComposedNoisyMechanism(NoisyMechanism):
     def __init__(self, noise_scale, mechanism_list, coeff_list):
         super().__init__(noise_scale)
         self.params = {'noise_scale': noise_scale, 'mechanism_list': mechanism_list, 'coeff_list': coeff_list}
         mechanism_list = [mech.update(noise_scale) for mech in mechanism_list]
         mech = Composition()(mechanism_list, coeff_list)
+        self.set_all_representation(mech)
+
+
+class ComposedGaussianMechanism(NoisyMechanism):
+    def __init__(self, noise_scale, mechanism_list, coeff_list):
+        super().__init__(noise_scale)
+        self.params = {'noise_scale': noise_scale, 'mechanism_list': mechanism_list, 'coeff_list': coeff_list}
+        mechanism_list = [mech.update(noise_scale) for mech in mechanism_list]
+        gm_list = [mechanisms.ExactGaussianMechanism(sigma=mech.params['noise_scale']) for mech in mechanism_list]
+        mech = ComposeGaussian()(gm_list, coeff_list)
         self.set_all_representation(mech)
 
 
@@ -144,7 +158,7 @@ class TopMFilter(NoisyMechanism):
         m = edge_index.shape[1]
         m_pert = self.mech_count.perturb(m, sensitivity=1)
         m_pert = round(m_pert.item())
-        eps_edges = 1 / self.mech_edges.noise_scale
+        eps_edges = 1 / self.mech_edges.params['noise_scale']
         
         theta = np.log((n * (n-1) / m_pert) - 1) / (2 * eps_edges) + 0.5
         if theta > 1:
@@ -293,7 +307,11 @@ class PMA(NoisyMechanism):
         elif noise_scale == 0.0:
             mech = InfMechanism()
         else:
-            mech = ComposeGaussian()([self.gm], [hops])
+            mech = ComposedGaussianMechanism(
+                noise_scale=noise_scale, 
+                mechanism_list=[self.gm], 
+                coeff_list=[hops]
+            )
 
         self.set_all_representation(mech)
 
