@@ -120,19 +120,19 @@ class Trainer:
                 self.train_loop(train_dataloader, optimizer, scaler)
                 metrics.update(self.aggregate_metrics(stage='train'))
 
+                # validation loop
+                if val_dataloader:
+                    self.validation_loop(val_dataloader, 'val')
+                    metrics.update(self.aggregate_metrics(stage='val'))
+
                 # test loop
                 if test_dataloader:
                     self.validation_loop(test_dataloader, 'test')
                     metrics.update(self.aggregate_metrics(stage='test'))
                     
-                if self.val_interval:
+                # update best metrics
+                if val_dataloader and self.val_interval:
                     if epoch % self.val_interval == 0:
-
-                        # validation loop
-                        if val_dataloader:
-                            self.validation_loop(val_dataloader, 'val')
-                            metrics.update(self.aggregate_metrics(stage='val'))
-
                         if self.performs_better(metrics):
                             self.best_metrics = metrics
                             num_epochs_without_improvement = 0
@@ -146,6 +146,7 @@ class Trainer:
                 else:
                     self.best_metrics = metrics
 
+                # log and update progress
                 if self.logger: self.logger.log(metrics)
                 self.progress.update('epoch', metrics=metrics, advance=1)
         
