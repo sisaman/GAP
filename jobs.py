@@ -61,6 +61,7 @@ class JobManager:
                 f'#$ -cwd\n',
                 f'#$ -V\n',
                 # f'export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:10240\n',
+                f'export CUDA_VISIBLE_DEVICES=0\n',
                 f'python jobs.py -f {self.file} exec --id $SGE_TASK_ID \n'
             ]
 
@@ -148,6 +149,7 @@ class JobManager:
 
         parser_resubmit = command_subparser.add_parser('resubmit')
         parser_resubmit.add_argument('-n', '--new-file', type=str, help='name of new jobs file', required=True)
+        parser_resubmit.add_argument('--gpumem', type=int, required=False, default=10, help='minimum required GPU memory in GB')
 
         parser_exec = command_subparser.add_parser('exec')
         parser_exec.add_argument('--id', type=int)
