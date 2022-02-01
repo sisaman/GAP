@@ -8,7 +8,7 @@ import torch
 from args import support_args
 from loggers import Logger
 from torchmetrics import MeanMetric
-from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn
+from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn, TextColumn
 
 
 @support_args
@@ -119,29 +119,30 @@ class Trainer:
                 # train loop
                 self.train_loop(train_dataloader, optimizer, scaler)
                 metrics.update(self.aggregate_metrics(stage='train'))
+
+                # test loop
+                if test_dataloader:
+                    self.validation_loop(test_dataloader, 'test')
+                    metrics.update(self.aggregate_metrics(stage='test'))
                     
-                if self.val_interval and epoch % self.val_interval == 0:
+                if self.val_interval:
+                    if epoch % self.val_interval == 0:
 
-                    # validation loop
-                    if val_dataloader:
-                        self.validation_loop(val_dataloader, 'val')
-                        metrics.update(self.aggregate_metrics(stage='val'))
+                        # validation loop
+                        if val_dataloader:
+                            self.validation_loop(val_dataloader, 'val')
+                            metrics.update(self.aggregate_metrics(stage='val'))
 
-                    # test loop
-                    if test_dataloader:
-                        self.validation_loop(test_dataloader, 'test')
-                        metrics.update(self.aggregate_metrics(stage='test'))
+                        if self.performs_better(metrics):
+                            self.best_metrics = metrics
+                            num_epochs_without_improvement = 0
 
-                    if self.performs_better(metrics):
-                        self.best_metrics = metrics
-                        num_epochs_without_improvement = 0
-
-                        if checkpoint:
-                            torch.save(self.model.state_dict(), self.checkpoint_path)
-                    else:
-                        num_epochs_without_improvement += 1
-                        if num_epochs_without_improvement >= self.patience > 0:
-                            break
+                            if checkpoint:
+                                torch.save(self.model.state_dict(), self.checkpoint_path)
+                        else:
+                            num_epochs_without_improvement += 1
+                            if num_epochs_without_improvement >= self.patience > 0:
+                                break
                 else:
                     self.best_metrics = metrics
 
