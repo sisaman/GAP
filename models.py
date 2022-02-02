@@ -63,10 +63,11 @@ class MultiStageClassifier(Module):
     }
 
     def __init__(self, num_stages, hidden_dim, output_dim, pre_layers, post_layers, 
-                 combination_type, activation, dropout, batch_norm):
+                 combination_type, normalize, activation, dropout, batch_norm):
 
         super().__init__()
         self.combination_type = combination_type
+        self.normalize = normalize
 
         self.pre_mlps = ModuleList([
             MLP(
@@ -96,7 +97,8 @@ class MultiStageClassifier(Module):
         x_stack = x_stack.permute(2, 0, 1) # (hop, batch, input_dim)
         h_list = [mlp(x) for x, mlp in zip(x_stack, self.pre_mlps)]
         h = self.combine(h_list)
-        h = F.normalize(h, p=2, dim=-1)
+        if self.normalize:
+            h = F.normalize(h, p=2, dim=-1)
         h = self.bn(h) if self.bn else h
         h = self.dropout(h)
         h = self.activation(h)
