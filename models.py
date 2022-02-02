@@ -167,7 +167,7 @@ class GraphSAGE(PyGraphSAGE):
 
 
 class GraphSAGEClassifier(Module):
-    def __init__(self, hidden_dim, output_dim, pre_layers, mp_layers, post_layers, 
+    def __init__(self, hidden_dim, output_dim, pre_layers, mp_layers, post_layers, normalize,
                  activation, dropout, batch_norm):
 
         assert mp_layers > 0, 'Must have at least one message passing layer'
@@ -187,6 +187,7 @@ class GraphSAGEClassifier(Module):
         self.dropout1 = Dropout(dropout, inplace=True)
         self.activation1 = supported_activations[activation]()
         self.pre_layers = pre_layers
+        self.normalize = normalize
 
         self.gnn = GraphSAGE(
             in_channels=-1,
@@ -222,6 +223,9 @@ class GraphSAGEClassifier(Module):
             x = self.bn1(x) if self.batch_norm else x
             x = self.dropout1(x)
             x = self.activation1(x)
+
+        if self.normalize:
+            x = F.normalize(x, p=2, dim=-1)
 
         h = self.gnn(x, adj_t)
 

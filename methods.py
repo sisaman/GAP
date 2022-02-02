@@ -310,6 +310,7 @@ class GraphSAGEModel:
             pre_layers=encoder_layers,
             mp_layers=mp_layers, 
             post_layers=post_layers, 
+            normalize=dp_level == 'node',
             activation=activation, 
             dropout=dropout, 
             batch_norm=batch_norm,
