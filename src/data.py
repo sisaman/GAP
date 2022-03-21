@@ -43,8 +43,8 @@ class NeighborSampler(BaseTransform):
             edge_sampler = torch.ops.my_ops.sample_edge
         except RuntimeError:
             torch.utils.cpp_extension.load(
-                name="sample",
-                sources=['csrc/sample.cpp'],
+                name="sampler",
+                sources=['csrc/sampler.cpp'],
                 build_directory='csrc',
                 is_python_module=False,
                 verbose=False,
