@@ -63,8 +63,8 @@ def main():
 
     command_subparser = init_parser.add_subparsers(dest='model', required=True, title='model architecture')
     command_parser = {
-        'gap': command_subparser.add_parser('gap', help='GAP model'),
-        'sage': command_subparser.add_parser('sage', help='GraphSAGE model')
+        'gap': command_subparser.add_parser('gap', help='GAP model', formatter_class=ArgumentDefaultsHelpFormatter),
+        'sage': command_subparser.add_parser('sage', help='GraphSAGE model', formatter_class=ArgumentDefaultsHelpFormatter),
     }
 
     for parser_name, parser in command_parser.items():
