@@ -127,10 +127,10 @@ output
 results
 expr
 .vscode
-*.ipynb
 test
 checkpoints
 TODO
 test.py
 plot_style.txt
 figs
+old
