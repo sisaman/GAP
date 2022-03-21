@@ -46,7 +46,7 @@ To reproduce the paper's results, please follow the below steps:
 2. Run ``sh jobs/experiments.sh`` to run all the experiments one by one. This will train all the methods and log the results to the WandB project you specified in step 1. 
 WARNING: This step will take a lot of time. For faster execution, consider running the commands in the jobs in parallel or using a distributed job scheduler.
 
-3. Run [results.ipynb](./results.ipynb) notebook to visualize the results as shown in the paper. It will fetch the experiment results from the WandB server, so you must set the same WandB username and project as in step 1 in this notebook as well.
+3. Run [results.ipynb](./results.ipynb) notebook to visualize the results as shown in the paper. It will fetch the experiment results from the WandB server, so you must set the same WandB username and project as in step 1 in this notebook as well. Note that we used the [Linux Libertine](https://libertine-fonts.org/) font in the figures, so you either need to have this font installed or change the font in the notebook.
 
 ### Training individual models
 
