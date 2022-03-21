@@ -4,7 +4,7 @@ This repository is the official implementation of the paper:
 [**GAP: Differentially Private Graph Neural Networks with Aggregation Perturbation**](https://arxiv.org/abs/2203.00949)
 
 ## Results
-<img src="https://i.imgur.com/Xlv0E7E.png" alt="results" width="400"/>
+<img src="https://i.imgur.com/Xlv0E7E.png" alt="results" width="500"/>
 
 ## Requirements
 
