@@ -5,11 +5,11 @@ from rich.highlighter import ReprHighlighter
 from rich import box
 from console import console
 from rich.table import Table
+from ogb.nodeproppred import PygNodePropPredDataset
 import torch
 from torch_geometric.utils import remove_self_loops, subgraph, from_scipy_sparse_matrix
 from torch_geometric.datasets import Reddit
 from torch_geometric.transforms import Compose, BaseTransform, RemoveIsolatedNodes, ToSparseTensor, RandomNodeSplit
-from ogb.nodeproppred import PygNodePropPredDataset
 import pandas as pd
 from scipy.io import loadmat
 from torch_geometric.data import Data, InMemoryDataset, download_url

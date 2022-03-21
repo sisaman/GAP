@@ -1,18 +1,18 @@
 import time
 from console import console
-from methods import GraphSAGEModel
 with console.status('importing modules'):
+    from data import Dataset
     import logging
     import sys
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
     import numpy as np
-    import torch
     from args import print_args
-    from data import Dataset
     from loggers import Logger
     from methods import GAP
+    from methods import GraphSAGEModel
     from utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
+    import torch
 
 
 def run(args):
