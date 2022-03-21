@@ -25,6 +25,16 @@ This code is implemented in Python 3.9, and requires the following modules:
 
 Refer to [requiresments.txt](./requirements.txt) for the tested versions of the above packages.
 
+### Notes
+1. The code includes a custome C++ operator or faster edge sampling required for the node-level DP methods. PyTorch will automatically build the C++ code at runtime, but you need to have a C++ compiler installed (usually it is handled automatically if you use conda).
+
+2. We use [Weights & Biases](https://docs.wandb.ai/) (WandB) to track the training progress and log experiment results. To replicate the results of the paper as described in the following, you need to have a WandB account. Otherwise, if you just want to train and evaluate the model, a WandB account is not required.
+
+3. The code requires autodp version 0.2.1b or later. You can install the latest version directly from the [GitHub repository](https://github.com/yuxiangw/autodp) using:
+```
+pip install git+https://github.com/yuxiangw/autodp
+```
+
 
 ## Usage
 
@@ -40,13 +50,20 @@ WARNING: This step will take a lot of time. For faster execution, consider runni
 
 ### Training individual models
 
-To train and evaluate the GAP model, run ``python src/train.py gap --help`` to see the list of available options.  
-For GraphSAGE-based models, you can also run ``python src/train.py sage --help`` for the list of parameters.
+To train and evaluate the GAP model, run 
+```
+python src/train.py gap --help
+``` 
+to see the list of available options. Analogously, you can run 
+```
+python src/train.py sage --help
+``` 
+for the list of parameters of the GraphSAGE model.
 
 
 ## Contact
 
-If you run into any problems or had any questions, please contact the author at: [sina.sajadmanesh@epfl.ch](mailto:sina.sajadmanesh@epfl.ch) or open an issue on [GitHub](https://github.com/sisaman/GAP).
+If you run into any problems or had any questions, please contact the author at: [sina.sajadmanesh@epfl.ch](mailto:sina.sajadmanesh@epfl.ch) or open an issue on [GitHub](https://github.com/sisaman/GAP/issues).
 
 
 ## Citation
