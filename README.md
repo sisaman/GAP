@@ -26,7 +26,7 @@ This code is implemented in Python 3.9, and requires the following modules:
 Refer to [requiresments.txt](./requirements.txt) for the tested versions of the above packages.
 
 ### Notes
-1. The code includes a custome C++ operator or faster edge sampling required for the node-level DP methods. PyTorch will automatically build the C++ code at runtime, but you need to have a C++ compiler installed (usually it is handled automatically if you use conda).
+1. The code includes a custome C++ operator for faster edge sampling required for the node-level DP methods. PyTorch will automatically build the C++ code at runtime, but you need to have a C++ compiler installed (usually it is handled automatically if you use conda).
 
 2. We use [Weights & Biases](https://docs.wandb.ai/) (WandB) to track the training progress and log experiment results. To replicate the results of the paper as described in the following, you need to have a WandB account. Otherwise, if you just want to train and evaluate the model, a WandB account is not required.
 
@@ -43,8 +43,8 @@ To reproduce the paper's results, please follow the below steps:
 
 1. Run [experiments.ipynb](./experiments.ipynb) notebook. It creates a file "jobs/experiments.sh" containing all individual commands for running the experiments in the paper. You must specify your WandB username and (optionally) project name in this notebook.
 
-2. Run ``sh jobs/experiments.sh`` to run all the experiments one by one. This will train all the methods and log the results to the WandB project you specified in step 1. 
-WARNING: This step will take a lot of time. For faster execution, consider running the commands in the jobs in parallel or using a distributed job scheduler.
+2. Run ``sh jobs/experiments.sh`` to run all the experiments one by one. This will train all the methods and log the results to the WandB project you specified in step 1.  
+WARNING: This step will take a lot of time. For faster execution, consider running the commands in parallel or using a distributed job scheduler.
 
 3. Run [results.ipynb](./results.ipynb) notebook to visualize the results as shown in the paper. It will fetch the experiment results from the WandB server, so you must set the same WandB username and project as in step 1 in this notebook as well. Note that we used the [Linux Libertine](https://libertine-fonts.org/) font in the figures, so you either need to have this font installed or change the font in the notebook.
 
@@ -63,7 +63,7 @@ for the list of parameters of the GraphSAGE model.
 
 ## Contact
 
-If you run into any problems or had any questions, please contact the author at: [sina.sajadmanesh@epfl.ch](mailto:sina.sajadmanesh@epfl.ch) or open an issue on [GitHub](https://github.com/sisaman/GAP/issues).
+Should you ran into any problems or had any questions, please get in touch via [email](mailto:sina.sajadmanesh@epfl.ch) or open an issue on [GitHub](https://github.com/sisaman/GAP/issues).
 
 
 ## Citation
