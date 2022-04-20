@@ -2,6 +2,7 @@ from console import console
 import torch
 import numpy as np
 import logging
+from time import time
 from torch.optim import Adam, SGD
 from args import support_args
 from privacy import GNNBasedNoisySGD, GaussianMechanism, NoisySGD, PMA, ComposedNoisyMechanism, AsymmetricRandResponse
@@ -152,10 +153,12 @@ class GAP:
 
     def fit(self, data):
         self.data = data
-        self.init_privacy_mechanisms()
         
         with console.status(f'moving data to {self.device}'):
             self.data.to(self.device)
+
+        start_time = time()
+        self.init_privacy_mechanisms()
 
         logging.info('step 1: encoder module')
         self.pretrain_encoder()
@@ -164,7 +167,12 @@ class GAP:
         self.precompute_aggregations()
 
         logging.info('step 3: classification module')
-        return self.train_classifier()
+        metrics = self.train_classifier()
+        
+        end_time = time()
+        metrics['time'] = end_time - start_time
+
+        return metrics
 
     def pretrain_encoder(self):
         if self.encoder_layers > 0:

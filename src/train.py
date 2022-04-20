@@ -35,13 +35,13 @@ def run(args):
         data = Data(**data_initial.to_dict())
 
         model.reset_parameters()
-        best_metrics = model.fit(data)
+        metrics = model.fit(data)
 
         ### process results ###
-        for metric, value in best_metrics.items():
+        for metric, value in metrics.items():
             run_metrics[metric] = run_metrics.get(metric, []) + [value]
 
-        test_acc.append(best_metrics['test/acc'])
+        test_acc.append(metrics['test/acc'])
         console.print()
         logging.info(f'run: {iteration + 1}\t test/acc: {test_acc[-1]:.2f}\t average: {np.mean(test_acc).item():.2f}\n')
 
