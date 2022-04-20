@@ -315,7 +315,6 @@ class GraphSAGE:
     def init_privacy_mechanisms(self):
         if self.dp_level == 'edge':
             mech = AsymmetricRandResponse(eps=self.epsilon)
-            # mech = TopMFilter(noise_scale=self.noise_scale)
             self.graph_mechanism = mech
         else:
             self.training_noisy_sgd = GNNBasedNoisySGD(
@@ -359,8 +358,7 @@ class GraphSAGE:
                 self.data = NeighborSampler(self.max_degree)(self.data)
         else:
             with console.status('perturbing graph structure'):
-                # self.data = self.graph_mechanism(self.data)
-                self.data.adj_t = self.graph_mechanism(self.data.adj_t)
+                self.data.adj_t = self.graph_mechanism(self.data.adj_t, chunk_size=500)
 
         logging.info('training classifier...')
         return self.train_classifier()
