@@ -4,7 +4,7 @@ import numpy as np
 import logging
 from torch.optim import Adam, SGD
 from args import support_args
-from privacy import GNNBasedNoisySGD, GaussianMechanism, TopMFilter, NoisySGD, PMA, ComposedNoisyMechanism
+from privacy import GNNBasedNoisySGD, GaussianMechanism, NoisySGD, PMA, ComposedNoisyMechanism, AsymmetricRandResponse
 from torch.utils.data import TensorDataset
 from trainer import Trainer
 from data import NeighborSampler, PoissonDataLoader
@@ -112,10 +112,7 @@ class GAP:
     def init_privacy_mechanisms(self):
         self.pma_mechanism = PMA(noise_scale=self.noise_scale, hops=self.hops)
 
-        if self.perturbation == 'graph':
-            self.graph_mechanism = TopMFilter(noise_scale=self.noise_scale)
-            mechanism_list = [self.graph_mechanism]
-        elif self.dp_level == 'edge':
+        if self.dp_level == 'edge':
             mechanism_list = [self.pma_mechanism]
         elif self.dp_level == 'node':
             dataset = self.data_loader('train').dataset
@@ -204,10 +201,6 @@ class GAP:
         if self.dp_level == 'node' and self.hops > 0 and self.max_degree > 0:
             with console.status('bounding the number of neighbors per node'):
                 self.data = NeighborSampler(self.max_degree)(self.data)
-        elif self.perturbation == 'graph':
-            self.pma_mechanism.update(noise_scale=0)
-            with console.status('perturbing graph structure'):
-                self.data = self.graph_mechanism(self.data)
 
         sensitivity = 1 if self.dp_level == 'edge' else np.sqrt(self.max_degree)
         with console.status('computing aggregations'):
@@ -325,7 +318,8 @@ class GraphSAGEModel:
 
     def init_privacy_mechanisms(self):
         if self.dp_level == 'edge':
-            mech = TopMFilter(noise_scale=self.noise_scale)
+            mech = AsymmetricRandResponse(eps=self.epsilon)
+            # mech = TopMFilter(noise_scale=self.noise_scale)
             self.graph_mechanism = mech
         else:
             self.training_noisy_sgd = GNNBasedNoisySGD(
@@ -347,15 +341,15 @@ class GraphSAGEModel:
                     self.noisy_aggr_gm(data=output, sensitivity=np.sqrt(self.max_degree)) if not module.training else output
             )
 
-        with console.status('calibrating noise to privacy budget'):
-            if self.delta == 'auto':
-                if np.isinf(self.epsilon):
-                    self.delta = 0.0
-                else:
-                    self.delta = 1. / (10 ** len(str(self.data.num_edges)))
-                logging.info('delta = %.0e', self.delta)
-            self.noise_scale = mech.calibrate(eps=self.epsilon, delta=self.delta)
-            logging.info(f'noise scale: {self.noise_scale:.4f}\n')
+            with console.status('calibrating noise to privacy budget'):
+                if self.delta == 'auto':
+                    if np.isinf(self.epsilon):
+                        self.delta = 0.0
+                    else:
+                        self.delta = 1. / (10 ** len(str(self.data.num_edges)))
+                    logging.info('delta = %.0e', self.delta)
+                self.noise_scale = mech.calibrate(eps=self.epsilon, delta=self.delta)
+                logging.info(f'noise scale: {self.noise_scale:.4f}\n')
 
     def fit(self, data):
         self.data = data
@@ -369,7 +363,8 @@ class GraphSAGEModel:
                 self.data = NeighborSampler(self.max_degree)(self.data)
         else:
             with console.status('perturbing graph structure'):
-                self.data = self.graph_mechanism(self.data)
+                # self.data = self.graph_mechanism(self.data)
+                self.data.adj_t = self.graph_mechanism(self.data.adj_t)
 
         logging.info('training classifier...')
         return self.train_classifier()
