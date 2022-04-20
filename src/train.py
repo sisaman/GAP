@@ -9,7 +9,7 @@ with console.status('importing modules'):
     from args import print_args
     from loggers import Logger
     from methods import GAP
-    from methods import GraphSAGEModel
+    from methods import GraphSAGE
     from utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
     import torch
@@ -27,7 +27,7 @@ def run(args):
     ### initiallize model ###
     model = {
         'gap': GAP,
-        'sage': GraphSAGEModel,
+        'sage': GraphSAGE,
     }[args.model].from_args(args, num_classes=num_classes)
 
     ### run experiment ###
@@ -77,7 +77,7 @@ def main():
         if parser_name == 'gap':
             GAP.add_args(group_model)
         elif parser_name == 'sage':
-            GraphSAGEModel.add_args(group_model)
+            GraphSAGE.add_args(group_model)
 
         # experiment args
         group_expr = parser.add_argument_group('experiment arguments')

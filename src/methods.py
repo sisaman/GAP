@@ -241,7 +241,7 @@ class GAP:
 
 
 @support_args
-class GraphSAGEModel:
+class GraphSAGE:
     supported_dp_levels = {'edge', 'node'}
 
     def __init__(self,
