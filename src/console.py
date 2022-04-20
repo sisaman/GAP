@@ -8,6 +8,7 @@ from rich.spinner import Spinner
 from rich.styled import Styled
 from rich.table import Table
 from rich.traceback import install
+from time import time
 import warnings
 import logging
 
@@ -133,9 +134,14 @@ class LogStatus(rich.status.Status):
             transient=True,
         )
         
+    def __enter__(self):
+        self._start_time = time()
+        return super().__enter__()
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
-        self.console.log(self.status+'...done', level=self.level)
+        self._end_time = time()
+        self.console.log(f'{self.status}...done in {self._end_time - self._start_time:.2f} s', level=self.level)
 
 
 console.log = log
