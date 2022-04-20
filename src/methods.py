@@ -15,14 +15,12 @@ from torch_geometric.loader import NeighborLoader
 @support_args
 class GAP:
     supported_dp_levels = {'edge', 'node'}
-    supported_perturbations = {'aggr', 'graph'}
 
     def __init__(self,
                  num_classes,
                  dp_level:      dict(help='level of privacy protection', option='-l', choices=supported_dp_levels) = 'edge',
                  epsilon:       dict(help='DP epsilon parameter', option='-e') = np.inf,
                  delta:         dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d') = 'auto',
-                 perturbation:  dict(help='perturbation method', option='-p', choices=supported_perturbations) = 'aggr',
                  hops:          dict(help='number of hops', option='-k') = 2,
                  max_degree:    dict(help='max degree to sample per each node (if 0, disables degree sampling)') = 0,
                  hidden_dim:    dict(help='dimension of the hidden layers') = 16,
@@ -44,7 +42,6 @@ class GAP:
                  use_amp:       dict(help='use automatic mixed precision training') = False,
                  ):
 
-        assert not (dp_level == 'node' and perturbation == 'graph'), 'graph perturbation is not supported for node-level DP'
         assert not (dp_level == 'node' and epsilon < np.inf and hops > 0 and max_degree <= 0), 'max_degree must be positive for node-level DP'
         assert not (dp_level == 'node' and epsilon < np.inf and batch_size <= 0), 'batch_size must be positive for node-level DP'
 
@@ -59,7 +56,6 @@ class GAP:
         self.dp_level = dp_level
         self.epsilon = epsilon
         self.delta = delta
-        self.perturbation = perturbation
         self.hops = hops
         self.max_degree = max_degree
         self.encoder_layers = encoder_layers
