@@ -356,10 +356,12 @@ class GraphSAGE:
 
     def fit(self, data):
         self.data = data
-        self.init_privacy_mechanisms()
-        
+
         with console.status(f'moving data to {self.device}'):
             self.data.to(self.device)
+        
+        start_time = time()
+        self.init_privacy_mechanisms()
 
         if self.dp_level == 'node' and self.max_degree > 0:
             with console.status('bounding the number of neighbors per node'):
@@ -369,7 +371,13 @@ class GraphSAGE:
                 self.data.adj_t = self.graph_mechanism(self.data.adj_t, chunk_size=500)
 
         logging.info('training classifier...')
-        return self.train_classifier()
+        metrics = self.train_classifier()
+
+        end_time = time()
+        metrics['time'] = end_time - start_time
+
+        return metrics
+
 
     def train_classifier(self):
         self.classifier.to(self.device)
