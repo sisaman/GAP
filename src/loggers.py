@@ -114,7 +114,7 @@ class Logger:
 
     def __init__(self,
                  logger:        dict(help='select logger type', choices=['wandb', 'csv']) = 'csv',
-                 project:       dict(help="project name for logger") = 'GAP',
+                 project:       dict(help="project name for logger") = 'GAP-DEBUG',
                  output_dir:    dict(help="directory to store the results", option='-o') = './output',
                  debug:         dict(help='enable debugger logging') = False,
                  enabled=True,
