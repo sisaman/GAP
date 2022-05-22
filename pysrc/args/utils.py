@@ -1,47 +1,11 @@
-from console import console
+from pysrc.console import console
 import math
-import enum
 import inspect
 from rich.table import Table
 from rich.highlighter import ReprHighlighter
 from rich import box
 from tabulate import tabulate
-from argparse import ArgumentTypeError, Action
-
-
-class Enum(enum.Enum):
-    def __str__(self):
-        return str(self.value)
-
-    def __repr__(self):
-        return str(self.value)
-
-
-class EnumAction(Action):
-    """
-    Argparse action for handling Enums
-    """
-    def __init__(self, **kwargs):
-        # Pop off the type value
-        _enum = kwargs.pop("type", None)
-
-        # Ensure an Enum subclass is provided
-        if _enum is None:
-            raise ValueError("type must be assigned an Enum when using EnumAction")
-        if not issubclass(_enum, enum.Enum):
-            raise TypeError("type must be an Enum when using EnumAction")
-
-        # Generate choices from the Enum
-        kwargs.setdefault("choices", tuple(e.value for e in _enum))
-
-        super().__init__(**kwargs)
-
-        self._enum = _enum
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        # Convert value back into an Enum
-        enum = self._enum(values)  # noqa
-        setattr(namespace, self.dest, enum)
+from argparse import ArgumentTypeError
 
 
 def str2bool(v):
@@ -88,8 +52,6 @@ def argsetup(Cls):
                     arg_info['type'] = str2bool
                     arg_info['nargs'] = '?'
                     arg_info['const'] = True
-                elif isinstance(arg_info['type'], Enum):
-                    arg_info['action'] = EnumAction
 
                 if 'choices' in arg_info:
                     choices = [str(c) for c in arg_info['choices']]

@@ -130,7 +130,7 @@ expr
 test
 checkpoints
 TODO
-test.py
+test_*
 plot_style.txt
 figs
 old

@@ -1,5 +1,4 @@
-from email.policy import default
-from console import console
+from pysrc.console import console
 import logging
 import os
 import time
@@ -62,7 +61,7 @@ class JobManager:
                 f'#$ -V\n',
                 # f'export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:10240\n',
                 f'export CUDA_VISIBLE_DEVICES=0\n',
-                f'python src/jobs.py -f {self.file} exec --id $SGE_TASK_ID \n'
+                f'python jobs.py -f {self.file} exec --id $SGE_TASK_ID \n'
             ]
 
             job_file = os.path.join(self.output_dir, f'{self.name}-{begin}-{end}.job')

@@ -1,23 +1,22 @@
-import time
-from console import console
+from pysrc.console import console
 with console.status('importing modules'):
-    from data import Dataset
-    import logging
     import sys
-    from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-    import numpy as np
-    from args import print_args
-    from loggers import Logger
-    from methods import GAP
-    from methods import GraphSAGE
-    from utils import seed_everything, confidence_interval
-    from torch_geometric.data import Data
+    import time
     import torch
+    import logging
+    import numpy as np
+    from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+    from pysrc.datasets import DatasetLoader
+    from pysrc.args.utils import print_args
+    from pysrc.loggers import Logger
+    from pysrc.methods import GAP, GraphSAGE
+    from pysrc.utils import seed_everything, confidence_interval
+    from torch_geometric.data import Data
 
 
 def run(args):
     with console.status('loading dataset'):
-        data_initial = Dataset.from_args(args).load(verbose=True)
+        data_initial = DatasetLoader.from_args(args).load(verbose=True)
 
     test_acc = []
     run_metrics = {}
@@ -70,7 +69,7 @@ def main():
     for parser_name, parser in command_parser.items():
         # dataset args
         group_dataset = parser.add_argument_group('dataset arguments')
-        Dataset.add_args(group_dataset)
+        DatasetLoader.add_args(group_dataset)
 
         # model args
         group_model = parser.add_argument_group('model arguments')
