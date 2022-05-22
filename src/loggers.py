@@ -2,7 +2,7 @@ import functools
 import os
 import uuid
 from argparse import Namespace
-from args import support_args
+from args import argsetup
 import pandas as pd
 
 try:
@@ -99,7 +99,7 @@ class CSVLogger(LoggerBase):
                   f'{self.experiment_id}.csv'), index=False)
 
 
-@support_args
+@argsetup
 class Logger:
     instance = None
 

@@ -4,7 +4,7 @@ import numpy as np
 import logging
 from time import time
 from torch.optim import Adam, SGD
-from args import support_args
+from args import argsetup
 from privacy import GNNBasedNoisySGD, GaussianMechanism, NoisySGD, PMA, ComposedNoisyMechanism, AsymmetricRandResponse
 from torch.utils.data import TensorDataset
 from trainer import Trainer
@@ -13,7 +13,7 @@ from models import GraphSAGEClassifier, MultiStageClassifier, supported_activati
 from torch_geometric.loader import NeighborLoader
 
 
-@support_args
+@argsetup
 class GAP:
     supported_dp_levels = {'edge', 'node'}
 
@@ -248,7 +248,7 @@ class GAP:
         return Optim(model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
 
 
-@support_args
+@argsetup
 class GraphSAGE:
     supported_dp_levels = {'edge', 'node'}
 

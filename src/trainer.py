@@ -5,13 +5,13 @@ from rich.table import Column, Table
 from console import console
 import os, uuid
 import torch
-from args import support_args
+from args import argsetup
 from loggers import Logger
 from torchmetrics import MeanMetric
 from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn
 
 
-@support_args
+@argsetup
 class Trainer:
     def __init__(self,
                  epochs:        dict(help='number of training epochs') = 100,

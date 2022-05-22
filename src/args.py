@@ -55,7 +55,7 @@ def str2bool(v):
         raise ArgumentTypeError('Boolean value expected.')
 
 
-def support_args(Cls):
+def argsetup(Cls):
 
     def strip_unexpected_kwargs(func, kwargs):
         signature = inspect.signature(func)

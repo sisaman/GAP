@@ -15,7 +15,7 @@ from scipy.io import loadmat
 from torch_geometric.data import Data, InMemoryDataset, download_url
 from sklearn.preprocessing import LabelEncoder
 from torch_sparse import SparseTensor
-from args import support_args
+from args import argsetup
 import torch.utils.cpp_extension
 
 
@@ -197,7 +197,7 @@ class PoissonDataLoader:
         return self.dataset_size // self.batch_size
 
 
-@support_args
+@argsetup
 class Dataset:
     supported_datasets = {
         # main datasets
