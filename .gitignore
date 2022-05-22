@@ -120,17 +120,14 @@ build.ninja
 .pyre/
 
 .DS_Store
-datasets
-wandb
-jobs
-output
-results
-expr
+/datasets
+/wandb
+/jobs
+/output
 .vscode
-test
-checkpoints
+/test
+/checkpoints
 TODO
-test_*
-plot_style.txt
-figs
-old
+/test_*
+/figs
+/old
