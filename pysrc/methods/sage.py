@@ -4,8 +4,9 @@ import numpy as np
 import logging
 from time import time
 from torch.optim import Adam, SGD
+from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
-from pysrc.args.utils import argsetup
+from pysrc.methods.base import MethodBase
 from pysrc.trainer import Trainer
 from pysrc.privacy.algorithms import AsymmetricRandResponse
 from pysrc.privacy.algorithms import GNNBasedNoisySGD
@@ -15,8 +16,7 @@ from pysrc.privacy.mechanisms import ComposedNoisyMechanism
 from pysrc.data.transforms import NeighborSampler
 
 
-@argsetup
-class GraphSAGE:
+class GraphSAGE (MethodBase):
     supported_dp_levels = {'edge', 'node'}
     supported_activations = {
         'relu': torch.relu_,
@@ -127,7 +127,7 @@ class GraphSAGE:
                 self.noise_scale = mech.calibrate(eps=self.epsilon, delta=self.delta)
                 logging.info(f'noise scale: {self.noise_scale:.4f}\n')
 
-    def fit(self, data):
+    def fit(self, data: Data) -> dict[str, object]:
         self.data = data
 
         with console.status(f'moving data to {self.device}'):

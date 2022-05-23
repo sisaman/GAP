@@ -4,16 +4,15 @@ from rich.highlighter import ReprHighlighter
 from rich import box
 from pysrc.console import console
 from rich.table import Table
+from torch_geometric.data import Data
 from torch_geometric.datasets import Reddit
 from torch_geometric.transforms import Compose, RemoveIsolatedNodes, ToSparseTensor, RandomNodeSplit
-from pysrc.args.utils import argsetup
 from pysrc.data.transforms import FilterClassByCount
 from pysrc.data.transforms import RemoveSelfLoops
 from pysrc.datasets import Facebook
 from pysrc.datasets import Amazon
 
 
-@argsetup
 class DatasetLoader:
     supported_datasets = {
         # main datasets
@@ -45,7 +44,7 @@ class DatasetLoader:
         self.name = dataset
         self.data_dir = data_dir
 
-    def load(self, verbose=False):
+    def load(self, verbose=False) -> Data:
         data = self.supported_datasets[self.name](root=os.path.join(self.data_dir, self.name))[0]
         data = Compose([RemoveSelfLoops(), RemoveIsolatedNodes(), ToSparseTensor()])(data)
 

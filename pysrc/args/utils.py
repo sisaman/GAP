@@ -1,3 +1,4 @@
+from typing import Callable, TypeVar
 from pysrc.console import console
 import math
 import inspect
@@ -5,8 +6,9 @@ from rich.table import Table
 from rich.highlighter import ReprHighlighter
 from rich import box
 from tabulate import tabulate
-from argparse import ArgumentTypeError
+from argparse import ArgumentParser, ArgumentTypeError, Namespace
 
+RT = TypeVar('RT')
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -19,59 +21,53 @@ def str2bool(v):
         raise ArgumentTypeError('Boolean value expected.')
 
 
-def argsetup(Cls):
+def strip_unexpected_kwargs(callable: Callable, kwargs: dict) -> dict[str, object]:
+    signature = inspect.signature(callable)
+    parameters = signature.parameters
 
-    def strip_unexpected_kwargs(func, kwargs):
-        signature = inspect.signature(func)
-        parameters = signature.parameters
+    # check if the function has kwargs
+    for _, param in parameters.items():
+        if param.kind == inspect.Parameter.VAR_KEYWORD:
+            return kwargs
 
-        # check if the function has kwargs
-        for name, param in parameters.items():
-            if param.kind == inspect.Parameter.VAR_KEYWORD:
-                return kwargs
-
-        kwargs = {arg: value for arg, value in kwargs.items() if arg in parameters}
-        return kwargs
-
-    def from_args(args, **kwargs) -> Cls:
-        args = strip_unexpected_kwargs(Cls.__init__, vars(args))
-        args.update(kwargs)
-        return Cls(**args)
-
-    def add_parameters_as_argument(parser):
-        function = Cls.__init__
-        parameters = inspect.signature(function).parameters
-        for param_name, param_obj in parameters.items():
-            if param_obj.annotation is not inspect.Parameter.empty:
-                arg_info = param_obj.annotation
-                arg_info['default'] = param_obj.default
-                arg_info['dest'] = param_name
-                arg_info['type'] = arg_info.get('type', type(param_obj.default))
-
-                if arg_info['type'] is bool:
-                    arg_info['type'] = str2bool
-                    arg_info['nargs'] = '?'
-                    arg_info['const'] = True
-
-                if 'choices' in arg_info:
-                    choices = [str(c) for c in arg_info['choices']]
-                    arg_info['help'] = arg_info.get('help', '') + f" (choices: {', '.join(choices)})"
-                    arg_info['metavar'] = param_name.upper()
-
-                options = {f'--{param_name}', f'--{param_name.replace("_", "-")}'}
-                custom_options = arg_info.pop('option', [])
-                custom_options = [custom_options] if isinstance(custom_options, str) else custom_options
-                options.update(custom_options)
-                options = sorted(sorted(list(options)), key=len)
-                parser.add_argument(*options, **arg_info)
-
-    Cls.add_args = add_parameters_as_argument
-    Cls.from_args = from_args
-
-    return Cls
+    kwargs = {arg: value for arg, value in kwargs.items() if arg in parameters}
+    return kwargs
 
 
-def print_args(args, num_cols=4):
+def init_from_args(callable: Callable[..., RT], args: Namespace, **kwargs) -> RT:
+    args_dict = strip_unexpected_kwargs(callable, vars(args))
+    args_dict.update(kwargs)
+    return callable(**args_dict)
+
+
+def create_arguments(callable: Callable, parser: ArgumentParser):
+    parameters = inspect.signature(callable).parameters
+    for param_name, param_obj in parameters.items():
+        if param_obj.annotation is not inspect.Parameter.empty:
+            arg_info = param_obj.annotation
+            arg_info['default'] = param_obj.default
+            arg_info['dest'] = param_name
+            arg_info['type'] = arg_info.get('type', type(param_obj.default))
+
+            if arg_info['type'] is bool:
+                arg_info['type'] = str2bool
+                arg_info['nargs'] = '?'
+                arg_info['const'] = True
+
+            if 'choices' in arg_info:
+                choices = [str(c) for c in arg_info['choices']]
+                arg_info['help'] = arg_info.get('help', '') + f" (choices: {', '.join(choices)})"
+                arg_info['metavar'] = param_name.upper()
+
+            options = {f'--{param_name}', f'--{param_name.replace("_", "-")}'}
+            custom_options = arg_info.pop('option', [])
+            custom_options = [custom_options] if isinstance(custom_options, str) else custom_options
+            options.update(custom_options)
+            options = sorted(sorted(list(options)), key=len)
+            parser.add_argument(*options, **arg_info)
+
+
+def print_args(args: Namespace, num_cols: int = 4):
     args = vars(args)
     num_args = len(args)
     num_rows = math.ceil(num_args / num_cols)

@@ -5,7 +5,8 @@ import logging
 from time import time
 from torch.optim import Adam, SGD
 from torch.utils.data import TensorDataset
-from pysrc.args.utils import argsetup
+from torch_geometric.data import Data
+from pysrc.methods.base import MethodBase
 from pysrc.trainer import Trainer
 from pysrc.data.loader.poisson import PoissonDataLoader
 from pysrc.privacy.mechanisms import ComposedNoisyMechanism
@@ -14,8 +15,7 @@ from pysrc.classifiers import MultiStageClassifier
 from pysrc.data.transforms import NeighborSampler
 
 
-@argsetup
-class GAP:
+class GAP (MethodBase):
     supported_dp_levels = {'edge', 'node'}
     supported_activations = {
         'relu': torch.relu_,
@@ -158,7 +158,7 @@ class GAP:
             self.noise_scale = composed_mech.calibrate(eps=self.epsilon, delta=self.delta)
             logging.info(f'noise scale: {self.noise_scale:.4f}\n')
 
-    def fit(self, data):
+    def fit(self, data: Data) -> dict[str, object]:
         self.data = data
         
         with console.status(f'moving data to {self.device}'):

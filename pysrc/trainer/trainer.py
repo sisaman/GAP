@@ -6,13 +6,11 @@ from rich.console import Group
 from rich.padding import Padding
 from rich.table import Column, Table
 from pysrc.console import console
-from pysrc.args.utils import argsetup
 from pysrc.loggers import Logger
 from torchmetrics import MeanMetric
 from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn
 
 
-@argsetup
 class Trainer:
     def __init__(self,
                  epochs:        dict(help='number of training epochs') = 100,
