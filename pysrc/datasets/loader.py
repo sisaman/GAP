@@ -1,5 +1,6 @@
 import os
 from functools import partial
+from typing import Annotated
 from rich.highlighter import ReprHighlighter
 from rich import box
 import torch
@@ -37,8 +38,8 @@ class DatasetLoader:
     }
 
     def __init__(self,
-                 dataset:    dict(help='name of the dataset', choices=supported_datasets) = 'facebook',
-                 data_dir:   dict(help='directory to store the dataset') = './datasets',
+                 dataset:    Annotated[str, dict(help='name of the dataset', choices=supported_datasets)] = 'facebook',
+                 data_dir:   Annotated[str, dict(help='directory to store the dataset')] = './datasets',
                  ):
 
         self.name = dataset

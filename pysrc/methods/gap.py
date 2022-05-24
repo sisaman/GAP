@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import logging
 from time import time
+from typing import Annotated, Union
 from torch.nn import Module
 from torch.optim import Adam, SGD, Optimizer
 from torch.utils.data import TensorDataset
@@ -27,28 +28,28 @@ class GAP (MethodBase):
 
     def __init__(self,
                  num_classes,
-                 dp_level:      dict(help='level of privacy protection', option='-l', choices=supported_dp_levels) = 'edge',
-                 epsilon:       dict(help='DP epsilon parameter', option='-e') = np.inf,
-                 delta:         dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d') = 'auto',
-                 hops:          dict(help='number of hops', option='-k') = 2,
-                 max_degree:    dict(help='max degree to sample per each node (if 0, disables degree sampling)') = 0,
-                 hidden_dim:    dict(help='dimension of the hidden layers') = 16,
-                 encoder_layers:dict(help='number of encoder MLP layers') = 2,
-                 pre_layers:    dict(help='number of pre-combination MLP layers') = 1,
-                 post_layers:   dict(help='number of post-combination MLP layers') = 1,
-                 combine:       dict(help='combination type of transformed hops', choices=MultiMLPClassifier.supported_combinations) = 'cat',
-                 activation:    dict(help='type of activation function', choices=supported_activations) = 'selu',
-                 dropout:       dict(help='dropout rate') = 0.0,
-                 batch_norm:    dict(help='if true, then model uses batch normalization') = True,
-                 optimizer:     dict(help='optimization algorithm', choices=['sgd', 'adam']) = 'adam',
-                 learning_rate: dict(help='learning rate', option='--lr') = 0.01,
-                 weight_decay:  dict(help='weight decay (L2 penalty)') = 0.0,
-                 cpu:           dict(help='if true, then model is trained on CPU') = False,
-                 pre_epochs:    dict(help='number of epochs for pre-training (ignored if encoder_layers=0)') = 100,
-                 epochs:        dict(help='number of epochs for training') = 100,
-                 batch_size:    dict(help='batch size (if 0, performs full-batch training)') = 0,
-                 max_grad_norm: dict(help='maximum norm of the per-sample gradients (ignored if dp_level=edge)') = 1.0,
-                 use_amp:       dict(help='use automatic mixed precision training') = False,
+                 dp_level:      Annotated[str, dict(help='level of privacy protection', option='-l', choices=supported_dp_levels)] = 'edge',
+                 epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')] = np.inf,
+                 delta:         Annotated[Union[str, float], dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
+                 hops:          Annotated[int, dict(help='number of hops', option='-k')] = 2,
+                 max_degree:    Annotated[int, dict(help='max degree to sample per each node (if 0, disables degree sampling)')] = 0,
+                 hidden_dim:    Annotated[int, dict(help='dimension of the hidden layers')] = 16,
+                 encoder_layers:Annotated[int, dict(help='number of encoder MLP layers')] = 2,
+                 pre_layers:    Annotated[int, dict(help='number of pre-combination MLP layers')] = 1,
+                 post_layers:   Annotated[int, dict(help='number of post-combination MLP layers')] = 1,
+                 combine:       Annotated[str, dict(help='combination type of transformed hops', choices=MultiMLPClassifier.supported_combinations)] = 'cat',
+                 activation:    Annotated[str, dict(help='type of activation function', choices=supported_activations)] = 'selu',
+                 dropout:       Annotated[float, dict(help='dropout rate')] = 0.0,
+                 batch_norm:    Annotated[bool, dict(help='if true, then model uses batch normalization')] = True,
+                 optimizer:     Annotated[str, dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
+                 learning_rate: Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
+                 weight_decay:  Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
+                 cpu:           Annotated[bool, dict(help='if true, then model is trained on CPU')] = False,
+                 pre_epochs:    Annotated[int, dict(help='number of epochs for pre-training (ignored if encoder_layers=0)')] = 100,
+                 epochs:        Annotated[int, dict(help='number of epochs for training')] = 100,
+                 batch_size:    Annotated[int, dict(help='batch size (if 0, performs full-batch training)')] = 0,
+                 max_grad_norm: Annotated[float, dict(help='maximum norm of the per-sample gradients (ignored if dp_level=edge)')] = 1.0,
+                 use_amp:       Annotated[bool, dict(help='use automatic mixed precision training')] = False,
                  ):
 
         assert not (dp_level == 'node' and epsilon < np.inf and hops > 0 and max_degree <= 0), 'max_degree must be positive for node-level DP'
@@ -154,7 +155,8 @@ class GAP (MethodBase):
                     data_size = self.data.num_edges if self.dp_level == 'edge' else self.data.num_nodes
                     self.delta = 1. / (10 ** len(str(data_size)))
                 logging.info('delta = %.0e', self.delta)
-            self.noise_scale = composed_mech.calibrate(eps=self.epsilon, delta=self.delta)
+            
+            self.noise_scale = composed_mech.calibrate(eps=self.epsilon, delta=float(self.delta))
             logging.info(f'noise scale: {self.noise_scale:.4f}\n')
 
     def fit(self, data: Data) -> Metrics:

@@ -2,6 +2,7 @@ import torch
 from pysrc.console import console
 import numpy as np
 import logging
+from typing import Annotated, Union
 from time import time
 from torch.nn import Module
 from torch.optim import Adam, SGD, Optimizer
@@ -28,25 +29,25 @@ class GraphSAGE (MethodBase):
 
     def __init__(self,
                  num_classes,
-                 dp_level:      dict(help='level of privacy protection', option='-l', choices=supported_dp_levels) = 'edge',
-                 epsilon:       dict(help='DP epsilon parameter', option='-e') = np.inf,
-                 delta:         dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d') = 'auto',
-                 max_degree:    dict(help='max degree to sample per each node (if 0, disables degree sampling)') = 0,
-                 hidden_dim:    dict(help='dimension of the hidden layers') = 16,
-                 encoder_layers:dict(help='number of encoder MLP layers') = 2,
-                 mp_layers:     dict(help='number of GNN layers') = 1,
-                 post_layers:   dict(help='number of post-processing MLP layers') = 1,
-                 activation:    dict(help='type of activation function', choices=supported_activations) = 'selu',
-                 dropout:       dict(help='dropout rate') = 0.0,
-                 batch_norm:    dict(help='if true, then model uses batch normalization') = True,
-                 optimizer:     dict(help='optimization algorithm', choices=['sgd', 'adam']) = 'adam',
-                 learning_rate: dict(help='learning rate', option='--lr') = 0.01,
-                 weight_decay:  dict(help='weight decay (L2 penalty)') = 0.0,
-                 cpu:           dict(help='if true, then model is trained on CPU') = False,
-                 epochs:        dict(help='number of epochs for training') = 100,
-                 batch_size:    dict(help='batch size (if 0, performs full-batch training)') = 0,
-                 max_grad_norm: dict(help='maximum norm of the per-sample gradients (ignored if dp_level=edge)') = 1.0,
-                 use_amp:       dict(help='use automatic mixed precision training') = False,
+                 dp_level:      Annotated[str, dict(help='level of privacy protection', option='-l', choices=supported_dp_levels)] = 'edge',
+                 epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')] = np.inf,
+                 delta:         Annotated[Union[str, float], dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
+                 max_degree:    Annotated[int, dict(help='max degree to sample per each node (if 0, disables degree sampling)')] = 0,
+                 hidden_dim:    Annotated[int, dict(help='dimension of the hidden layers')] = 16,
+                 encoder_layers:Annotated[int, dict(help='number of encoder MLP layers')] = 2,
+                 mp_layers:     Annotated[int, dict(help='number of GNN layers')] = 1,
+                 post_layers:   Annotated[int, dict(help='number of post-processing MLP layers')] = 1,
+                 activation:    Annotated[str, dict(help='type of activation function', choices=supported_activations)] = 'selu',
+                 dropout:       Annotated[float, dict(help='dropout rate')] = 0.0,
+                 batch_norm:    Annotated[bool, dict(help='if true, then model uses batch normalization')] = True,
+                 optimizer:     Annotated[str, dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
+                 learning_rate: Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
+                 weight_decay:  Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
+                 cpu:           Annotated[bool, dict(help='if true, then model is trained on CPU')] = False,
+                 epochs:        Annotated[int, dict(help='number of epochs for training')] = 100,
+                 batch_size:    Annotated[int, dict(help='batch size (if 0, performs full-batch training)')] = 0,
+                 max_grad_norm: Annotated[float, dict(help='maximum norm of the per-sample gradients (ignored if dp_level=edge)')] = 1.0,
+                 use_amp:       Annotated[bool, dict(help='use automatic mixed precision training')] = False,
                  ):
 
         assert mp_layers >= 1, 'number of message-passing layers must be at least 1'
@@ -126,7 +127,8 @@ class GraphSAGE (MethodBase):
                     else:
                         self.delta = 1. / (10 ** len(str(self.data.num_edges)))
                     logging.info('delta = %.0e', self.delta)
-                self.noise_scale = mech.calibrate(eps=self.epsilon, delta=self.delta)
+
+                self.noise_scale = mech.calibrate(eps=self.epsilon, delta=float(self.delta))
                 logging.info(f'noise scale: {self.noise_scale:.4f}\n')
 
     def fit(self, data: Data) -> Metrics:

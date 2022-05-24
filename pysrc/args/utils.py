@@ -1,4 +1,4 @@
-from typing import Callable, Union
+from typing import Callable, Union, get_args, get_origin
 from typing_extensions import Self
 from pysrc.console import console
 import math
@@ -45,27 +45,30 @@ def create_arguments(callable: Callable, parser: ArgumentParser):
     parameters = inspect.signature(callable).parameters
     for param_name, param_obj in parameters.items():
         if param_obj.annotation is not inspect.Parameter.empty:
-            arg_info = param_obj.annotation
-            arg_info['default'] = param_obj.default
-            arg_info['dest'] = param_name
-            arg_info['type'] = arg_info.get('type', type(param_obj.default))
+            annotation = get_args(param_obj.annotation)
+            metadata: dict = annotation[1]
+            metadata['type'] = annotation[0]
+            metadata['default'] = param_obj.default
+            metadata['dest'] = param_name
 
-            if arg_info['type'] is bool:
-                arg_info['type'] = str2bool
-                arg_info['nargs'] = '?'
-                arg_info['const'] = True
+            if metadata['type'] is bool:
+                metadata['type'] = str2bool
+                metadata['nargs'] = '?'
+                metadata['const'] = True
+            elif get_origin(metadata['type']) is Union:
+                metadata['type'] = metadata['type'].__args__[0]
 
-            if 'choices' in arg_info:
-                choices = [str(c) for c in arg_info['choices']]
-                arg_info['help'] = arg_info.get('help', '') + f" (choices: {', '.join(choices)})"
-                arg_info['metavar'] = param_name.upper()
+            if 'choices' in metadata:
+                choices = [str(c) for c in metadata['choices']]
+                metadata['help'] = metadata.get('help', '') + f" (choices: {', '.join(choices)})"
+                metadata['metavar'] = param_name.upper()
 
             options = {f'--{param_name}', f'--{param_name.replace("_", "-")}'}
-            custom_options = arg_info.pop('option', [])
+            custom_options = metadata.pop('option', [])
             custom_options = [custom_options] if isinstance(custom_options, str) else custom_options
             options.update(custom_options)
             options = sorted(sorted(list(options)), key=len)
-            parser.add_argument(*options, **arg_info)
+            parser.add_argument(*options, **metadata)
 
 
 class ArgParseHelper:
