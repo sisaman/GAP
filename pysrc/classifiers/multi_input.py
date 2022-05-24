@@ -7,12 +7,12 @@ from pysrc.models import MLP
 from pysrc.trainer.typing import Metrics, TrainerStage
 
 
-class MultiStageClassifier(Module):
+class MultiInputClassifier(Module):
     CombType = Literal['cat', 'sum', 'max', 'mean']
     supported_combinations = get_args(CombType)
 
     def __init__(self, 
-                 num_stages: int, 
+                 num_inputs: int, 
                  output_dim: int,
                  hidden_dim: int = 16,  
                  pre_layers: int = 2, 
@@ -36,10 +36,10 @@ class MultiStageClassifier(Module):
                 dropout=dropout,
                 activation_fn=activation_fn,
                 batch_norm=batch_norm,
-            )] * num_stages
+            )] * num_inputs
         )
 
-        self.bn = BatchNorm1d(hidden_dim * num_stages) if batch_norm else False
+        self.bn = BatchNorm1d(hidden_dim * num_inputs) if batch_norm else False
         self.dropout = Dropout(dropout, inplace=True)
         self.activation_fn = activation_fn
 

@@ -1,2 +1,2 @@
-from pysrc.classifiers.multistage import *
-from pysrc.classifiers.graphsage import *
+from pysrc.classifiers.multi_input import *
+from pysrc.classifiers.graph_sage import *
