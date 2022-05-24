@@ -1,4 +1,4 @@
-from typing import Callable, Union, get_args, get_origin
+from typing import Annotated, Callable, Union, get_args, get_origin
 from typing_extensions import Self
 from pysrc.console import console
 import math
@@ -44,24 +44,30 @@ def init_from_args(callable: Callable[..., RT], args: Namespace, **kwargs) -> RT
 def create_arguments(callable: Callable, parser: ArgumentParser):
     parameters = inspect.signature(callable).parameters
     for param_name, param_obj in parameters.items():
-        if param_obj.annotation is not inspect.Parameter.empty:
-            annotation = get_args(param_obj.annotation)
+        annotation = param_obj.annotation
+        if get_origin(annotation) is Annotated:
+            annotation = get_args(annotation)
+            param_type = annotation[0]
             metadata: dict = annotation[1]
-            metadata['type'] = annotation[0]
+            metadata['type'] = param_type
             metadata['default'] = param_obj.default
             metadata['dest'] = param_name
 
-            if metadata['type'] is bool:
+            if param_type is bool:
                 metadata['type'] = str2bool
                 metadata['nargs'] = '?'
                 metadata['const'] = True
-            elif get_origin(metadata['type']) is Union:
-                metadata['type'] = metadata['type'].__args__[0]
+            elif get_origin(param_type) is Union:
+                metadata['type'] = param_type.__args__[0]
+                metadata['metavar'] = '|'.join([tp.__name__ for tp in param_type.__args__])
 
-            if 'choices' in metadata:
-                choices = [str(c) for c in metadata['choices']]
-                metadata['help'] = metadata.get('help', '') + f" (choices: {', '.join(choices)})"
-                metadata['metavar'] = param_name.upper()
+            if 'choices' not in metadata:
+                try:
+                    metadata['metavar'] = metadata.get('metavar', param_type.__name__)
+                except: pass
+            
+            #     choices = [str(c) for c in metadata['choices']]
+            #     metadata['help'] = metadata.get('help', '') + f" (choices: {', '.join(choices)})"
 
             options = {f'--{param_name}', f'--{param_name.replace("_", "-")}'}
             custom_options = metadata.pop('option', [])

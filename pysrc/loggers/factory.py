@@ -28,12 +28,12 @@ class Logger:
 
     @classmethod
     def setup(cls,
-        logger:        Annotated[str, dict(help='select logger type', choices=['wandb', 'csv'])] = 'csv',
-        project:       Annotated[str, dict(help="project name for logger")] = 'GAP-DEBUG',
-        output_dir:    Annotated[str, dict(help="directory to store the results", option='-o')] = './output',
+        logger:        Annotated[str,  dict(help='select logger type', choices=['wandb', 'csv'])] = 'csv',
+        project:       Annotated[str,  dict(help="project name for logger")] = 'GAP-DEBUG',
+        output_dir:    Annotated[str,  dict(help="directory to store the results", option='-o')] = './output',
         debug:         Annotated[bool, dict(help='enable debugger logging')] = False,
-        enabled=True,
-        config=Namespace()
+        enabled:       bool = True,
+        config:        Namespace = Namespace()
         ) -> LoggerBase:
 
         cls._options['logger'] = logger
