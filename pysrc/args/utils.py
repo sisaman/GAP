@@ -1,4 +1,5 @@
 from typing import Callable, Union
+from typing_extensions import Self
 from pysrc.console import console
 import math
 import inspect
@@ -8,6 +9,7 @@ from rich import box
 from tabulate import tabulate
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
 from pysrc.utils import RT
+
 
 def str2bool(v: Union[str, bool]) -> bool:
     if isinstance(v, bool):
@@ -64,6 +66,14 @@ def create_arguments(callable: Callable, parser: ArgumentParser):
             options.update(custom_options)
             options = sorted(sorted(list(options)), key=len)
             parser.add_argument(*options, **arg_info)
+
+
+class ArgParseHelper:
+    def init(self, args: Namespace, **kwargs) -> Self:
+        return init_from_args(self.__class__, args, **kwargs)
+
+    def create_arguments(self, parser: ArgumentParser):
+        create_arguments(self.__class__, parser)
 
 
 def print_args(args: Namespace, num_cols: int = 4):
