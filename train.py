@@ -5,30 +5,37 @@ with console.status('importing modules'):
     import torch
     import logging
     import numpy as np
-    from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
+    from typing import Annotated
+    from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
     from pysrc.datasets import DatasetLoader
-    from pysrc.args.utils import print_args, init_from_args, create_arguments
+    from pysrc.args.utils import print_args, invoke_by_args, create_arguments
     from pysrc.loggers import Logger
     from pysrc.methods import GAP, GraphSAGE
     from pysrc.utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
 
 
-def run(args: Namespace):
+def run(
+    name: Annotated[str, dict(help='experiment name')] = '',
+    seed: Annotated[int, dict(help='initial random seed')] = 12345,
+    repeats: Annotated[int, dict(help='number of times the experiment is repeated')] = 1,
+    **kwargs
+    ):
     with console.status('loading dataset'):
-        data_initial = init_from_args(DatasetLoader, args).load(verbose=True)
+        data_initial = invoke_by_args(DatasetLoader, kwargs).load(verbose=True)
 
     test_acc = []
     run_metrics = {}
     num_classes = data_initial.y.max().item() + 1
-    logger = init_from_args(Logger.setup, args, enabled=args.debug, config=args)
+    config = dict(**kwargs, name=name, seed=seed, repeats=repeats)
+    logger = invoke_by_args(Logger.setup, dict(enabled=False, config=config, **kwargs))
 
     ### initiallize model ###
-    Method = GAP if args.model == 'gap' else GraphSAGE
-    model = init_from_args(Method, args, num_classes=num_classes)
+    Method = GAP if kwargs['model'] == 'gap' else GraphSAGE
+    model = invoke_by_args(Method, dict(num_classes=num_classes, **kwargs))
 
     ### run experiment ###
-    for iteration in range(args.repeats):
+    for iteration in range(repeats):
         data = Data(**data_initial.to_dict())
 
         model.reset_parameters()
@@ -48,7 +55,7 @@ def run(args: Namespace):
     for metric, values in run_metrics.items():
         summary[metric + '_mean'] = np.mean(values)
         summary[metric + '_std'] = np.std(values)
-        summary[metric + '_ci'] = confidence_interval(values, size=1000, ci=95, seed=args.seed)
+        summary[metric + '_ci'] = confidence_interval(values, size=1000, ci=95, seed=seed)
         logger.log_summary(summary)
 
     logger.finish()
@@ -78,9 +85,7 @@ def main():
 
         # experiment args
         group_expr = parser.add_argument_group('experiment arguments')
-        group_expr.add_argument('-n', '--name', type=str, default=None, help='experiment name')
-        group_expr.add_argument('-s', '--seed', type=int, default=12345, help='initial random seed')
-        group_expr.add_argument('-r', '--repeats', type=int, default=1, help="number of times the experiment is repeated")
+        create_arguments(run, group_expr)
         create_arguments(Logger.setup, group_expr)
 
     parser = ArgumentParser(parents=[init_parser], formatter_class=ArgumentDefaultsHelpFormatter)
@@ -98,7 +103,7 @@ def main():
 
     try:
         start = time.time()
-        run(args)
+        invoke_by_args(run, args)
         end = time.time()
         logging.info(f'Total running time: {(end - start):.2f} seconds.')
     except KeyboardInterrupt:

@@ -7,7 +7,7 @@ class CSVLogger(LoggerBase):
     @property
     def experiment(self) -> dict[str, object]:
         if not hasattr(self, '_experiment'):
-            self._experiment = vars(self.config)
+            self._experiment = self.config
         return self._experiment
 
     @if_enabled

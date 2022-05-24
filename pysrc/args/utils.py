@@ -1,5 +1,4 @@
 from typing import Annotated, Callable, Union, get_args, get_origin
-from typing_extensions import Self
 from pysrc.console import console
 import math
 import inspect
@@ -9,6 +8,9 @@ from rich import box
 from tabulate import tabulate
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
 from pysrc.utils import RT
+
+
+ArgType = Union[Namespace, dict[str, object]]
 
 
 def str2bool(v: Union[str, bool]) -> bool:
@@ -35,9 +37,9 @@ def strip_unexpected_kwargs(callable: Callable, kwargs: dict) -> dict[str, objec
     return kwargs
 
 
-def init_from_args(callable: Callable[..., RT], args: Namespace, **kwargs) -> RT:
-    args_dict = strip_unexpected_kwargs(callable, vars(args))
-    args_dict.update(kwargs)
+def invoke_by_args(callable: Callable[..., RT], args: ArgType) -> RT:
+    args_dict = args if isinstance(args, dict) else vars(args)
+    args_dict = strip_unexpected_kwargs(callable, args_dict)
     return callable(**args_dict)
 
 
@@ -77,16 +79,8 @@ def create_arguments(callable: Callable, parser: ArgumentParser):
             parser.add_argument(*options, **metadata)
 
 
-class ArgParseHelper:
-    def init(self, args: Namespace, **kwargs) -> Self:
-        return init_from_args(self.__class__, args, **kwargs)
-
-    def create_arguments(self, parser: ArgumentParser):
-        create_arguments(self.__class__, parser)
-
-
-def print_args(args: Namespace, num_cols: int = 4):
-    args = vars(args)
+def print_args(args: ArgType, num_cols: int = 4):
+    args = args if isinstance(args, dict) else vars(args)
     num_args = len(args)
     num_rows = math.ceil(num_args / num_cols)
     col = 0

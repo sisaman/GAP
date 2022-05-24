@@ -2,7 +2,6 @@ import functools
 from typing import Callable
 from uuid import uuid1
 from abc import ABC, abstractmethod
-from argparse import Namespace
 from pysrc.utils import RT
 
 
@@ -17,13 +16,13 @@ def if_enabled(func: Callable[..., RT]) -> Callable[..., RT]:
 class LoggerBase(ABC):
     def __init__(self, project: str=None, output_dir: str='./output', 
                  experiment_id: str=str(uuid1()), enabled: bool=True, 
-                 config: Namespace=Namespace()):
+                 config: dict={}):
         self.project = project
         self.experiment_id = experiment_id
         self.output_dir = output_dir
         self.enabled = enabled
         self.config = config
-        self.config.experiment_id = experiment_id
+        self.config[experiment_id] = experiment_id
 
     @property
     @abstractmethod

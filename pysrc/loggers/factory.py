@@ -1,5 +1,4 @@
 from typing import Annotated
-from argparse import Namespace
 from pysrc.loggers.base import LoggerBase
 from pysrc.loggers.csv import CSVLogger
 from pysrc.loggers.wandb import WandbLogger
@@ -14,7 +13,7 @@ class Logger:
         'output_dir': './output',
         'debug': False,
         'enabled': True,
-        'config': Namespace()
+        'config': {}
     }
 
     @classmethod
@@ -33,7 +32,7 @@ class Logger:
         output_dir:    Annotated[str,  dict(help="directory to store the results", option='-o')] = './output',
         debug:         Annotated[bool, dict(help='enable debugger logging')] = False,
         enabled:       bool = True,
-        config:        Namespace = Namespace()
+        config:        dict = {}
         ) -> LoggerBase:
 
         cls._options['logger'] = logger
@@ -44,5 +43,5 @@ class Logger:
         cls._options['config'] = config
 
         LoggerCls = WandbLogger if debug or logger == 'wandb' else CSVLogger
-        cls._instance = LoggerCls(project=project, output_dir=output_dir, enabled=enabled, config=config)
+        cls._instance = LoggerCls(project=project, output_dir=output_dir, enabled=enabled or debug, config=config)
         return cls._instance
