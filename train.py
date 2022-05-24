@@ -21,6 +21,8 @@ def run(
     repeats: Annotated[int, dict(help='number of times the experiment is repeated')] = 1,
     **kwargs
     ):
+    seed_everything(seed)
+
     with console.status('loading dataset'):
         data_initial = invoke_by_args(DatasetLoader, kwargs).load(verbose=True)
 
@@ -89,17 +91,14 @@ def main():
         create_arguments(Logger.setup, group_expr)
 
     parser = ArgumentParser(parents=[init_parser], formatter_class=ArgumentDefaultsHelpFormatter)
-    args = parser.parse_args()
+    args = vars(parser.parse_args())
 
     print_args(args, num_cols=4)
-    args.cmd = ' '.join(sys.argv)  # store calling command
+    args['cmd'] = ' '.join(sys.argv)  # store calling command
 
-    if args.seed:
-        seed_everything(args.seed)
-
-    if not args.cpu and not torch.cuda.is_available():
+    if not args['cpu'] and not torch.cuda.is_available():
         logging.warn('CUDA is not available, proceeding with CPU') 
-        args.cpu = True
+        args['cpu'] = True
 
     try:
         start = time.time()
@@ -112,7 +111,7 @@ def main():
     except RuntimeError:
         raise
     finally:
-        if not args.cpu:    
+        if not args['cpu']:
             gpu_mem = torch.cuda.max_memory_allocated() / 1024 ** 3
             logging.info(f'Max GPU memory used = {gpu_mem:.2f} GB\n')
 
