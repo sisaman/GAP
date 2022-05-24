@@ -7,7 +7,7 @@ from pysrc.models import MLP
 from pysrc.trainer.typing import Metrics, TrainerStage
 
 
-class MultiInputClassifier(Module):
+class MultiMLPClassifier(Module):
     CombType = Literal['cat', 'sum', 'max', 'mean']
     supported_combinations = get_args(CombType)
 

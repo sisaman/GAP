@@ -38,7 +38,7 @@ class GraphSAGE (MethodBase):
                  post_layers:   dict(help='number of post-processing MLP layers') = 1,
                  activation:    dict(help='type of activation function', choices=supported_activations) = 'selu',
                  dropout:       dict(help='dropout rate') = 0.0,
-                 batch_norm:     dict(help='if true, then model uses batch normalization') = True,
+                 batch_norm:    dict(help='if true, then model uses batch normalization') = True,
                  optimizer:     dict(help='optimization algorithm', choices=['sgd', 'adam']) = 'adam',
                  learning_rate: dict(help='learning rate', option='--lr') = 0.01,
                  weight_decay:  dict(help='weight decay (L2 penalty)') = 0.0,

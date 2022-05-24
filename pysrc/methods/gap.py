@@ -12,7 +12,7 @@ from pysrc.trainer import Trainer
 from pysrc.data.loader.poisson import PoissonDataLoader
 from pysrc.privacy.mechanisms import ComposedNoisyMechanism
 from pysrc.privacy.algorithms import NoisySGD, PMA
-from pysrc.classifiers import MultiInputClassifier
+from pysrc.classifiers import MultiMLPClassifier
 from pysrc.data.transforms import NeighborSampler
 from pysrc.trainer.typing import Metrics, TrainerStage
 
@@ -36,7 +36,7 @@ class GAP (MethodBase):
                  encoder_layers:dict(help='number of encoder MLP layers') = 2,
                  pre_layers:    dict(help='number of pre-combination MLP layers') = 1,
                  post_layers:   dict(help='number of post-combination MLP layers') = 1,
-                 combine:       dict(help='combination type of transformed hops', choices=MultiInputClassifier.supported_combinations) = 'cat',
+                 combine:       dict(help='combination type of transformed hops', choices=MultiMLPClassifier.supported_combinations) = 'cat',
                  activation:    dict(help='type of activation function', choices=supported_activations) = 'selu',
                  dropout:       dict(help='dropout rate') = 0.0,
                  batch_norm:    dict(help='if true, then model uses batch normalization') = True,
@@ -80,7 +80,7 @@ class GAP (MethodBase):
         self.noise_scale = 0.0 # used to save noise calibration results
         activation_fn = self.supported_activations[activation]
 
-        self.encoder = MultiInputClassifier(
+        self.encoder = MultiMLPClassifier(
             num_inputs=1,
             hidden_dim=hidden_dim,
             output_dim=num_classes,
@@ -93,7 +93,7 @@ class GAP (MethodBase):
             batch_norm=batch_norm,
         )
 
-        self.classifier = MultiInputClassifier(
+        self.classifier = MultiMLPClassifier(
             num_inputs=hops+1,
             hidden_dim=hidden_dim,
             output_dim=num_classes,
