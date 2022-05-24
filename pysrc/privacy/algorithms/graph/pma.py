@@ -1,12 +1,13 @@
 import torch
 import torch.nn.functional as F
+from torch_geometric.data import Data
 from pysrc.privacy.mechanisms.commons import GaussianMechanism, InfMechanism, ZeroMechanism
 from pysrc.privacy.mechanisms.composed import ComposedGaussianMechanism
 from pysrc.privacy.mechanisms.noisy import NoisyMechanism
 
 
 class PMA(NoisyMechanism):
-    def __init__(self, noise_scale, hops):
+    def __init__(self, noise_scale: float, hops: int):
         super().__init__(noise_scale)
         self.name = 'PMA'
         self.params = {'noise_scale': noise_scale, 'hops': hops}
@@ -26,7 +27,7 @@ class PMA(NoisyMechanism):
 
         self.set_all_representation(mech)
 
-    def __call__(self, data, sensitivity):
+    def __call__(self, data: Data, sensitivity: float) -> Data:
         assert hasattr(data, 'adj_t')
 
         x = F.normalize(data.x, p=2, dim=-1)

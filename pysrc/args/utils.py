@@ -1,4 +1,4 @@
-from typing import Callable, TypeVar
+from typing import Callable, Union
 from pysrc.console import console
 import math
 import inspect
@@ -7,10 +7,9 @@ from rich.highlighter import ReprHighlighter
 from rich import box
 from tabulate import tabulate
 from argparse import ArgumentParser, ArgumentTypeError, Namespace
+from pysrc.utils import RT
 
-RT = TypeVar('RT')
-
-def str2bool(v):
+def str2bool(v: Union[str, bool]) -> bool:
     if isinstance(v, bool):
         return v
     if v.lower() in ('yes', 'true', 't', 'y', '1'):

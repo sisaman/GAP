@@ -1,29 +1,30 @@
+from typing_extensions import Self
 from scipy.optimize import minimize_scalar
 from autodp.mechanism_zoo import Mechanism
 import numpy as np
 
 
 class NoisyMechanism(Mechanism):
-    def __init__(self, noise_scale):
+    def __init__(self, noise_scale: float):
         # "noise_scale" is the std of the noise divide by the sensitivity
         super().__init__()
         self.name = 'NoisyMechanism'
         self.params = {'noise_scale': noise_scale}
 
-    def is_zero(self):
+    def is_zero(self) -> bool:
         eps = np.array([self.RenyiDP(alpha) for alpha in range(2,100)])
         return np.all(eps == 0.0)
 
-    def is_inf(self):
+    def is_inf(self) -> bool:
         eps = np.array([self.RenyiDP(alpha) for alpha in range(2,100)])
         return np.all(eps == np.inf)
 
-    def update(self, noise_scale):
+    def update(self, noise_scale: float) -> Self:
         self.params.pop('noise_scale')
         self.__init__(noise_scale, **self.params)
         return self
 
-    def calibrate(self, eps, delta):
+    def calibrate(self, eps: float, delta: float) -> float:
         if self.params['noise_scale'] == 0:
             self.update(noise_scale=1)  # to avoid is_inf being true
 

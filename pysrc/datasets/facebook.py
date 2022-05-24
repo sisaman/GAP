@@ -26,26 +26,26 @@ class Facebook(InMemoryDataset):
         "Texas80", "UF21", "JohnsHopkins55", "Syracuse56", "BC17", "Georgetown15", "Trinity100", "Brandeis99", "Emory27"
     ]
 
-    def __init__(self, root, name, target='status', transform=None, pre_transform=None):
+    def __init__(self, root: str, name: str, target='status', transform=None, pre_transform=None):
         self.name = name
         self.target = target
         super().__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
 
     @property
-    def raw_dir(self):
+    def raw_dir(self) -> str:
         return os.path.join(self.root, self.name, 'raw')
 
     @property
-    def raw_file_names(self):
+    def raw_file_names(self) -> str:
         return self.name + '.mat'
 
     @property
-    def processed_dir(self):
+    def processed_dir(self) -> str:
         return os.path.join(self.root, self.name, 'processed')
 
     @property
-    def processed_file_names(self):
+    def processed_file_names(self) -> str:
         return f'data-{self.name}-{self.target}.pt'
 
     def download(self):
@@ -55,7 +55,6 @@ class Facebook(InMemoryDataset):
         ssl._create_default_https_context = context
 
     def process(self):
-
         mat = loadmat(os.path.join(self.raw_dir, self.raw_file_names))
         features = pd.DataFrame(mat['local_info'][:, :-1], columns=self.targets)
         y = torch.from_numpy(LabelEncoder().fit_transform(features[self.target]))
@@ -79,6 +78,6 @@ class Facebook(InMemoryDataset):
 
         torch.save(self.collate([data]), self.processed_paths[0])
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'Facebook100-{self.name}()'
 

@@ -2,6 +2,7 @@ import os
 from functools import partial
 from rich.highlighter import ReprHighlighter
 from rich import box
+import torch
 from pysrc.console import console
 from rich.table import Table
 from torch_geometric.data import Data
@@ -15,7 +16,6 @@ from pysrc.datasets import Amazon
 
 class DatasetLoader:
     supported_datasets = {
-        # main datasets
         'reddit': partial(Reddit, 
             transform=Compose([
                 RandomNodeSplit(num_val=0.1, num_test=0.15), 
@@ -53,12 +53,12 @@ class DatasetLoader:
 
         return data
 
-    def print_stats(self, data):
-        nodes_degree = data.adj_t.sum(dim=1)
-        baseline = (data.y[data.test_mask].unique(return_counts=True)[1].max().item() * 100 / data.test_mask.sum().item())
-        train_ratio = data.train_mask.sum().item() / data.num_nodes * 100
-        val_ratio = data.val_mask.sum().item() / data.num_nodes * 100
-        test_ratio = data.test_mask.sum().item() / data.num_nodes * 100
+    def print_stats(self, data: Data):
+        nodes_degree: torch.Tensor = data.adj_t.sum(dim=1)
+        baseline: float = (data.y[data.test_mask].unique(return_counts=True)[1].max().item() * 100 / data.test_mask.sum().item())
+        train_ratio: float = data.train_mask.sum().item() / data.num_nodes * 100
+        val_ratio: float = data.val_mask.sum().item() / data.num_nodes * 100
+        test_ratio: float = data.test_mask.sum().item() / data.num_nodes * 100
 
         stat = {
             'name': self.name,

@@ -1,11 +1,12 @@
+from typing import Callable
 import torch
-import torch_geometric
+from torch import Tensor
 from torch.nn import Dropout, ModuleList, BatchNorm1d
 from torch_geometric.nn import Linear
 from opacus.grad_sample import register_grad_sampler
 
 
-@register_grad_sampler(torch_geometric.nn.Linear)
+@register_grad_sampler(Linear)
 def compute_lazy_linear_grad_sample(layer, activations, backprops):
     gs = torch.einsum("n...i,n...j->nij", backprops, activations)
     ret = {layer.weight: gs}
@@ -15,7 +16,14 @@ def compute_lazy_linear_grad_sample(layer, activations, backprops):
 
 
 class MLP(torch.nn.Module):
-    def __init__(self, hidden_dim, output_dim, num_layers, dropout, activation_fn, batch_norm):
+    def __init__(self, 
+                 output_dim: int,
+                 hidden_dim: int = 16,  
+                 num_layers: int = 2, 
+                 dropout: float = 0.0, 
+                 activation_fn: Callable[[Tensor], Tensor] = torch.relu_, 
+                 batch_norm: bool = False,
+                 ):
         super().__init__()
         self.num_layers = num_layers
         self.dropout_fn = Dropout(dropout, inplace=True)
@@ -29,15 +37,13 @@ class MLP(torch.nn.Module):
         
         self.reset_parameters()
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         for i, layer in enumerate(self.layers):
             x = layer(x)
-
             if i < self.num_layers - 1:
                 x = self.bns[i](x) if self.bns else x
                 x = self.dropout_fn(x)
                 x = self.activation_fn(x)
-
         return x
 
     def reset_parameters(self):

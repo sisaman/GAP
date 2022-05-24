@@ -1,1 +1,1 @@
-from .trainer import *
+from pysrc.trainer.trainer import *

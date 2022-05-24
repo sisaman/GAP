@@ -3,7 +3,8 @@ from pysrc.console import console
 import numpy as np
 import logging
 from time import time
-from torch.optim import Adam, SGD
+from torch.nn import Module
+from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
 from pysrc.methods.base import MethodBase
@@ -14,6 +15,7 @@ from pysrc.privacy.mechanisms import GaussianMechanism
 from pysrc.classifiers import GraphSAGEClassifier
 from pysrc.privacy.mechanisms import ComposedNoisyMechanism
 from pysrc.data.transforms import NeighborSampler
+from pysrc.trainer.typing import Metrics, TrainerStage
 
 
 class GraphSAGE (MethodBase):
@@ -127,7 +129,7 @@ class GraphSAGE (MethodBase):
                 self.noise_scale = mech.calibrate(eps=self.epsilon, delta=self.delta)
                 logging.info(f'noise scale: {self.noise_scale:.4f}\n')
 
-    def fit(self, data: Data) -> dict[str, object]:
+    def fit(self, data: Data) -> Metrics:
         self.data = data
 
         with console.status(f'moving data to {self.device}'):
@@ -152,7 +154,7 @@ class GraphSAGE (MethodBase):
         return metrics
 
 
-    def train_classifier(self):
+    def train_classifier(self) -> Metrics:
         self.classifier.to(self.device)
 
         trainer = Trainer(
@@ -161,7 +163,7 @@ class GraphSAGE (MethodBase):
             val_interval=not(self.dp_level == 'node' and self.epsilon < np.inf),
             monitor='val/acc', monitor_mode='max', 
             device=self.device,
-            dp_mechanism=self.training_noisy_sgd if self.dp_level == 'node' else None,
+            noisy_sgd=self.training_noisy_sgd if self.dp_level == 'node' else None,
         )
 
         metrics = trainer.fit(
@@ -175,7 +177,7 @@ class GraphSAGE (MethodBase):
 
         return metrics
 
-    def data_loader(self, stage):
+    def data_loader(self, stage: TrainerStage) -> NeighborLoader:
         if self.batch_size <= 0:
             self.data.batch_size = self.data.num_nodes
             return [self.data]
@@ -190,6 +192,6 @@ class GraphSAGE (MethodBase):
                 num_workers=6,
             )
 
-    def configure_optimizers(self, model):
+    def configure_optimizers(self, model: Module) -> Optimizer:
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
         return Optim(model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)

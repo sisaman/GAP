@@ -1,12 +1,15 @@
 from opacus.privacy_engine import PrivacyEngine
 from autodp.transformer_zoo import Composition, AmplificationBySampling
+from torch.nn import Module
+from torch.optim import Optimizer
+from torch.utils.data import DataLoader
 from pysrc.data.loader.poisson import PoissonDataLoader
 from pysrc.privacy.mechanisms.commons import GaussianMechanism, InfMechanism, ZeroMechanism
 from pysrc.privacy.mechanisms.noisy import NoisyMechanism
 
 
 class NoisySGD(NoisyMechanism):
-    def __init__(self, noise_scale, dataset_size, batch_size, epochs, max_grad_norm):
+    def __init__(self, noise_scale: float, dataset_size: int, batch_size: int, epochs: int, max_grad_norm: float):
         super().__init__(noise_scale)
         self.name = 'NoisySGD'
         self.params = {
@@ -31,7 +34,7 @@ class NoisySGD(NoisyMechanism):
         
         self.set_all_representation(mech)
 
-    def __call__(self, module, optimizer, data_loader, **kwargs):
+    def __call__(self, module: Module, optimizer: Optimizer, data_loader: DataLoader, **kwargs):
         if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
             _, optimizer, data_loader = PrivacyEngine().make_private(
                 module=module,

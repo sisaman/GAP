@@ -1,5 +1,6 @@
 import torch
 from torch_geometric.transforms import BaseTransform
+from torch_geometric.data import Data
 from torch_sparse import SparseTensor
 import torch.utils.cpp_extension
 
@@ -22,10 +23,10 @@ class NeighborSampler(BaseTransform):
         
         self.edge_sampler = edge_sampler
 
-    def __call__(self, data):
+    def __call__(self, data: Data) -> Data:
         N = data.num_nodes
         E = data.num_edges
-        adj = data.adj_t.t()
+        adj: SparseTensor = data.adj_t.t()
         device = adj.device()
         row, col, _ = adj.coo()
         perm = torch.randperm(E)

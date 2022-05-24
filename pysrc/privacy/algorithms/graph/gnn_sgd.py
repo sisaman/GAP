@@ -1,12 +1,16 @@
 import numpy as np
 from scipy.stats import hypergeom
 from opacus.privacy_engine import PrivacyEngine
+from torch.nn import Module
+from torch.optim import Optimizer
+from torch.utils.data import DataLoader
 from pysrc.privacy.mechanisms.commons import InfMechanism, ZeroMechanism
 from pysrc.privacy.mechanisms.noisy import NoisyMechanism
 
 
 class GNNBasedNoisySGD(NoisyMechanism):
-    def __init__(self, noise_scale, dataset_size, batch_size, epochs, max_grad_norm, max_degree):
+    def __init__(self, noise_scale: float, dataset_size: int, batch_size: int, 
+                 epochs: int, max_grad_norm: float, max_degree: int):
         super().__init__(noise_scale)
         self.name = 'NoisySGD'
         self.params = {
@@ -42,7 +46,7 @@ class GNNBasedNoisySGD(NoisyMechanism):
 
             self.propagate_updates(RDP, type_of_update='RDP')
 
-    def __call__(self, module, optimizer, data_loader, **kwargs):
+    def __call__(self, module: Module, optimizer: Optimizer, data_loader: DataLoader, **kwargs):
         noise_scale = self.params['noise_scale']
         epochs = self.params['epochs']
         K = self.params['max_degree']

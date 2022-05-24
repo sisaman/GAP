@@ -1,16 +1,18 @@
 import torch
+import torch.nn.functional as F
 from torch_geometric.transforms import BaseTransform
+from torch_geometric.data import Data
 
 
 class FilterClassByCount(BaseTransform):
-    def __init__(self, min_count, remove_unlabeled=False):
+    def __init__(self, min_count: int, remove_unlabeled=False):
         self.min_count = min_count
         self.remove_unlabeled = remove_unlabeled
 
-    def __call__(self, data):
+    def __call__(self, data: Data) -> Data:
         assert hasattr(data, 'y') and hasattr(data, 'train_mask')
 
-        y = torch.nn.functional.one_hot(data.y)
+        y: torch.Tensor = F.one_hot(data.y)
         counts = y.sum(dim=0)
         y = y[:, counts >= self.min_count]
         mask = y.sum(dim=1).bool()        # nodes to keep

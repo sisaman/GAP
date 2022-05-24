@@ -1,19 +1,31 @@
+from typing import Callable, Iterable, Literal, get_args
 import torch
+from torch import Tensor
 import torch.nn.functional as F
 from torch.nn import Dropout, ModuleList, BatchNorm1d, Module
 from pysrc.models import MLP
+from pysrc.trainer.typing import Metrics, TrainerStage
 
 
 class MultiStageClassifier(Module):
-    supported_combinations = {
-        'cat', 'sum', 'max', 'mean', 'att'   ### TODO implement attention
-    }
+    CombType = Literal['cat', 'sum', 'max', 'mean']
+    supported_combinations = get_args(CombType)
 
-    def __init__(self, num_stages, hidden_dim, output_dim, pre_layers, post_layers, 
-                 combination_type, normalize, activation_fn, dropout, batch_norm):
+    def __init__(self, 
+                 num_stages: int, 
+                 output_dim: int,
+                 hidden_dim: int = 16,  
+                 pre_layers: int = 2, 
+                 post_layers: int = 1, 
+                 combination: CombType = 'cat',
+                 normalize: bool = False, 
+                 activation_fn: Callable[[Tensor], Tensor] = torch.relu_,
+                 dropout: float = 0.0, 
+                 batch_norm: bool = False,
+                 ):
 
         super().__init__()
-        self.combination_type = combination_type
+        self.combination = combination
         self.normalize = normalize
 
         self.pre_mlps = ModuleList([
@@ -40,7 +52,7 @@ class MultiStageClassifier(Module):
             batch_norm=batch_norm,
         )
 
-    def forward(self, x_stack):
+    def forward(self, x_stack: Tensor) -> Tensor:
         x_stack = x_stack.permute(2, 0, 1) # (hop, batch, input_dim)
         h_list = [mlp(x) for x, mlp in zip(x_stack, self.pre_mlps)]
         h = self.combine(h_list)
@@ -52,32 +64,30 @@ class MultiStageClassifier(Module):
         h = self.post_mlp(h)
         return F.log_softmax(h, dim=-1)
 
-    def combine(self, h_list):
-        if self.combination_type == 'cat':
+    def combine(self, h_list: Iterable[Tensor]) -> Tensor:
+        if self.combination == 'cat':
             return torch.cat(h_list, dim=-1)
-        elif self.combination_type == 'sum':
+        elif self.combination == 'sum':
             return torch.stack(h_list, dim=0).sum(dim=0)
-        elif self.combination_type == 'mean':
+        elif self.combination == 'mean':
             return torch.stack(h_list, dim=0).mean(dim=0)
-        elif self.combination_type == 'max':
+        elif self.combination == 'max':
             return torch.stack(h_list, dim=0).max(dim=0).values
-        elif self.combination_type == 'att':
-            raise NotImplementedError
         else:
-            raise ValueError(f'Unknown combination type {self.combination_type}')
+            raise ValueError(f'Unknown combination type {self.combination}')
 
     @torch.no_grad()
-    def encode(self, x_stack):
+    def encode(self, x_stack: Tensor) -> Tensor:
         self.eval()
         x_stack = x_stack.permute(2, 0, 1) # (hop, batch, input_dim)
         h_list = [mlp(x) for x, mlp in zip(x_stack, self.pre_mlps)]
         h_combined = self.combine(h_list)
         return h_combined
 
-    def step(self, batch, stage):
+    def step(self, batch: tuple[Tensor, Tensor], stage: TrainerStage) -> tuple[Tensor, Metrics]:
         x_stack, y = batch
-        preds = self(x_stack)
-        acc = (preds.argmax(dim=1) == y).float().mean() * 100
+        preds: Tensor = self(x_stack)
+        acc = preds.argmax(dim=1).eq(y).float().mean() * 100
         metrics = {f'{stage}/acc': acc}
 
         loss = None

@@ -4,11 +4,11 @@ from torch_sparse import SparseTensor
 
 
 class AsymmetricRandResponse:
-    def __init__(self, eps):
+    def __init__(self, eps: float):
         self.eps_link = eps * 0.9
         self.eps_density = eps * 0.1
         
-    def arr(self, data: SparseTensor):
+    def arr(self, data: SparseTensor) -> SparseTensor:
         n = data.size(1)
         sensitivity = 1 / (n*n)
         p = 1 / (1 + np.exp(-self.eps_link))
@@ -23,7 +23,7 @@ class AsymmetricRandResponse:
         out = SparseTensor.from_dense(out, has_value=False)
         return out
 
-    def __call__(self, data, chunk_size=1000):
+    def __call__(self, data: SparseTensor, chunk_size: int=1000) -> SparseTensor:
         chunks = self.split_sparse(data, chunk_size=chunk_size)
         pert_chunks = []
 
@@ -35,7 +35,7 @@ class AsymmetricRandResponse:
         return data_pert
     
     @staticmethod
-    def split_sparse(mat, chunk_size):
+    def split_sparse(mat: SparseTensor, chunk_size: int) -> list[SparseTensor]:
         chunks = []
         for i in range(0, mat.size(0), chunk_size):
             if (i + chunk_size) <= mat.size(0):
@@ -45,7 +45,7 @@ class AsymmetricRandResponse:
         return chunks
     
     @staticmethod
-    def merge_sparse(chunks, chunk_size):
+    def merge_sparse(chunks: list[SparseTensor], chunk_size: int) -> SparseTensor:
         n = (len(chunks) - 1) * chunk_size + chunks[-1].size(0)
         m = chunks[0].size(1)
         row = torch.cat([chunk.coo()[0] + i * chunk_size for i, chunk in enumerate(chunks)])

@@ -1,10 +1,12 @@
 import os
+
+from torch.nn import Module
 from pysrc.loggers.base import LoggerBase, if_enabled
 
-
-try:
+try: 
     import wandb
-except ImportError:
+    from wandb.wandb_run import Run
+except ImportError: 
     wandb = None
 
 
@@ -12,14 +14,13 @@ class WandbLogger(LoggerBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if wandb is None:
-            raise ImportError(
-                'wandb is not installed yet, install it with `pip install wandb`.')
+            raise ImportError('wandb is not installed yet, install it with `pip install wandb`.')
 
     @property
-    def experiment(self):
-        if self._experiment is None:
+    def experiment(self) -> Run:
+        if not hasattr(self, '_experiment'):
             os.environ["WANDB_SILENT"] = "true"
-            settings = wandb.Settings(start_method="fork")  # noqa
+            settings = wandb.Settings(start_method="fork")
 
             self._experiment = wandb.init(
                 project=self.project,
@@ -29,16 +30,16 @@ class WandbLogger(LoggerBase):
         return self._experiment
 
     @if_enabled
-    def log(self, metrics):
+    def log(self, metrics: dict[str, object]):
         self.experiment.log(metrics)
 
     @if_enabled
-    def log_summary(self, metrics):
+    def log_summary(self, metrics: dict[str, object]):
         for metric, value in metrics.items():
             self.experiment.summary[metric] = value
 
     @if_enabled
-    def watch(self, model):
+    def watch(self, model: Module):
         self.experiment.watch(model, log_freq=50)
 
     @if_enabled

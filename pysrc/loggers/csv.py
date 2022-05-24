@@ -5,13 +5,17 @@ from pysrc.loggers.base import LoggerBase, if_enabled
 
 class CSVLogger(LoggerBase):
     @property
-    def experiment(self):
-        if self._experiment is None:
+    def experiment(self) -> dict[str, object]:
+        if not hasattr(self, '_experiment'):
             self._experiment = vars(self.config)
         return self._experiment
 
     @if_enabled
-    def log_summary(self, metrics):
+    def log(self, metrics: dict[str, object]):
+        self.experiment.update(metrics)
+
+    @if_enabled
+    def log_summary(self, metrics: dict[str, object]):
         self.experiment.update(metrics)
 
     @if_enabled

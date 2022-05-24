@@ -3,7 +3,7 @@ from ogb.nodeproppred import PygNodePropPredDataset
 
 
 class Amazon(PygNodePropPredDataset):
-    def __init__(self, root, transform=None, pre_transform=None):
+    def __init__(self, root: str, transform=None, pre_transform=None):
         super().__init__(root=root, name='ogbn-products', transform=None, pre_transform=pre_transform)
         self.data.__num_nodes__ = self.data.x.size(0)
         self.data.y = self.data.y.view(-1)

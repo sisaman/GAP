@@ -1,13 +1,28 @@
+from typing import Callable
 import torch
+from torch import Tensor
 import torch.nn.functional as F
 from torch.nn import Module, BatchNorm1d
+from torch_sparse import SparseTensor
 from pysrc.models import MLP
 from pysrc.models import GraphSAGE
+from torch_geometric.data import Data
+
+from pysrc.trainer.typing import Metrics, TrainerStage
 
 
 class GraphSAGEClassifier(Module):
-    def __init__(self, hidden_dim, output_dim, pre_layers, mp_layers, post_layers, normalize,
-                 activation_fn, dropout, batch_norm):
+    def __init__(self, 
+                 output_dim: int, 
+                 hidden_dim: int = 16, 
+                 pre_layers: int = 0, 
+                 mp_layers: int = 2, 
+                 post_layers: int = 0, 
+                 normalize: bool = False,
+                 activation_fn: Callable[[Tensor], Tensor] = torch.relu_,
+                 dropout: float = 0.0, 
+                 batch_norm: bool = False,
+                 ):
 
         assert mp_layers > 0, 'Must have at least one message passing layer'
         super().__init__()
@@ -54,7 +69,7 @@ class GraphSAGEClassifier(Module):
             batch_norm=batch_norm,
         )
 
-    def forward(self, x, adj_t):
+    def forward(self, x: Tensor, adj_t: SparseTensor) -> Tensor:
         if self.pre_layers > 0:
             x = self.pre_mlp(x)
             x = self.bn1(x) if self.batch_norm else x
@@ -74,12 +89,12 @@ class GraphSAGEClassifier(Module):
 
         return F.log_softmax(h, dim=-1)
 
-    def step(self, data, stage):
+    def step(self, data: Data, stage: TrainerStage) -> tuple[Tensor, Metrics]:
         mask = data[f'{stage}_mask']
         target = data.y[mask][:data.batch_size]
         adj_t = data.adj_t[:data.num_nodes, :data.num_nodes]
-        preds = self(data.x, adj_t)[mask][:data.batch_size]
-        acc = (preds.argmax(dim=1) == target).float().mean() * 100
+        preds: Tensor = self(data.x, adj_t)[mask][:data.batch_size]
+        acc = preds.argmax(dim=1).eq(target).float().mean() * 100
         metrics = {f'{stage}/acc': acc}
 
         loss = None

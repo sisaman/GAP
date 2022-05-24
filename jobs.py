@@ -3,13 +3,13 @@ import logging
 import os
 import time
 import subprocess
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
 from pathlib import Path
 from rich.progress import track
 
 
 class JobManager:
-    def __init__(self, args):
+    def __init__(self, args: Namespace):
         self.args = args
         self.command = args.command
         self.file = args.file
@@ -122,7 +122,7 @@ class JobManager:
         else:
             subprocess.check_call(job_list[self.args.id - 1].split())
 
-    def get_failed_jobs(self):
+    def get_failed_jobs(self) -> list[tuple[int, str, int]]:
         file_list = [
             os.path.join(self.output_dir, file)
             for file in os.listdir(self.output_dir) if file.count('.e')
@@ -138,7 +138,7 @@ class JobManager:
         return failed_jobs
 
     @staticmethod
-    def register_arguments(parser):
+    def register_arguments(parser: ArgumentParser):
         parser.add_argument('-f', '--file', type=str, required=True, help='jobs file name')
         command_subparser = parser.add_subparsers(dest='command')
 

@@ -1,26 +1,27 @@
 import os
 import uuid
 import torch
-from typing import Text
-from rich.console import Group
-from rich.padding import Padding
-from rich.table import Column, Table
-from pysrc.console import console
+from torch.nn import Module
+from torch.optim import Optimizer
+from torch.cuda.amp import GradScaler
+from typing import Iterable, Literal, Optional
 from pysrc.loggers import Logger
 from torchmetrics import MeanMetric
-from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn
+from pysrc.privacy.algorithms import NoisySGD
+from pysrc.trainer.progress import TrainerProgress
+from pysrc.trainer.typing import TrainerStage, Metrics
 
 
 class Trainer:
     def __init__(self,
-                 epochs:        dict(help='number of training epochs') = 100,
-                 patience:      dict(help='early-stopping patience window size') = 0,
-                 val_interval:  dict(help='number of epochs to wait for validation', type=int) = 1,
-                 use_amp:       dict(help='use automatic mixed precision training') = False,
-                 monitor:       dict(help='metric to monitor') = 'val/acc',
-                 monitor_mode:  dict(help='monitor mode', choices=['min', 'max']) = 'max',
-                 device = 'cuda',
-                 dp_mechanism = None,
+                 epochs:        int = 100,
+                 patience:      int = 0,
+                 val_interval:  int = 1,
+                 use_amp:       bool = False,
+                 monitor:       str = 'val/acc',
+                 monitor_mode:  Literal['min', 'max'] = 'max',
+                 device:        Literal['cpu', 'cuda'] = 'cuda',
+                 noisy_sgd:     Optional[NoisySGD] = None,
                  ):
 
         self.epochs = epochs
@@ -30,7 +31,8 @@ class Trainer:
         self.monitor = monitor
         self.monitor_mode = monitor_mode
         self.device = device
-        self.dp_mechanism = dp_mechanism
+        self.noisy_sgd = noisy_sgd
+        
         self.logger = Logger.get_instance()
         
         self.metrics = {
@@ -42,14 +44,15 @@ class Trainer:
         }
 
     def reset(self):
-        self.model = None
-        self.best_metrics = None
-        self.checkpoint_path = None
+        self.model: Module = None
+        self.scaler = GradScaler(enabled=self.use_amp)
+        self.best_metrics: dict[str, object] = None
+        self.checkpoint_path: str = None
 
         for metric in self.metrics.values():
             metric.reset()
 
-    def aggregate_metrics(self, stage='train'):
+    def aggregate_metrics(self, stage: TrainerStage='train') -> Metrics:
         metrics = {}
 
         for metric_name, metric_value in self.metrics.items():
@@ -62,7 +65,7 @@ class Trainer:
 
         return metrics
 
-    def performs_better(self, metrics):
+    def performs_better(self, metrics: Metrics) -> bool:
         if self.best_metrics is None:
             return True
         elif self.monitor_mode == 'max':
@@ -72,21 +75,29 @@ class Trainer:
         else:
             raise ValueError(f'Unknown metric mode: {self.monitor_mode}')
 
-    def load_best_model(self):
+    def load_best_model(self) -> Module:
         if self.checkpoint_path:
             self.model.load_state_dict(torch.load(self.checkpoint_path))
             return self.model
         else:
             raise Exception('No checkpoint found')
 
-    def fit(self, model, optimizer, train_dataloader, val_dataloader=None, test_dataloader=None, checkpoint=False):
+    def fit(self, 
+            model: Module, 
+            optimizer: Optimizer, 
+            train_dataloader: Iterable, 
+            val_dataloader: Optional[Iterable]=None, 
+            test_dataloader: Optional[Iterable]=None, 
+            checkpoint: bool=False
+            ) -> Metrics:
+
         self.reset()
         self.model = model.to(self.device)
         self.model.train()
-        scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        self.optimizer = optimizer
 
-        if self.dp_mechanism:
-            self.model, optimizer, train_dataloader = self.dp_mechanism(
+        if self.noisy_sgd:
+            self.model, self.optimizer, train_dataloader = self.noisy_sgd(
                 module=self.model,
                 optimizer=optimizer,
                 data_loader=train_dataloader,
@@ -116,18 +127,18 @@ class Trainer:
                 metrics = {'epoch': epoch}
 
                 # train loop
-                self.train_loop(train_dataloader, optimizer, scaler)
-                metrics.update(self.aggregate_metrics(stage='train'))
+                train_metrics = self.loop(train_dataloader, stage='train')
+                metrics.update(train_metrics)
 
                 # validation loop
                 if val_dataloader:
-                    self.validation_loop(val_dataloader, 'val')
-                    metrics.update(self.aggregate_metrics(stage='val'))
+                    val_metrics = self.loop(val_dataloader, stage='val')
+                    metrics.update(val_metrics)
 
                 # test loop
                 if test_dataloader:
-                    self.validation_loop(test_dataloader, 'test')
-                    metrics.update(self.aggregate_metrics(stage='test'))
+                    test_metrics = self.loop(test_dataloader, stage='test')
+                    metrics.update(test_metrics)
                     
                 # update best metrics
                 if val_dataloader and self.val_interval:
@@ -152,133 +163,32 @@ class Trainer:
         if self.logger: self.logger.log_summary(self.best_metrics)
         return self.best_metrics
 
-    def train_loop(self, dataloader, optimizer, scaler):
-        self.model.train()
-        self.progress.update('train', visible=len(dataloader) > 1)
-
-        for batch in dataloader:
-            metrics = self.train_step(batch, optimizer, scaler)
-            for item in metrics:
-                self.metrics[item].update(metrics[item], weight=len(batch))
-            self.progress.update('train', advance=1)
-
-        self.progress.reset('train', visible=False)
-
-    def validation_loop(self, dataloader, stage):
-        self.model.eval()
+    def loop(self, dataloader: Iterable, stage: TrainerStage) -> Metrics:
+        self.model.train(stage == 'train')
         self.progress.update(stage, visible=len(dataloader) > 1)
 
         for batch in dataloader:
-            metrics = self.validation_step(batch, stage)
+            metrics = self.step(batch, stage)
             for item in metrics:
                 self.metrics[item].update(metrics[item], weight=len(batch))
             self.progress.update(stage, advance=1)
 
         self.progress.reset(stage, visible=False)
+        return self.aggregate_metrics(stage)
 
-    def train_step(self, batch, optimizer, scaler):
-        optimizer.zero_grad(set_to_none=True)
+    def step(self, batch, stage: TrainerStage) -> Metrics:
+        if stage == 'train':
+            self.optimizer.zero_grad(set_to_none=True)
 
         with torch.cuda.amp.autocast(enabled=self.use_amp):
-            loss, metrics = self.model.step(batch, stage='train')
+            prev = torch.is_grad_enabled()
+            torch.set_grad_enabled(stage == 'train')
+            loss, metrics = self.model.step(batch, stage=stage)
+            torch.set_grad_enabled(prev)
         
-        if loss is not None:
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+        if stage == 'train' and loss is not None:
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
 
         return metrics
-
-    @torch.no_grad()
-    def validation_step(self, batch, stage='val'):
-        with torch.cuda.amp.autocast(enabled=self.use_amp):
-            _, metrics = self.model.step(batch, stage=stage)
-        return metrics
-
-
-class TrainerProgress(Progress):
-    def __init__(self, num_epochs, num_train_steps, num_val_steps, num_test_steps):
-
-        progress_bar = [
-            SpinnerColumn(),
-            "{task.description}",
-            "{task.completed:>3}/{task.total}",
-            "{task.fields[unit]}",
-            BarColumn(),
-            "{task.percentage:>3.0f}%",
-            TimeElapsedColumn(),
-            # "{task.fields[metrics]}"
-        ]
-
-        super().__init__(*progress_bar, console=console)
-
-        self.trainer_tasks = {
-            'epoch': self.add_task(total=num_epochs, metrics='', unit='epochs', description='overal progress'),
-            'train': self.add_task(total=num_train_steps, metrics='', unit='steps', description='training', visible=False),
-            'val':   self.add_task(total=num_val_steps, metrics='', unit='steps', description='validation', visible=False),
-            'test':  self.add_task(total=num_test_steps, metrics='', unit='steps', description='testing', visible=False),
-        }
-
-        self.max_rows = 0
-
-    def update(self, task, **kwargs):
-        if 'metrics' in kwargs:
-            kwargs['metrics'] = self.render_metrics(kwargs['metrics'])
-
-        super().update(self.trainer_tasks[task], **kwargs)
-
-    def reset(self, task, **kwargs):
-        super().reset(self.trainer_tasks[task], **kwargs)
-
-    def render_metrics(self, metrics):
-        out = []
-        for split in ['train', 'val', 'test']:
-            metric_str = ' '.join(f'{k}: {v:.3f}' for k, v in metrics.items() if k.startswith(split))
-            out.append(metric_str)
-        
-        return '  '.join(out)
-
-    def make_tasks_table(self, tasks):
-        """Get a table to render the Progress display.
-
-        Args:
-            tasks (Iterable[Task]): An iterable of Task instances, one per row of the table.
-
-        Returns:
-            Table: A table instance.
-        """
-        table_columns = (
-            (
-                Column(no_wrap=True)
-                if isinstance(_column, str)
-                else _column.get_table_column().copy()
-            )
-            for _column in self.columns
-        )
-
-        table = Table.grid(*table_columns, padding=(0, 1), expand=self.expand)
-
-        if tasks:
-            epoch_task = tasks[0]
-            metrics = epoch_task.fields['metrics']
-
-            for task in tasks:
-                if task.visible:
-                    table.add_row(
-                        *(
-                            (
-                                column.format(task=task)
-                                if isinstance(column, str)
-                                else column(task)
-                            )
-                            for column in self.columns
-                        )
-                    )
-
-            self.max_rows = max(self.max_rows, table.row_count)
-            pad_top = 0 if epoch_task.finished else self.max_rows - table.row_count
-            group = Group(table, Padding(Text(metrics), pad=(pad_top,0,0,2)))
-            return Padding(group, pad=(0,0,1,18))
-
-        else:
-            return table

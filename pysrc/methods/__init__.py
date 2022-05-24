@@ -1,3 +1,3 @@
-from .base import *
-from .gap import *
-from .sage import *
+from pysrc.methods.base import *
+from pysrc.methods.gap import *
+from pysrc.methods.sage import *

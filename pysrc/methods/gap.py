@@ -3,7 +3,8 @@ import torch
 import numpy as np
 import logging
 from time import time
-from torch.optim import Adam, SGD
+from torch.nn import Module
+from torch.optim import Adam, SGD, Optimizer
 from torch.utils.data import TensorDataset
 from torch_geometric.data import Data
 from pysrc.methods.base import MethodBase
@@ -13,6 +14,7 @@ from pysrc.privacy.mechanisms import ComposedNoisyMechanism
 from pysrc.privacy.algorithms import NoisySGD, PMA
 from pysrc.classifiers import MultiStageClassifier
 from pysrc.data.transforms import NeighborSampler
+from pysrc.trainer.typing import Metrics, TrainerStage
 
 
 class GAP (MethodBase):
@@ -84,7 +86,7 @@ class GAP (MethodBase):
             output_dim=num_classes,
             pre_layers=encoder_layers,
             post_layers=1,
-            combination_type='cat',
+            combination='cat',
             normalize=True,
             activation_fn=activation_fn,
             dropout=dropout,
@@ -97,7 +99,7 @@ class GAP (MethodBase):
             output_dim=num_classes,
             pre_layers=pre_layers,
             post_layers=post_layers,
-            combination_type=combine,
+            combination=combine,
             normalize=True,
             activation_fn=activation_fn,
             dropout=dropout,
@@ -109,9 +111,6 @@ class GAP (MethodBase):
     def reset_parameters(self):
         self.encoder.reset_parameters()
         self.classifier.reset_parameters()
-
-    def set_training_state(self, pre_train):
-        self._pre_train_flag = pre_train
 
     def init_privacy_mechanisms(self):
         self.pma_mechanism = PMA(noise_scale=self.noise_scale, hops=self.hops)
@@ -158,7 +157,7 @@ class GAP (MethodBase):
             self.noise_scale = composed_mech.calibrate(eps=self.epsilon, delta=self.delta)
             logging.info(f'noise scale: {self.noise_scale:.4f}\n')
 
-    def fit(self, data: Data) -> dict[str, object]:
+    def fit(self, data: Data) -> Metrics:
         self.data = data
         
         with console.status(f'moving data to {self.device}'):
@@ -183,7 +182,6 @@ class GAP (MethodBase):
 
     def pretrain_encoder(self):
         if self.encoder_layers > 0:
-            self.set_training_state(pre_train=True)
             self.encoder.to(self.device)
             self.data.x = torch.stack([self.data.x], dim=-1)
 
@@ -192,7 +190,7 @@ class GAP (MethodBase):
                 use_amp=self.use_amp, 
                 monitor='val/acc', monitor_mode='max', 
                 device=self.device,
-                dp_mechanism=self.pretraining_noisy_sgd if self.dp_level == 'node' else None,
+                noisy_sgd=self.pretraining_noisy_sgd if self.dp_level == 'node' else None,
             )
 
             trainer.fit(
@@ -218,8 +216,7 @@ class GAP (MethodBase):
             self.data = self.pma_mechanism(self.data, sensitivity=sensitivity)
         self.data.to('cpu', 'adj_t')
 
-    def train_classifier(self):
-        self.set_training_state(pre_train=False)
+    def train_classifier(self) -> Metrics:
         self.classifier.to(self.device)
 
         trainer = Trainer(
@@ -227,7 +224,7 @@ class GAP (MethodBase):
             use_amp=self.use_amp, 
             monitor='val/acc', monitor_mode='max', 
             device=self.device,
-            dp_mechanism=self.training_noisy_sgd if self.dp_level == 'node' else None,
+            noisy_sgd=self.training_noisy_sgd if self.dp_level == 'node' else None,
         )
 
         metrics = trainer.fit(
@@ -242,7 +239,7 @@ class GAP (MethodBase):
         self.classifier.to('cpu')
         return metrics
 
-    def data_loader(self, stage):
+    def data_loader(self, stage: TrainerStage) -> PoissonDataLoader:
         mask = self.data[f'{stage}_mask']
         x = self.data.x[mask]
         y = self.data.y[mask]
@@ -250,6 +247,6 @@ class GAP (MethodBase):
         batch_size = len(dataset) if self.batch_size <= 0 else self.batch_size
         return PoissonDataLoader(dataset, batch_size=batch_size)
 
-    def configure_optimizers(self, model):
+    def configure_optimizers(self, model: Module) -> Optimizer:
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
         return Optim(model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)

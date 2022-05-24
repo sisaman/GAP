@@ -1,3 +1,3 @@
-from .facebook import *
-from .amazon import *
-from .loader import *
+from pysrc.datasets.facebook import *
+from pysrc.datasets.amazon import *
+from pysrc.datasets.loader import *

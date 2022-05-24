@@ -1,18 +1,19 @@
-import rich
+from rich.console import Console as RichConsole
 from rich.logging import RichHandler
 from rich.spinner import Spinner
 from rich.table import Table
 from rich.status import Status
+from rich.live import Live
+from rich._log_render import LogRender
 from time import time
 import logging
 
 
-# with console.status(''): pass
 class LogStatus(Status):
     def __init__(self,
         status,
-        console,
-        level=logging.INFO,
+        console: RichConsole,
+        level: int = logging.INFO,
         speed: float = 1.0,
         refresh_per_second: float = 12.5,
     ):
@@ -31,12 +32,12 @@ class LogStatus(Status):
         table = Table.grid()
         table.add_row(self.status, spinner)
         
-        self._spinner = rich.logging.LogRender(show_level=True, time_format='[%X]')(
+        self._spinner = LogRender(show_level=True, time_format='[%X]')(
             console=console, 
             level=handler.get_level_text(record),
             renderables=[table]
         )
-        self._live = rich.live.Live(
+        self._live = Live(
             self.renderable,
             console=console,
             refresh_per_second=refresh_per_second,

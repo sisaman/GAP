@@ -1,2 +1,2 @@
-from .mlp import *
-from .sage import *
+from pysrc.models.mlp import *
+from pysrc.models.sage import *

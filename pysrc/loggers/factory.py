@@ -1,15 +1,12 @@
 from argparse import Namespace
-from typing import Callable
-from pysrc.args.utils import RT
 from pysrc.loggers.base import LoggerBase
 from pysrc.loggers.csv import CSVLogger
 from pysrc.loggers.wandb import WandbLogger
 
 
-
 class Logger:
 
-    _instance = None
+    _instance: LoggerBase = None
     _options = {
         'logger': 'csv',
         'project': 'GAP-DEBUG',
@@ -20,10 +17,10 @@ class Logger:
     }
 
     @classmethod
-    def get_instance(cls):
+    def get_instance(cls) -> LoggerBase:
         return cls._instance
 
-    def __new__(cls: Callable[..., RT]) -> RT:
+    def __new__(cls) -> LoggerBase:
         if cls._instance is None:
             raise RuntimeError('Logger is not initialized, call Logger.setup() first')
         return cls._instance

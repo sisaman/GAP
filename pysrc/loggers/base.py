@@ -1,34 +1,45 @@
 import functools
-import uuid
+from typing import Callable
+from uuid import uuid1
+from abc import ABC, abstractmethod
 from argparse import Namespace
+from pysrc.utils import RT
 
 
-def if_enabled(func):
+def if_enabled(func: Callable[..., RT]) -> Callable[..., RT]:
     @functools.wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(self: LoggerBase, *args, **kwargs) -> RT:
         if self.enabled:
             return func(self, *args, **kwargs)
     return wrapper
 
 
-class LoggerBase:
-    def __init__(self, project=None, output_dir='./output', experiment_id=str(uuid.uuid1()),
-                 enabled=True, config=Namespace()):
+class LoggerBase(ABC):
+    def __init__(self, project: str=None, output_dir: str='./output', 
+                 experiment_id: str=str(uuid1()), enabled: bool=True, 
+                 config: Namespace=Namespace()):
         self.project = project
         self.experiment_id = experiment_id
         self.output_dir = output_dir
         self.enabled = enabled
         self.config = config
         self.config.experiment_id = experiment_id
-        self._experiment = None
-
-    def log(self, metrics): pass
-    def log_summary(self, metrics): pass
-    def watch(self, model): pass
-    def finish(self): pass
-    def enable(self): self.enabled = True
-    def disable(self): self.enabled = False
 
     @property
-    def experiment(self):
-        return self._experiment
+    @abstractmethod
+    def experiment(self): pass
+
+    @abstractmethod
+    def log(self, metrics: dict[str, object]): pass
+    
+    @abstractmethod
+    def log_summary(self, metrics: dict[str, object]): pass
+    
+    @abstractmethod
+    def finish(self): pass
+
+    def enable(self): 
+        self.enabled = True
+
+    def disable(self): 
+        self.enabled = False

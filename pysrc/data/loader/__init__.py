@@ -1,1 +1,1 @@
-from .poisson import *
+from pysrc.data.loader.poisson import *

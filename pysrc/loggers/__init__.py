@@ -1,5 +1,5 @@
-from .base import LoggerBase
-from .csv import CSVLogger
-from .wandb import WandbLogger
-from .factory import Logger
+from pysrc.loggers.base import LoggerBase
+from pysrc.loggers.csv import CSVLogger
+from pysrc.loggers.wandb import WandbLogger
+from pysrc.loggers.factory import Logger
 
