@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import logging
 from time import time
-from typing import Annotated, Union
+from typing import Annotated, Literal, Union
 from torch.nn import Module
 from torch.optim import Adam, SGD, Optimizer
 from torch.utils.data import TensorDataset
@@ -30,9 +30,9 @@ class GAP (MethodBase):
                  num_classes,
                  dp_level:      Annotated[str,   dict(help='level of privacy protection', option='-l', choices=supported_dp_levels)] = 'edge',
                  epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')] = np.inf,
-                 delta:         Annotated[Union[str, float], dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
+                 delta:         Annotated[Union[Literal['auto'], float], dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
                  hops:          Annotated[int,   dict(help='number of hops', option='-k')] = 2,
-                 max_degree:    Annotated[int,   dict(help='max degree to sample per each node (if 0, disables degree sampling)')] = 0,
+                 max_degree:    Annotated[Union[Literal['full'], int],   dict(help='max degree to sample per each node, or "full" to disable sampling)')] = 'full',
                  hidden_dim:    Annotated[int,   dict(help='dimension of the hidden layers')] = 16,
                  encoder_layers:Annotated[int,   dict(help='number of encoder MLP layers')] = 2,
                  pre_layers:    Annotated[int,   dict(help='number of pre-combination MLP layers')] = 1,
@@ -47,13 +47,13 @@ class GAP (MethodBase):
                  cpu:           Annotated[bool,  dict(help='if true, then model is trained on CPU')] = False,
                  pre_epochs:    Annotated[int,   dict(help='number of epochs for pre-training (ignored if encoder_layers=0)')] = 100,
                  epochs:        Annotated[int,   dict(help='number of epochs for training')] = 100,
-                 batch_size:    Annotated[int,   dict(help='batch size (if 0, performs full-batch training)')] = 0,
+                 batch_size:    Annotated[Union[Literal['full'], int],   dict(help='batch size, or "full" for full-batch training')] = 'full',
                  max_grad_norm: Annotated[float, dict(help='maximum norm of the per-sample gradients (ignored if dp_level=edge)')] = 1.0,
                  use_amp:       Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
                  ):
 
-        assert not (dp_level == 'node' and epsilon < np.inf and hops > 0 and max_degree <= 0), 'max_degree must be positive for node-level DP'
-        assert not (dp_level == 'node' and epsilon < np.inf and batch_size <= 0), 'batch_size must be positive for node-level DP'
+        assert not (dp_level == 'node' and epsilon < np.inf and hops > 0 and max_degree == 'full'), 'max_degree must be positive for node-level DP'
+        assert not (dp_level == 'node' and epsilon < np.inf and batch_size == 'full'), 'batch_size must be positive for node-level DP'
 
         if dp_level == 'node' and epsilon < np.inf and batch_norm:
             logging.warn('batch normalization is not supported for node-level DP, setting batch_norm to False')
@@ -121,7 +121,7 @@ class GAP (MethodBase):
         elif self.dp_level == 'node':
             dataset = self.data_loader('train').dataset
             dataset_size = len(dataset)
-            batch_size = len(dataset) if self.batch_size <= 0 else self.batch_size
+            batch_size = len(dataset) if self.batch_size == 'full' else self.batch_size
 
             self.pretraining_noisy_sgd = NoisySGD(
                 noise_scale=self.noise_scale, 
@@ -209,13 +209,15 @@ class GAP (MethodBase):
             self.encoder.to('cpu')
 
     def precompute_aggregations(self):
-        if self.dp_level == 'node' and self.hops > 0 and self.max_degree > 0:
+        if self.max_degree != 'full':
             with console.status('bounding the number of neighbors per node'):
                 self.data = NeighborSampler(self.max_degree)(self.data)
 
         sensitivity = 1 if self.dp_level == 'edge' else np.sqrt(self.max_degree)
+        
         with console.status('computing aggregations'):
             self.data = self.pma_mechanism(self.data, sensitivity=sensitivity)
+        
         self.data.to('cpu', 'adj_t')
 
     def train_classifier(self) -> Metrics:
@@ -246,7 +248,7 @@ class GAP (MethodBase):
         x = self.data.x[mask]
         y = self.data.y[mask]
         dataset = TensorDataset(x, y)
-        batch_size = len(dataset) if self.batch_size <= 0 else self.batch_size
+        batch_size = len(dataset) if self.batch_size == 'full' else self.batch_size
         return PoissonDataLoader(dataset, batch_size=batch_size)
 
     def configure_optimizers(self, model: Module) -> Optimizer:
