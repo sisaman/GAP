@@ -20,7 +20,7 @@ class ArgWithLiteral:
     def __call__(self, arg):
         try:
             return self.main_type(arg)
-        except ArgumentTypeError:
+        except ValueError:
             if arg in self.literals:
                 return arg
             else:
