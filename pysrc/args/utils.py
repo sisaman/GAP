@@ -1,4 +1,4 @@
-from typing import Annotated, Callable, Union, get_args, get_origin
+from typing import Annotated, Callable, Literal, Union, get_args, get_origin
 from pysrc.console import console
 import math
 import inspect
@@ -12,6 +12,19 @@ from pysrc.utils import RT
 
 ArgType = Union[Namespace, dict[str, object]]
 
+class ArgWithLiteral:
+    def __init__(self, main_type, literals):
+        self.main_type = main_type
+        self.literals = literals
+
+    def __call__(self, arg):
+        try:
+            return self.main_type(arg)
+        except ArgumentTypeError:
+            if arg in self.literals:
+                return arg
+            else:
+                raise ArgumentTypeError(f'{arg} is not a valid literal')
 
 def str2bool(v: Union[str, bool]) -> bool:
     if isinstance(v, bool):
@@ -60,8 +73,10 @@ def create_arguments(callable: Callable, parser: ArgumentParser):
                 metadata['nargs'] = '?'
                 metadata['const'] = True
             elif get_origin(param_type) is Union:
-                metadata['type'] = param_type.__args__[0]
-                metadata['metavar'] = '|'.join([tp.__name__ for tp in param_type.__args__])
+                sub_types = get_args(param_type)
+                if len(sub_types) == 2 and get_origin(sub_types[0]) is Literal:
+                    metadata['type'] = ArgWithLiteral(main_type=sub_types[1], literals=get_args(sub_types[0]))
+                    metadata['metavar'] = f"{sub_types[1].__name__}" + '|{' +  ','.join(map(str, get_args(sub_types[0]))) + '}'
 
             if 'choices' not in metadata:
                 try:
