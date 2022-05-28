@@ -209,11 +209,14 @@ class GAP (MethodBase):
             self.encoder.to('cpu')
 
     def precompute_aggregations(self):
-        if self.max_degree != 'full':
+        if self.dp_level == 'node' and self.max_degree != 'full':
             with console.status('bounding the number of neighbors per node'):
                 self.data = NeighborSampler(self.max_degree)(self.data)
-
-        sensitivity = 1 if self.dp_level == 'edge' else np.sqrt(self.max_degree)
+        
+        if self.dp_level == 'node':
+            sensitivity = np.sqrt(self.max_degree) if self.max_degree != 'full' else np.nan
+        else:
+            sensitivity = 1
         
         with console.status('computing aggregations'):
             self.data = self.pma_mechanism(self.data, sensitivity=sensitivity)
