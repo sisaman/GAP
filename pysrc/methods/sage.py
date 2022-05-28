@@ -2,7 +2,7 @@ import torch
 from pysrc.console import console
 import numpy as np
 import logging
-from typing import Annotated, Union
+from typing import Annotated, Literal, Union
 from time import time
 from torch.nn import Module
 from torch.optim import Adam, SGD, Optimizer
@@ -31,8 +31,8 @@ class GraphSAGE (MethodBase):
                  num_classes,
                  dp_level:      Annotated[str,   dict(help='level of privacy protection', option='-l', choices=supported_dp_levels)] = 'edge',
                  epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')] = np.inf,
-                 delta:         Annotated[Union[str, float], dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
-                 max_degree:    Annotated[int,   dict(help='max degree to sample per each node (if 0, disables degree sampling)')] = 0,
+                 delta:         Annotated[Union[Literal['auto'], float], dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
+                 max_degree:    Annotated[Union[Literal['full'], int],   dict(help='max degree to sample per each node, or "full" to disable sampling)')] = 'full',
                  hidden_dim:    Annotated[int,   dict(help='dimension of the hidden layers')] = 16,
                  encoder_layers:Annotated[int,   dict(help='number of encoder MLP layers')] = 2,
                  mp_layers:     Annotated[int,   dict(help='number of GNN layers')] = 1,
@@ -45,15 +45,15 @@ class GraphSAGE (MethodBase):
                  weight_decay:  Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
                  cpu:           Annotated[bool,  dict(help='if true, then model is trained on CPU')] = False,
                  epochs:        Annotated[int,   dict(help='number of epochs for training')] = 100,
-                 batch_size:    Annotated[int,   dict(help='batch size (if 0, performs full-batch training)')] = 0,
+                 batch_size:    Annotated[Union[Literal['full'], int],   dict(help='batch size, or "full" for full-batch training')] = 'full',
                  max_grad_norm: Annotated[float, dict(help='maximum norm of the per-sample gradients (ignored if dp_level=edge)')] = 1.0,
                  use_amp:       Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
                  ):
 
         assert mp_layers >= 1, 'number of message-passing layers must be at least 1'
         assert not (dp_level == 'node' and epsilon < np.inf and mp_layers > 1), 'node-level DP is not supported for more than one message-passing layer'
-        assert not (dp_level == 'node' and epsilon < np.inf and max_degree <= 0), 'max_degree must be positive for node-level DP'
-        assert not (dp_level == 'node' and epsilon < np.inf and batch_size <= 0), 'batch_size must be positive for node-level DP'
+        assert not (dp_level == 'node' and epsilon < np.inf and max_degree == 'full'), 'max_degree must be positive for node-level DP'
+        assert not (dp_level == 'node' and epsilon < np.inf and batch_size == 'full'), 'batch_size must be positive for node-level DP'
 
         if dp_level == 'node' and batch_norm:
             logging.warn('batch normalization is not supported for node-level DP, setting it to False')
@@ -128,7 +128,7 @@ class GraphSAGE (MethodBase):
                         self.delta = 1. / (10 ** len(str(self.data.num_edges)))
                     logging.info('delta = %.0e', self.delta)
 
-                self.noise_scale = mech.calibrate(eps=self.epsilon, delta=float(self.delta))
+                self.noise_scale = mech.calibrate(eps=self.epsilon, delta=self.delta)
                 logging.info(f'noise scale: {self.noise_scale:.4f}\n')
 
     def fit(self, data: Data) -> Metrics:
@@ -140,7 +140,7 @@ class GraphSAGE (MethodBase):
         start_time = time()
         self.init_privacy_mechanisms()
 
-        if self.dp_level == 'node' and self.max_degree > 0:
+        if self.dp_level == 'node' and self.max_degree != 'full':
             with console.status('bounding the number of neighbors per node'):
                 self.data = NeighborSampler(self.max_degree)(self.data)
         else:
@@ -180,7 +180,7 @@ class GraphSAGE (MethodBase):
         return metrics
 
     def data_loader(self, stage: TrainerStage) -> NeighborLoader:
-        if self.batch_size <= 0:
+        if self.batch_size == 'full':
             self.data.batch_size = self.data.num_nodes
             return [self.data]
         else:
