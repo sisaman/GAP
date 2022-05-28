@@ -14,7 +14,6 @@ from pysrc.trainer.typing import TrainerStage, Metrics
 
 class Trainer:
     def __init__(self,
-                 epochs:        int = 100,
                  patience:      int = 0,
                  val_interval:  int = 1,
                  use_amp:       bool = False,
@@ -24,7 +23,6 @@ class Trainer:
                  noisy_sgd:     Optional[NoisySGD] = None,
                  ):
 
-        self.epochs = epochs
         self.patience = patience
         self.val_interval = val_interval
         self.use_amp = use_amp
@@ -34,6 +32,10 @@ class Trainer:
         self.noisy_sgd = noisy_sgd
         
         self.logger = Logger.get_instance()
+        self.model: Module = None
+        self.scaler = GradScaler(enabled=self.use_amp)
+        self.best_metrics: dict[str, object] = None
+        self.checkpoint_path: str = None
         
         self.metrics = {
             'train/loss': MeanMetric(compute_on_step=False).to(device),
@@ -84,6 +86,7 @@ class Trainer:
 
     def fit(self, 
             model: Module, 
+            epochs: int,
             optimizer: Optimizer, 
             train_dataloader: Iterable, 
             val_dataloader: Optional[Iterable]=None, 
@@ -91,7 +94,6 @@ class Trainer:
             checkpoint: bool=False
             ) -> Metrics:
 
-        self.reset()
         self.model = model.to(self.device)
         self.model.train()
         self.optimizer = optimizer
@@ -114,7 +116,7 @@ class Trainer:
             test_dataloader = []
 
         self.progress = TrainerProgress(
-            num_epochs=self.epochs, 
+            num_epochs=epochs, 
             num_train_steps=len(train_dataloader), 
             num_val_steps=len(val_dataloader), 
             num_test_steps=len(test_dataloader),
@@ -123,7 +125,7 @@ class Trainer:
         with self.progress:
             num_epochs_without_improvement = 0
             
-            for epoch in range(1, self.epochs + 1):
+            for epoch in range(1, epochs + 1):
                 metrics = {'epoch': epoch}
 
                 # train loop

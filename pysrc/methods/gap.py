@@ -188,7 +188,6 @@ class GAP (MethodBase):
             self.data.x = torch.stack([self.data.x], dim=-1)
 
             trainer = Trainer(
-                epochs=self.pre_epochs, 
                 use_amp=self.use_amp, 
                 monitor='val/acc', monitor_mode='max', 
                 device=self.device,
@@ -197,6 +196,7 @@ class GAP (MethodBase):
 
             trainer.fit(
                 model=self.encoder,
+                epochs=self.pre_epochs, 
                 optimizer=self.configure_optimizers(self.encoder), 
                 train_dataloader=self.data_loader('train'), 
                 val_dataloader=self.data_loader('val'),
@@ -227,7 +227,6 @@ class GAP (MethodBase):
         self.classifier.to(self.device)
 
         trainer = Trainer(
-            epochs=self.epochs, 
             use_amp=self.use_amp, 
             monitor='val/acc', monitor_mode='max', 
             device=self.device,
@@ -236,6 +235,7 @@ class GAP (MethodBase):
 
         metrics = trainer.fit(
             model=self.classifier, 
+            epochs=self.epochs, 
             optimizer=self.configure_optimizers(self.classifier),
             train_dataloader=self.data_loader('train'), 
             val_dataloader=self.data_loader('val'),

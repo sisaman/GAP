@@ -160,7 +160,6 @@ class GraphSAGE (MethodBase):
         self.classifier.to(self.device)
 
         trainer = Trainer(
-            epochs=self.epochs, 
             use_amp=self.use_amp, 
             val_interval=not(self.dp_level == 'node' and self.epsilon < np.inf),
             monitor='val/acc', monitor_mode='max', 
@@ -170,6 +169,7 @@ class GraphSAGE (MethodBase):
 
         metrics = trainer.fit(
             model=self.classifier, 
+            epochs=self.epochs, 
             optimizer=self.configure_optimizers(self.classifier),
             train_dataloader=self.data_loader('train'), 
             val_dataloader=self.data_loader('val'),
