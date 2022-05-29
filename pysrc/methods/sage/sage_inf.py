@@ -1,6 +1,5 @@
 import torch
 from typing import Annotated, Literal, Union
-from torch.nn import Module
 from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
@@ -69,9 +68,6 @@ class SAGEINF (MethodBase):
             device=self.device,
         )
 
-        Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
-        self.optimizer = Optim(self.classifier.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
-
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -89,7 +85,7 @@ class SAGEINF (MethodBase):
         metrics = self.trainer.fit(
             model=self.classifier, 
             epochs=self.epochs, 
-            optimizer=self.optimizer,
+            optimizer=self.configure_optimizer(),
             train_dataloader=self.data_loader('train'), 
             val_dataloader=self.data_loader('val'),
             test_dataloader=self.data_loader('test'),
@@ -112,3 +108,7 @@ class SAGEINF (MethodBase):
                 shuffle=True,
                 num_workers=6,
             )
+
+    def configure_optimizer(self) -> Optimizer:
+        Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
+        return Optim(self.classifier.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
