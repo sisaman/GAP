@@ -2,16 +2,15 @@ from typing import Callable
 import torch
 from torch import Tensor
 import torch.nn.functional as F
-from torch.nn import Module, BatchNorm1d
+from torch.nn import BatchNorm1d
 from torch_sparse import SparseTensor
+from pysrc.classifiers.base import ClassifierBase, Metrics, Stage
 from pysrc.models import MLP
 from pysrc.models import GraphSAGE
 from torch_geometric.data import Data
 
-from pysrc.trainer.typing import Metrics, TrainerStage
 
-
-class GraphSAGEClassifier(Module):
+class GraphSAGEClassifier(ClassifierBase):
     def __init__(self, 
                  output_dim: int, 
                  hidden_dim: int = 16, 
@@ -89,7 +88,7 @@ class GraphSAGEClassifier(Module):
 
         return F.log_softmax(h, dim=-1)
 
-    def step(self, data: Data, stage: TrainerStage) -> tuple[Tensor, Metrics]:
+    def step(self, data: Data, stage: Stage) -> tuple[Tensor, Metrics]:
         mask = data[f'{stage}_mask']
         target = data.y[mask][:data.batch_size]
         adj_t = data.adj_t[:data.num_nodes, :data.num_nodes]
@@ -112,8 +111,3 @@ class GraphSAGEClassifier(Module):
         self.pre_mlp.reset_parameters()
         self.gnn.reset_parameters()
         self.post_mlp.reset_parameters()
-
-        if hasattr(self, 'autograd_grad_sample_hooks'):
-            for hook in self.autograd_grad_sample_hooks:
-                hook.remove()
-            del self.autograd_grad_sample_hooks

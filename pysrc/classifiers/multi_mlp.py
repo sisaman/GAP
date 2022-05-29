@@ -2,12 +2,12 @@ from typing import Callable, Iterable, Literal, get_args
 import torch
 from torch import Tensor
 import torch.nn.functional as F
-from torch.nn import Dropout, ModuleList, BatchNorm1d, Module
+from torch.nn import Dropout, ModuleList, BatchNorm1d
+from pysrc.classifiers.base import ClassifierBase, Metrics, Stage
 from pysrc.models import MLP
-from pysrc.trainer.typing import Metrics, TrainerStage
 
 
-class MultiMLPClassifier(Module):
+class MultiMLPClassifier(ClassifierBase):
     CombType = Literal['cat', 'sum', 'max', 'mean']
     supported_combinations = get_args(CombType)
 
@@ -28,7 +28,7 @@ class MultiMLPClassifier(Module):
         self.combination = combination
         self.normalize = normalize
 
-        self.pre_mlps = ModuleList([
+        self.pre_mlps: list[MLP] = ModuleList([
             MLP(
                 hidden_dim=hidden_dim,
                 output_dim=hidden_dim,
@@ -84,7 +84,7 @@ class MultiMLPClassifier(Module):
         h_combined = self.combine(h_list)
         return h_combined
 
-    def step(self, batch: tuple[Tensor, Tensor], stage: TrainerStage) -> tuple[Tensor, Metrics]:
+    def step(self, batch: tuple[Tensor, Tensor], stage: Stage) -> tuple[Tensor, Metrics]:
         x_stack, y = batch
         preds: Tensor = self(x_stack)
         acc = preds.argmax(dim=1).eq(y).float().mean() * 100
@@ -106,7 +106,3 @@ class MultiMLPClassifier(Module):
         
         self.post_mlp.reset_parameters()
 
-        if hasattr(self, 'autograd_grad_sample_hooks'):
-            for hook in self.autograd_grad_sample_hooks:
-                hook.remove()
-            del self.autograd_grad_sample_hooks
