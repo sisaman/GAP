@@ -1,19 +1,24 @@
 from pysrc.console import console
 with console.status('importing modules'):
     import sys
-    import time
     import torch
     import logging
     import numpy as np
+    from time import time
     from typing import Annotated
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
     from pysrc.datasets import DatasetLoader
-    from pysrc.args.utils import print_args, invoke_by_args, create_arguments
+    from pysrc.args.utils import print_args, invoke, create_arguments
     from pysrc.loggers import Logger
-    from pysrc.methods import GAP, GraphSAGE
+    from pysrc.methods import GAPINF, GAPEDP, GAPNDP
     from pysrc.utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
 
+supported_methods = {
+    'gap-inf': GAPINF,
+    'gap-edp': GAPEDP,
+    'gap-ndp': GAPNDP,
+}
 
 def run(
     name: Annotated[str, dict(help='experiment name')] = '',
@@ -24,24 +29,29 @@ def run(
     seed_everything(seed)
 
     with console.status('loading dataset'):
-        data_initial = invoke_by_args(DatasetLoader, kwargs).load(verbose=True)
+        data_initial = invoke(DatasetLoader, **kwargs).load(verbose=True)
 
     test_acc = []
     run_metrics = {}
     num_classes = data_initial.y.max().item() + 1
     config = dict(**kwargs, name=name, seed=seed, repeats=repeats)
-    logger = invoke_by_args(Logger.setup, dict(enabled=False, config=config, **kwargs))
+    logger = invoke(Logger.setup, enabled=False, config=config, **kwargs)
 
-    ### initiallize model ###
-    Method = GAP if kwargs['model'] == 'gap' else GraphSAGE
-    model = invoke_by_args(Method, dict(num_classes=num_classes, **kwargs))
+    ### initiallize method ###
+    Method = supported_methods[kwargs['method']]
+    method = invoke(Method, num_classes=num_classes, **kwargs)
 
     ### run experiment ###
     for iteration in range(repeats):
         data = Data(**data_initial.to_dict())
+        with console.status(f'moving data to {kwargs["device"]}'):
+            data.to(kwargs['device'])
 
-        model.reset_parameters()
-        metrics = model.fit(data)
+        start_time = time()
+        method.reset_parameters()
+        metrics = method.fit(data)
+        end_time = time()
+        metrics['time'] = end_time - start_time
 
         ### process results ###
         for metric, value in metrics.items():
@@ -66,27 +76,25 @@ def run(
 
 def main():
     init_parser = ArgumentParser(add_help=False, conflict_handler='resolve')
+    method_subparser = init_parser.add_subparsers(dest='method', required=True, title='algorithm to use')
 
-    command_subparser = init_parser.add_subparsers(dest='model', required=True, title='model architecture')
-    command_parser = {
-        'gap': command_subparser.add_parser('gap', help='GAP model', formatter_class=ArgumentDefaultsHelpFormatter),
-        'sage': command_subparser.add_parser('sage', help='GraphSAGE model', formatter_class=ArgumentDefaultsHelpFormatter),
-    }
+    for method_name, method_class in supported_methods.items():
+        method_parser = method_subparser.add_parser(
+            name=method_name, 
+            help=method_class.__doc__, 
+            formatter_class=ArgumentDefaultsHelpFormatter
+        )
 
-    for parser_name, parser in command_parser.items():
         # dataset args
-        group_dataset = parser.add_argument_group('dataset arguments')
+        group_dataset = method_parser.add_argument_group('dataset arguments')
         create_arguments(DatasetLoader, group_dataset)
 
-        # model args
-        group_model = parser.add_argument_group('model arguments')
-        if parser_name == 'gap':
-            create_arguments(GAP, group_model)
-        elif parser_name == 'sage':
-            create_arguments(GraphSAGE, group_model)
-
+        # method args
+        group_method = method_parser.add_argument_group('method arguments')
+        create_arguments(method_class, group_method)
+        
         # experiment args
-        group_expr = parser.add_argument_group('experiment arguments')
+        group_expr = method_parser.add_argument_group('experiment arguments')
         create_arguments(run, group_expr)
         create_arguments(Logger.setup, group_expr)
 
@@ -96,14 +104,14 @@ def main():
     print_args(args, num_cols=4)
     args['cmd'] = ' '.join(sys.argv)  # store calling command
 
-    if not args['cpu'] and not torch.cuda.is_available():
+    if args['device'] == 'cuda' and not torch.cuda.is_available():
         logging.warn('CUDA is not available, proceeding with CPU') 
-        args['cpu'] = True
+        args['device'] = 'cpu'
 
     try:
-        start = time.time()
-        invoke_by_args(run, args)
-        end = time.time()
+        start = time()
+        invoke(run, **args)
+        end = time()
         logging.info(f'Total running time: {(end - start):.2f} seconds.')
     except KeyboardInterrupt:
         print('\n')
@@ -111,7 +119,7 @@ def main():
     except RuntimeError:
         raise
     finally:
-        if not args['cpu']:
+        if args['device'] == 'cuda':
             gpu_mem = torch.cuda.max_memory_allocated() / 1024 ** 3
             logging.info(f'Max GPU memory used = {gpu_mem:.2f} GB\n')
 

@@ -1,3 +1,2 @@
-from pysrc.methods.base import *
-from pysrc.methods.gap import *
-from pysrc.methods.sage import *
+from pysrc.methods.base import MethodBase
+from pysrc.methods.gap import GAPINF, GAPEDP, GAPNDP
