@@ -45,23 +45,28 @@ class NoisySGD(NoisyMechanism):
         return module, optimizer, dataloader
 
     def prepare_module(self, module: T) -> T:
-        if hasattr(module, 'autograd_grad_sample_hooks'):
-            for hook in module.autograd_grad_sample_hooks:
-                hook.remove()
-            del self.autograd_grad_sample_hooks
-        GradSampleModule(module).register_backward_hook(forbid_accumulation_hook)
+        if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
+            if hasattr(module, 'autograd_grad_sample_hooks'):
+                for hook in module.autograd_grad_sample_hooks:
+                    hook.remove()
+                del self.autograd_grad_sample_hooks
+            GradSampleModule(module).register_backward_hook(forbid_accumulation_hook)
         return module
 
-    def prepare_dataloader(self, dataloader: DataLoader) -> PoissonDataLoader:
-        return PoissonDataLoader(
-            dataset=dataloader.dataset, 
-            batch_size=self.params['batch_size']
-        )
+    def prepare_dataloader(self, dataloader: DataLoader) -> DataLoader:
+        if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
+            dataloader = PoissonDataLoader(
+                dataset=dataloader.dataset, 
+                batch_size=self.params['batch_size']
+            )
+        return dataloader
 
     def prepare_optimizer(self, optimizer: Optimizer) -> DPOptimizer:
-        return DPOptimizer(
-            optimizer=optimizer,
-            noise_multiplier=self.params['noise_scale'],
-            max_grad_norm=self.params['max_grad_norm'],
-            expected_batch_size=self.params['batch_size'],
-        )
+        if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
+            optimizer = DPOptimizer(
+                optimizer=optimizer,
+                noise_multiplier=self.params['noise_scale'],
+                max_grad_norm=self.params['max_grad_norm'],
+                expected_batch_size=self.params['batch_size'],
+            )
+        return optimizer
