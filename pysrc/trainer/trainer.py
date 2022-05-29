@@ -1,15 +1,14 @@
 import os
 import uuid
 import torch
-from torch.nn import Module
 from torch.optim import Optimizer
 from torch.cuda.amp import GradScaler
 from typing import Iterable, Literal, Optional
+from pysrc.classifiers.base import ClassifierBase
 from pysrc.loggers import Logger
 from torchmetrics import MeanMetric
-from pysrc.privacy.algorithms import NoisySGD
 from pysrc.trainer.progress import TrainerProgress
-from pysrc.trainer.typing import TrainerStage, Metrics
+from pysrc.classifiers.base import Metrics, Stage
 
 
 class Trainer:
@@ -20,7 +19,6 @@ class Trainer:
                  monitor:       str = 'val/acc',
                  monitor_mode:  Literal['min', 'max'] = 'max',
                  device:        Literal['cpu', 'cuda'] = 'cuda',
-                 noisy_sgd:     Optional[NoisySGD] = None,
                  ):
 
         self.patience = patience
@@ -29,10 +27,9 @@ class Trainer:
         self.monitor = monitor
         self.monitor_mode = monitor_mode
         self.device = device
-        self.noisy_sgd = noisy_sgd
         
         self.logger = Logger.get_instance()
-        self.model: Module = None
+        self.model: ClassifierBase = None
         self.scaler = GradScaler(enabled=self.use_amp)
         self.best_metrics: dict[str, object] = None
         self.checkpoint_path: str = None
@@ -46,7 +43,7 @@ class Trainer:
         }
 
     def reset(self):
-        self.model: Module = None
+        self.model: ClassifierBase = None
         self.scaler = GradScaler(enabled=self.use_amp)
         self.best_metrics: dict[str, object] = None
         self.checkpoint_path: str = None
@@ -54,7 +51,7 @@ class Trainer:
         for metric in self.metrics.values():
             metric.reset()
 
-    def aggregate_metrics(self, stage: TrainerStage='train') -> Metrics:
+    def aggregate_metrics(self, stage: Stage='train') -> Metrics:
         metrics = {}
 
         for metric_name, metric_value in self.metrics.items():
@@ -77,7 +74,7 @@ class Trainer:
         else:
             raise ValueError(f'Unknown metric mode: {self.monitor_mode}')
 
-    def load_best_model(self) -> Module:
+    def load_best_model(self) -> ClassifierBase:
         if self.checkpoint_path:
             self.model.load_state_dict(torch.load(self.checkpoint_path))
             return self.model
@@ -85,7 +82,7 @@ class Trainer:
             raise Exception('No checkpoint found')
 
     def fit(self, 
-            model: Module, 
+            model: ClassifierBase, 
             epochs: int,
             optimizer: Optimizer, 
             train_dataloader: Iterable, 
@@ -97,13 +94,6 @@ class Trainer:
         self.model = model.to(self.device)
         self.model.train()
         self.optimizer = optimizer
-
-        if self.noisy_sgd:
-            self.model, self.optimizer, train_dataloader = self.noisy_sgd(
-                module=self.model,
-                optimizer=optimizer,
-                data_loader=train_dataloader,
-            )
 
         if checkpoint:
             os.makedirs('checkpoints', exist_ok=True)
@@ -165,7 +155,7 @@ class Trainer:
         if self.logger: self.logger.log_summary(self.best_metrics)
         return self.best_metrics
 
-    def loop(self, dataloader: Iterable, stage: TrainerStage) -> Metrics:
+    def loop(self, dataloader: Iterable, stage: Stage) -> Metrics:
         self.model.train(stage == 'train')
         self.progress.update(stage, visible=len(dataloader) > 1)
 
@@ -178,7 +168,7 @@ class Trainer:
         self.progress.reset(stage, visible=False)
         return self.aggregate_metrics(stage)
 
-    def step(self, batch, stage: TrainerStage) -> Metrics:
+    def step(self, batch, stage: Stage) -> Metrics:
         if stage == 'train':
             self.optimizer.zero_grad(set_to_none=True)
 
