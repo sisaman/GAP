@@ -1,4 +1,3 @@
-import numpy as np
 from typing import Annotated
 from torch_geometric.data import Data
 from pysrc.console import console
@@ -10,7 +9,7 @@ from pysrc.classifiers.base import Metrics
 class SAGEEDP (SAGEINF):
     def __init__(self,
                  num_classes,
-                 epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')] = np.inf,
+                 epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')],
                  **kwargs:      Annotated[dict, dict(help='extra options passed to base class', bases=[SAGEINF])]
                  ):
 

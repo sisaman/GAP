@@ -1,5 +1,4 @@
 from typing import Annotated, Callable, Literal, Union, get_args, get_origin
-from collections.abc import Iterable
 from pysrc.console import console
 import math
 import inspect
@@ -85,8 +84,13 @@ def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list =
                     )
             else:
                 metadata['type'] = param_type
-                metadata['default'] = param_obj.default
                 metadata['dest'] = param_name
+
+                if param_obj.default is not inspect.Parameter.empty:
+                    metadata['default'] = param_obj.default
+                else:
+                    metadata['required'] = True
+                    metadata['default'] = 'required'
 
                 if param_type is bool:
                     metadata['type'] = str2bool
@@ -102,9 +106,6 @@ def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list =
                     try:
                         metadata['metavar'] = metadata.get('metavar', f'<{param_type.__name__}>')
                     except: pass
-                
-                #     choices = [str(c) for c in metadata['choices']]
-                #     metadata['help'] = metadata.get('help', '') + f" (choices: {', '.join(choices)})"
 
                 options = {f'--{param_name}', f'--{param_name.replace("_", "-")}'}
                 custom_options = metadata.pop('option', [])
