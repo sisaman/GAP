@@ -1,11 +1,18 @@
+from typing import TypeVar
 import numpy as np
 from scipy.stats import hypergeom
-from opacus.privacy_engine import PrivacyEngine
+from opacus.privacy_engine import forbid_accumulation_hook
+from opacus.grad_sample import GradSampleModule
+from opacus.optimizers import DPOptimizer
+from opacus.data_loader import DPDataLoader
 from torch.nn import Module
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from pysrc.privacy.mechanisms.commons import InfMechanism, ZeroMechanism
 from pysrc.privacy.mechanisms.noisy import NoisyMechanism
+
+
+T = TypeVar('T', bound=Module)
 
 
 class GNNBasedNoisySGD(NoisyMechanism):
@@ -46,21 +53,37 @@ class GNNBasedNoisySGD(NoisyMechanism):
 
             self.propagate_updates(RDP, type_of_update='RDP')
 
-    def __call__(self, module: Module, optimizer: Optimizer, data_loader: DataLoader, **kwargs):
+    def __call__(self, module: T, optimizer: Optimizer, dataloader: DataLoader) -> tuple[T, Optimizer, DataLoader]:
+        module = self.prepare_module(module)
+        dataloader = self.prepare_dataloader(dataloader)
+        optimizer = self.prepare_optimizer(optimizer)
+        return module, optimizer, dataloader
+
+    def prepare_module(self, module: T) -> T:
+        if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
+            if hasattr(module, 'autograd_grad_sample_hooks'):
+                for hook in module.autograd_grad_sample_hooks:
+                    hook.remove()
+                del self.autograd_grad_sample_hooks
+            GradSampleModule(module).register_backward_hook(forbid_accumulation_hook)
+        return module
+
+    def prepare_dataloader(self, dataloader: DataLoader) -> DataLoader:
+        if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
+            dataloader = DPDataLoader.from_data_loader(dataloader)
+        return dataloader
+
+    def prepare_optimizer(self, optimizer: Optimizer) -> DPOptimizer:
         noise_scale = self.params['noise_scale']
         epochs = self.params['epochs']
         K = self.params['max_degree']
         C = self.params['max_grad_norm']
 
         if noise_scale > 0.0 and epochs > 0:
-            _, optimizer, data_loader = PrivacyEngine().make_private(
-                module=module,
+            optimizer = DPOptimizer(
                 optimizer=optimizer,
-                data_loader=data_loader,
                 noise_multiplier=noise_scale * 2 * (K + 1),
                 max_grad_norm=C,
-                poisson_sampling=False,
-                **kwargs
+                expected_batch_size=self.params['batch_size'],
             )
-
-        return module, optimizer, data_loader
+        return optimizer
