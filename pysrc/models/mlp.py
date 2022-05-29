@@ -30,10 +30,12 @@ class MLP(torch.nn.Module):
         self.activation_fn = activation_fn
 
         dimensions = [hidden_dim] * (num_layers - 1) + [output_dim] * (num_layers > 0)
-        self.layers = ModuleList([Linear(-1, dim) for dim in dimensions])
+        self.layers: list[Linear] = ModuleList([Linear(-1, dim) for dim in dimensions])
         
         num_bns = batch_norm * (num_layers - 1)
-        self.bns = ModuleList([BatchNorm1d(hidden_dim) for _ in range(num_bns)]) if batch_norm else []
+        self.bns: list[BatchNorm1d] = []
+        if batch_norm:
+            self.bns = ModuleList([BatchNorm1d(hidden_dim) for _ in range(num_bns)])
         
         self.reset_parameters()
 
