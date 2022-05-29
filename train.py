@@ -12,6 +12,7 @@ with console.status('importing modules'):
     from pysrc.loggers import Logger
     from pysrc.methods.gap import GAPINF, GAPEDP, GAPNDP
     from pysrc.methods.sage import SAGEINF, SAGEEDP, SAGENDP
+    from pysrc.methods.mlp import MLP, MLPDP
     from pysrc.utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
 
@@ -22,6 +23,8 @@ supported_methods = {
     'sage-inf': SAGEINF,
     'sage-edp': SAGEEDP,
     'sage-ndp': SAGENDP,
+    'mlp': MLP,
+    'mlp-dp': MLPDP
 }
 
 def run(
