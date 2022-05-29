@@ -1,4 +1,5 @@
 from typing import Annotated, Callable, Literal, Union, get_args, get_origin
+from collections.abc import Iterable
 from pysrc.console import console
 import math
 import inspect
@@ -40,58 +41,80 @@ def str2bool(v: Union[str, bool]) -> bool:
 def strip_unexpected_kwargs(callable: Callable, kwargs: dict) -> dict[str, object]:
     signature = inspect.signature(callable)
     parameters = signature.parameters
+    out_kwargs = {arg: value for arg, value in kwargs.items() if arg in parameters}
 
     # check if the function has kwargs
     for _, param in parameters.items():
-        if param.kind == inspect.Parameter.VAR_KEYWORD:
+        annotation = param.annotation
+        if get_origin(annotation) is Annotated:
+            metadata = get_args(annotation)[1]
+            bases = metadata.get('bases', [])
+            for base_callable in bases:
+                out_kwargs.update(strip_unexpected_kwargs(base_callable, kwargs))
+        elif param.kind == inspect.Parameter.VAR_KEYWORD:
             return kwargs
 
-    kwargs = {arg: value for arg, value in kwargs.items() if arg in parameters}
-    return kwargs
+    return out_kwargs
 
 
-def invoke_by_args(callable: Callable[..., RT], args: ArgType) -> RT:
-    args_dict = args if isinstance(args, dict) else vars(args)
-    args_dict = strip_unexpected_kwargs(callable, args_dict)
-    return callable(**args_dict)
+def invoke(callable: Callable[..., RT], **kwargs) -> RT:
+    kwargs = strip_unexpected_kwargs(callable, kwargs)
+    return callable(**kwargs)
 
 
-def create_arguments(callable: Callable, parser: ArgumentParser):
+def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list = []) -> list[str]:
+    arguments_added = []
     parameters = inspect.signature(callable).parameters
     for param_name, param_obj in parameters.items():
+        if param_name in exclude:
+            continue
+        
         annotation = param_obj.annotation
         if get_origin(annotation) is Annotated:
             annotation = get_args(annotation)
             param_type = annotation[0]
             metadata: dict = annotation[1]
-            metadata['type'] = param_type
-            metadata['default'] = param_obj.default
-            metadata['dest'] = param_name
 
-            if param_type is bool:
-                metadata['type'] = str2bool
-                metadata['nargs'] = '?'
-                metadata['const'] = True
-            elif get_origin(param_type) is Union:
-                sub_types = get_args(param_type)
-                if len(sub_types) == 2 and get_origin(sub_types[0]) is Literal:
-                    metadata['type'] = ArgWithLiteral(main_type=sub_types[1], literals=get_args(sub_types[0]))
-                    metadata['metavar'] = f"{sub_types[1].__name__}" + '|{' +  ','.join(map(str, get_args(sub_types[0]))) + '}'
+            bases = metadata.get('bases', False)
+            if bases:
+                for base_callable in bases:
+                    arguments_added += create_arguments(
+                        callable=base_callable, 
+                        parser=parser, 
+                        exclude=metadata.get('exclude', []) + arguments_added
+                    )
+            else:
+                metadata['type'] = param_type
+                metadata['default'] = param_obj.default
+                metadata['dest'] = param_name
 
-            if 'choices' not in metadata:
-                try:
-                    metadata['metavar'] = metadata.get('metavar', param_type.__name__)
-                except: pass
-            
-            #     choices = [str(c) for c in metadata['choices']]
-            #     metadata['help'] = metadata.get('help', '') + f" (choices: {', '.join(choices)})"
+                if param_type is bool:
+                    metadata['type'] = str2bool
+                    metadata['nargs'] = '?'
+                    metadata['const'] = True
+                elif get_origin(param_type) is Union:
+                    sub_types = get_args(param_type)
+                    if len(sub_types) == 2 and get_origin(sub_types[0]) is Literal:
+                        metadata['type'] = ArgWithLiteral(main_type=sub_types[1], literals=get_args(sub_types[0]))
+                        metadata['metavar'] = f"<{sub_types[1].__name__}>" + '|{' +  ','.join(map(str, get_args(sub_types[0]))) + '}'
 
-            options = {f'--{param_name}', f'--{param_name.replace("_", "-")}'}
-            custom_options = metadata.pop('option', [])
-            custom_options = [custom_options] if isinstance(custom_options, str) else custom_options
-            options.update(custom_options)
-            options = sorted(sorted(list(options)), key=len)
-            parser.add_argument(*options, **metadata)
+                if 'choices' not in metadata:
+                    try:
+                        metadata['metavar'] = metadata.get('metavar', f'<{param_type.__name__}>')
+                    except: pass
+                
+                #     choices = [str(c) for c in metadata['choices']]
+                #     metadata['help'] = metadata.get('help', '') + f" (choices: {', '.join(choices)})"
+
+                options = {f'--{param_name}', f'--{param_name.replace("_", "-")}'}
+                custom_options = metadata.pop('option', [])
+                custom_options = [custom_options] if isinstance(custom_options, str) else custom_options
+                options.update(custom_options)
+                options = sorted(sorted(list(options)), key=len)
+                parser.add_argument(*options, **metadata)
+                arguments_added.append(param_name)
+    
+    return arguments_added
 
 
 def print_args(args: ArgType, num_cols: int = 4):
