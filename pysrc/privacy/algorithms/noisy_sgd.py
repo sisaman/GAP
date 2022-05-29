@@ -1,4 +1,7 @@
-from opacus.privacy_engine import PrivacyEngine
+from typing import TypeVar
+from opacus.privacy_engine import forbid_accumulation_hook
+from opacus.grad_sample import GradSampleModule
+from opacus.optimizers import DPOptimizer
 from autodp.transformer_zoo import Composition, AmplificationBySampling
 from torch.nn import Module
 from torch.optim import Optimizer
@@ -7,6 +10,7 @@ from pysrc.data.loader.poisson import PoissonDataLoader
 from pysrc.privacy.mechanisms.commons import GaussianMechanism, InfMechanism, ZeroMechanism
 from pysrc.privacy.mechanisms.noisy import NoisyMechanism
 
+T = TypeVar('T', bound=Module)
 
 class NoisySGD(NoisyMechanism):
     def __init__(self, noise_scale: float, dataset_size: int, batch_size: int, epochs: int, max_grad_norm: float):
@@ -34,16 +38,30 @@ class NoisySGD(NoisyMechanism):
         
         self.set_all_representation(mech)
 
-    def __call__(self, module: Module, optimizer: Optimizer, data_loader: DataLoader, **kwargs):
-        if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
-            _, optimizer, data_loader = PrivacyEngine().make_private(
-                module=module,
-                optimizer=optimizer,
-                data_loader=data_loader,
-                noise_multiplier=self.params['noise_scale'],
-                max_grad_norm=self.params['max_grad_norm'],
-                poisson_sampling=not isinstance(data_loader, PoissonDataLoader),
-                **kwargs
-            )
+    def __call__(self, module: T, optimizer: Optimizer, dataloader: DataLoader) -> tuple[T, Optimizer, DataLoader]:
+        module = self.prepare_module(module)
+        dataloader = self.prepare_dataloader(dataloader)
+        optimizer = self.prepare_optimizer(optimizer)
+        return module, optimizer, dataloader
 
-        return module, optimizer, data_loader
+    def prepare_module(self, module: T) -> T:
+        if hasattr(module, 'autograd_grad_sample_hooks'):
+            for hook in module.autograd_grad_sample_hooks:
+                hook.remove()
+            del self.autograd_grad_sample_hooks
+        GradSampleModule(module).register_backward_hook(forbid_accumulation_hook)
+        return module
+
+    def prepare_dataloader(self, dataloader: DataLoader) -> PoissonDataLoader:
+        return PoissonDataLoader(
+            dataset=dataloader.dataset, 
+            batch_size=self.params['batch_size']
+        )
+
+    def prepare_optimizer(self, optimizer: Optimizer) -> DPOptimizer:
+        return DPOptimizer(
+            optimizer=optimizer,
+            noise_multiplier=self.params['noise_scale'],
+            max_grad_norm=self.params['max_grad_norm'],
+            expected_batch_size=self.params['batch_size'],
+        )
