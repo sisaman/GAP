@@ -61,16 +61,11 @@ class GNNBasedNoisySGD(NoisyMechanism):
 
     def prepare_module(self, module: T) -> T:
         if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
-            if hasattr(module, 'autograd_grad_sample_hooks'):
-                for hook in module.autograd_grad_sample_hooks:
-                    hook.remove()
-                del self.autograd_grad_sample_hooks
-            GradSampleModule(module).register_backward_hook(forbid_accumulation_hook)
+            GradSampleModule(module)
         return module
 
     def prepare_dataloader(self, dataloader: DataLoader) -> DataLoader:
-        if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
-            dataloader = DPDataLoader.from_data_loader(dataloader)
+        # since we don't need poisson sampling, we can use the same dataloader
         return dataloader
 
     def prepare_optimizer(self, optimizer: Optimizer) -> DPOptimizer:
