@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 from typing import Annotated, Union, Literal
+from torch.optim import Optimizer
 from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
 from pysrc.console import console
@@ -20,7 +21,7 @@ class SAGENDP (SAGEINF):
                  max_degree:    Annotated[int,   dict(help='max degree to sample per each node')] = 100,
                  max_grad_norm: Annotated[float, dict(help='maximum norm of the per-sample gradients')] = 1.0,
                  batch_size:    Annotated[int,   dict(help='batch size')] = 256,
-                 **kwargs:      Annotated[dict, dict(help='extra options passed to GAPINF method', bases=[SAGEINF], exclude=['batch_norm', 'mp_layers'])]
+                 **kwargs:      Annotated[dict, dict(help='extra options passed to base class', bases=[SAGEINF], exclude=['batch_norm', 'mp_layers'])]
                  ):
 
         super().__init__(num_classes, mp_layers=1, batch_size=batch_size, batch_norm=False, **kwargs)
@@ -67,7 +68,6 @@ class SAGENDP (SAGEINF):
             logging.info(f'noise scale: {self.noise_scale:.4f}\n')
 
         self.classifier = self.noisy_sgd.prepare_module(self.classifier)
-        self.optimizer = self.noisy_sgd.prepare_optimizer(self.optimizer)
 
     def fit(self, data: Data) -> Metrics:
         num_train_nodes = data.train_mask.sum().item()
@@ -86,3 +86,8 @@ class SAGENDP (SAGEINF):
         if stage == 'train':
             dataloader = self.noisy_sgd.prepare_dataloader(dataloader)
         return dataloader
+
+    def configure_optimizer(self) -> Optimizer:
+        optimizer = super().configure_optimizer()
+        optimizer = self.noisy_sgd.prepare_optimizer(optimizer)
+        return optimizer

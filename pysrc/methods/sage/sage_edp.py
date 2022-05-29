@@ -11,7 +11,7 @@ class SAGEEDP (SAGEINF):
     def __init__(self,
                  num_classes,
                  epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')] = np.inf,
-                 **kwargs:      Annotated[dict, dict(help='extra options passed to GAPINF method', bases=[SAGEINF])]
+                 **kwargs:      Annotated[dict, dict(help='extra options passed to base class', bases=[SAGEINF])]
                  ):
 
         super().__init__(num_classes, **kwargs)

@@ -17,7 +17,7 @@ class GAPEDP (GAPINF):
                  num_classes,
                  epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')] = np.inf,
                  delta:         Annotated[Union[Literal['auto'], float], dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
-                 **kwargs:      Annotated[dict, dict(help='extra options passed to GAPINF method', bases=[GAPINF])]
+                 **kwargs:      Annotated[dict, dict(help='extra options passed to base class', bases=[GAPINF])]
                  ):
 
         super().__init__(num_classes, **kwargs)
