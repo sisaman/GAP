@@ -10,7 +10,8 @@ with console.status('importing modules'):
     from pysrc.datasets import DatasetLoader
     from pysrc.args.utils import print_args, invoke, create_arguments
     from pysrc.loggers import Logger
-    from pysrc.methods import GAPINF, GAPEDP, GAPNDP
+    from pysrc.methods.gap import GAPINF, GAPEDP, GAPNDP
+    from pysrc.methods.sage import SAGEINF, SAGEEDP, SAGENDP
     from pysrc.utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
 
@@ -18,6 +19,9 @@ supported_methods = {
     'gap-inf': GAPINF,
     'gap-edp': GAPEDP,
     'gap-ndp': GAPNDP,
+    'sage-inf': SAGEINF,
+    'sage-edp': SAGEEDP,
+    'sage-ndp': SAGENDP,
 }
 
 def run(
