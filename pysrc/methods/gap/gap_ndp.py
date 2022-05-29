@@ -38,7 +38,6 @@ class GAPNDP (GAPINF):
 
         self.num_train_nodes = None  # will be used to set delta if it is 'auto'
 
-
     def calibrate(self):
         self.pma_mechanism = PMA(noise_scale=0.0, hops=self.hops)
 

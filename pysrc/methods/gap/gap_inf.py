@@ -15,7 +15,7 @@ from pysrc.classifiers.base import ClassifierBase, Metrics, Stage
 
 class GAPINF (MethodBase):
     """non-private GAP method"""
-    
+
     supported_activations = {
         'relu': torch.relu_,
         'selu': torch.selu_,
@@ -113,7 +113,6 @@ class GAPINF (MethodBase):
 
         logging.info('step 3: classification module')
         metrics = self.train_classifier()
-
         return metrics
 
     def aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
