@@ -103,6 +103,12 @@ class GraphSAGEClassifier(ClassifierBase):
 
         return loss, metrics
 
+    @torch.no_grad()
+    def predict(self, data: Data) -> Tensor:
+        self.eval()
+        logits = self(data.x, data.adj_t)
+        return torch.exp(logits)
+
     def reset_parameters(self):
         if self.batch_norm:
             self.bn1.reset_parameters()

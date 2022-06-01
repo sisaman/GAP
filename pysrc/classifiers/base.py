@@ -10,4 +10,6 @@ Metrics = dict[str, Number]
 class ClassifierBase(Module, ABC):
     @abstractmethod
     def step(self, batch: tuple[Tensor, Tensor], stage: Stage) -> tuple[Tensor, Metrics]: pass
+    @abstractmethod
+    def predict(self, x: Tensor) -> Tensor: pass
     def reset_parameters(self): pass

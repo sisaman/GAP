@@ -97,6 +97,10 @@ class MultiMLPClassifier(ClassifierBase):
 
         return loss, metrics
 
+    def predict(self, x_stack: Tensor) -> Tensor:
+        logits = self.forward(x_stack)
+        return torch.exp(logits)
+
     def reset_parameters(self):
         if self.bn:
             self.bn.reset_parameters()
