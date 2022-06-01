@@ -7,6 +7,8 @@ from pysrc.classifiers.base import Metrics
 
 
 class SAGEEDP (SAGEINF):
+    """edge-private GraphSAGE method"""
+    
     def __init__(self,
                  num_classes,
                  epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')],

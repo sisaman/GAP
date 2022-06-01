@@ -10,6 +10,8 @@ from pysrc.classifiers.base import Metrics, Stage
 
 
 class SAGEINF (MethodBase):
+    """non-private GraphSAGE method"""
+    
     supported_activations = {
         'relu': torch.relu_,
         'selu': torch.selu_,

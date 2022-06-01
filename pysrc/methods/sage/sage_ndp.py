@@ -14,6 +14,8 @@ from pysrc.privacy.mechanisms import ComposedNoisyMechanism
 
 
 class SAGENDP (SAGEINF):
+    """node-private GraphSAGE method"""
+    
     def __init__(self,
                  num_classes,
                  epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')],
