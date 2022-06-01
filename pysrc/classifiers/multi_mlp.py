@@ -15,8 +15,8 @@ class MultiMLPClassifier(ClassifierBase):
                  num_inputs: int, 
                  output_dim: int,
                  hidden_dim: int = 16,  
-                 pre_layers: int = 2, 
-                 post_layers: int = 1, 
+                 base_layers: int = 2, 
+                 head_layers: int = 1, 
                  combination: CombType = 'cat',
                  normalize: bool = False, 
                  activation_fn: Callable[[Tensor], Tensor] = torch.relu_,
@@ -28,11 +28,11 @@ class MultiMLPClassifier(ClassifierBase):
         self.combination = combination
         self.normalize = normalize
 
-        self.pre_mlps: list[MLP] = ModuleList([
+        self.base_mlps: list[MLP] = ModuleList([
             MLP(
                 hidden_dim=hidden_dim,
                 output_dim=hidden_dim,
-                num_layers=pre_layers,
+                num_layers=base_layers,
                 dropout=dropout,
                 activation_fn=activation_fn,
                 batch_norm=batch_norm,
@@ -43,10 +43,10 @@ class MultiMLPClassifier(ClassifierBase):
         self.dropout = Dropout(dropout, inplace=True)
         self.activation_fn = activation_fn
 
-        self.post_mlp = MLP(
+        self.head_mlp = MLP(
             hidden_dim=hidden_dim,
             output_dim=output_dim,
-            num_layers=post_layers,
+            num_layers=head_layers,
             activation_fn=activation_fn,
             dropout=dropout,
             batch_norm=batch_norm,
@@ -54,14 +54,14 @@ class MultiMLPClassifier(ClassifierBase):
 
     def forward(self, x_stack: Tensor) -> Tensor:
         x_stack = x_stack.permute(2, 0, 1) # (hop, batch, input_dim)
-        h_list = [mlp(x) for x, mlp in zip(x_stack, self.pre_mlps)]
+        h_list = [mlp(x) for x, mlp in zip(x_stack, self.base_mlps)]
         h = self.combine(h_list)
         if self.normalize:
             h = F.normalize(h, p=2, dim=-1)
         h = self.bn(h) if self.bn else h
         h = self.dropout(h)
         h = self.activation_fn(h)
-        h = self.post_mlp(h)
+        h = self.head_mlp(h)
         return F.log_softmax(h, dim=-1)
 
     def combine(self, h_list: Iterable[Tensor]) -> Tensor:
@@ -80,7 +80,7 @@ class MultiMLPClassifier(ClassifierBase):
     def encode(self, x_stack: Tensor) -> Tensor:
         self.eval()
         x_stack = x_stack.permute(2, 0, 1) # (hop, batch, input_dim)
-        h_list = [mlp(x) for x, mlp in zip(x_stack, self.pre_mlps)]
+        h_list = [mlp(x) for x, mlp in zip(x_stack, self.base_mlps)]
         h_combined = self.combine(h_list)
         return h_combined
 
@@ -101,8 +101,8 @@ class MultiMLPClassifier(ClassifierBase):
         if self.bn:
             self.bn.reset_parameters()
 
-        for mlp in self.pre_mlps:
+        for mlp in self.base_mlps:
             mlp.reset_parameters()
         
-        self.post_mlp.reset_parameters()
+        self.head_mlp.reset_parameters()
 

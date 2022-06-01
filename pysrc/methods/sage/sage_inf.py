@@ -19,9 +19,9 @@ class SAGEINF (MethodBase):
     def __init__(self,
                  num_classes,
                  hidden_dim:      Annotated[int,   dict(help='dimension of the hidden layers')] = 16,
-                 encoder_layers:  Annotated[int,   dict(help='number of encoder MLP layers')] = 2,
+                 base_layers:  Annotated[int,   dict(help='number of base MLP layers')] = 2,
                  mp_layers:       Annotated[int,   dict(help='number of GNN layers')] = 1,
-                 post_layers:     Annotated[int,   dict(help='number of post-processing MLP layers')] = 1,
+                 head_layers:     Annotated[int,   dict(help='number of head MLP layers')] = 1,
                  activation:      Annotated[str,   dict(help='type of activation function', choices=supported_activations)] = 'selu',
                  dropout:         Annotated[float, dict(help='dropout rate')] = 0.0,
                  batch_norm:      Annotated[bool,  dict(help='if true, then model uses batch normalization')] = True,
@@ -37,9 +37,9 @@ class SAGEINF (MethodBase):
 
         assert mp_layers >= 1, 'number of message-passing layers must be at least 1'
 
-        self.encoder_layers = encoder_layers
+        self.base_layers = base_layers
         self.mp_layers = mp_layers
-        self.post_layers = post_layers
+        self.head_layers = head_layers
         self.device = device
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
@@ -53,9 +53,9 @@ class SAGEINF (MethodBase):
         self.classifier = GraphSAGEClassifier(
             hidden_dim=hidden_dim, 
             output_dim=num_classes, 
-            pre_layers=encoder_layers,
+            base_layers=base_layers,
             mp_layers=mp_layers, 
-            post_layers=post_layers, 
+            head_layers=head_layers, 
             normalize=False,
             activation_fn=activation_fn, 
             dropout=dropout, 

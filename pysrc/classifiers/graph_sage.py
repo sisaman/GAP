@@ -14,9 +14,9 @@ class GraphSAGEClassifier(ClassifierBase):
     def __init__(self, 
                  output_dim: int, 
                  hidden_dim: int = 16, 
-                 pre_layers: int = 0, 
+                 base_layers: int = 0, 
                  mp_layers: int = 2, 
-                 post_layers: int = 0, 
+                 head_layers: int = 0, 
                  normalize: bool = False,
                  activation_fn: Callable[[Tensor], Tensor] = torch.relu_,
                  dropout: float = 0.0, 
@@ -26,10 +26,10 @@ class GraphSAGEClassifier(ClassifierBase):
         assert mp_layers > 0, 'Must have at least one message passing layer'
         super().__init__()
 
-        self.pre_mlp = MLP(
+        self.base_mlp = MLP(
             hidden_dim=hidden_dim,
             output_dim=hidden_dim,
-            num_layers=pre_layers,
+            num_layers=base_layers,
             activation_fn=activation_fn,
             dropout=dropout,
             batch_norm=batch_norm,
@@ -37,8 +37,8 @@ class GraphSAGEClassifier(ClassifierBase):
 
         self.dropout = dropout
         self.activation_fn = activation_fn
-        self.pre_layers = pre_layers
-        self.post_layers = post_layers
+        self.base_layers = base_layers
+        self.head_layers = head_layers
         self.normalize = normalize
         self.batch_norm = batch_norm
         if batch_norm:
@@ -49,7 +49,7 @@ class GraphSAGEClassifier(ClassifierBase):
             in_channels=-1,
             hidden_channels=hidden_dim,
             num_layers=mp_layers,
-            out_channels=output_dim if post_layers == 0 else hidden_dim,
+            out_channels=output_dim if head_layers == 0 else hidden_dim,
             dropout=dropout,
             act=activation_fn,
             norm=BatchNorm1d(hidden_dim) if batch_norm else None,
@@ -59,18 +59,18 @@ class GraphSAGEClassifier(ClassifierBase):
             normalize=True,
         )
 
-        self.post_mlp = MLP(
+        self.head_mlp = MLP(
             hidden_dim=hidden_dim,
             output_dim=output_dim,
-            num_layers=post_layers,
+            num_layers=head_layers,
             activation_fn=activation_fn,
             dropout=dropout,
             batch_norm=batch_norm,
         )
 
     def forward(self, x: Tensor, adj_t: SparseTensor) -> Tensor:
-        if self.pre_layers > 0:
-            x = self.pre_mlp(x)
+        if self.base_layers > 0:
+            x = self.base_mlp(x)
             x = self.bn1(x) if self.batch_norm else x
             x = F.dropout(x, p=self.dropout, training=self.training, inplace=True)
             x = self.activation_fn(x)
@@ -80,11 +80,11 @@ class GraphSAGEClassifier(ClassifierBase):
 
         h = self.gnn(x, adj_t)
 
-        if self.post_layers > 0:
+        if self.head_layers > 0:
             h = self.bn2(h) if self.batch_norm else h
             h = F.dropout(h, p=self.dropout, training=self.training, inplace=True)
             h = self.activation_fn(h)
-            h = self.post_mlp(h)
+            h = self.head_mlp(h)
 
         return F.log_softmax(h, dim=-1)
 
@@ -108,6 +108,6 @@ class GraphSAGEClassifier(ClassifierBase):
             self.bn1.reset_parameters()
             self.bn2.reset_parameters()
 
-        self.pre_mlp.reset_parameters()
+        self.base_mlp.reset_parameters()
         self.gnn.reset_parameters()
-        self.post_mlp.reset_parameters()
+        self.head_mlp.reset_parameters()

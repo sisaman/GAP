@@ -27,8 +27,8 @@ class GAPINF (MethodBase):
                  hops:            Annotated[int,   dict(help='number of hops', option='-k')] = 2,
                  hidden_dim:      Annotated[int,   dict(help='dimension of the hidden layers')] = 16,
                  encoder_layers:  Annotated[int,   dict(help='number of encoder MLP layers')] = 2,
-                 pre_layers:      Annotated[int,   dict(help='number of pre-combination MLP layers')] = 1,
-                 post_layers:     Annotated[int,   dict(help='number of post-combination MLP layers')] = 1,
+                 base_layers:     Annotated[int,   dict(help='number of base MLP layers')] = 1,
+                 head_layers:     Annotated[int,   dict(help='number of head MLP layers')] = 1,
                  combine:         Annotated[str,   dict(help='combination type of transformed hops', choices=MultiMLPClassifier.supported_combinations)] = 'cat',
                  activation:      Annotated[str,   dict(help='type of activation function', choices=supported_activations)] = 'selu',
                  dropout:         Annotated[float, dict(help='dropout rate')] = 0.0,
@@ -37,8 +37,8 @@ class GAPINF (MethodBase):
                  learning_rate:   Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
                  weight_decay:    Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
                  device:          Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
-                 pre_epochs:      Annotated[int,   dict(help='number of epochs for pre-training (ignored if encoder_layers=0)')] = 100,
-                 epochs:          Annotated[int,   dict(help='number of epochs for training')] = 100,
+                 encoder_epochs:  Annotated[int,   dict(help='number of epochs for encoder pre-training (ignored if encoder_layers=0)')] = 100,
+                 epochs:          Annotated[int,   dict(help='number of epochs for classifier training')] = 100,
                  batch_size:      Annotated[Union[Literal['full'], int],   dict(help='batch size, or "full" for full-batch training')] = 'full',
                  full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
                  use_amp:         Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
@@ -46,9 +46,9 @@ class GAPINF (MethodBase):
 
         super().__init__(num_classes)
 
-        if encoder_layers == 0 and pre_epochs > 0:
-            logging.info('encoder is not available, setting pre_epochs to 0')
-            pre_epochs = 0
+        if encoder_layers == 0 and encoder_epochs > 0:
+            logging.warn('encoder_layers is 0, setting encoder_epochs to 0')
+            encoder_epochs = 0
 
         self.hops = hops
         self.encoder_layers = encoder_layers
@@ -56,7 +56,7 @@ class GAPINF (MethodBase):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.optimizer_name = optimizer
-        self.pre_epochs = pre_epochs
+        self.encoder_epochs = encoder_epochs
         self.epochs = epochs
         self.batch_size = batch_size
         self.full_batch_eval = full_batch_eval
@@ -67,8 +67,8 @@ class GAPINF (MethodBase):
             num_inputs=1,
             hidden_dim=hidden_dim,
             output_dim=num_classes,
-            pre_layers=encoder_layers,
-            post_layers=1,
+            base_layers=encoder_layers,
+            head_layers=1,
             combination='cat',
             normalize=True,
             activation_fn=activation_fn,
@@ -80,8 +80,8 @@ class GAPINF (MethodBase):
             num_inputs=hops+1,
             hidden_dim=hidden_dim,
             output_dim=num_classes,
-            pre_layers=pre_layers,
-            post_layers=post_layers,
+            base_layers=base_layers,
+            head_layers=head_layers,
             combination=combine,
             normalize=True,
             activation_fn=activation_fn,
@@ -129,7 +129,7 @@ class GAPINF (MethodBase):
             self.trainer.reset()
             self.trainer.fit(
                 model=self.encoder,
-                epochs=self.pre_epochs,
+                epochs=self.encoder_epochs,
                 optimizer=self.configure_optimizers(self.encoder), 
                 train_dataloader=self.data_loader('train'), 
                 val_dataloader=self.data_loader('val'),
