@@ -156,7 +156,7 @@ class Trainer:
         return self.best_metrics
 
     def test(self, dataloader: Iterable, load_best: bool = True) -> Metrics:
-        if load_best:
+        if load_best and self.val_interval:
             self.model = self.load_best_model()
 
         metrics = self.loop(dataloader, stage='test')
