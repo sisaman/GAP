@@ -1,2 +1,2 @@
-from pysrc.models.mlp import *
-from pysrc.models.sage import *
+from pysrc.models.mlp import MLP
+from pysrc.models.sage import GraphSAGE

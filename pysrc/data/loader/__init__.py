@@ -1,1 +1,1 @@
-from pysrc.data.loader.poisson import *
+from pysrc.data.loader.poisson import PoissonDataLoader
