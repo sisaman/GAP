@@ -19,7 +19,7 @@ class SAGEINF (MethodBase):
     def __init__(self,
                  num_classes,
                  hidden_dim:      Annotated[int,   dict(help='dimension of the hidden layers')] = 16,
-                 base_layers:  Annotated[int,   dict(help='number of base MLP layers')] = 2,
+                 base_layers:     Annotated[int,   dict(help='number of base MLP layers')] = 2,
                  mp_layers:       Annotated[int,   dict(help='number of GNN layers')] = 1,
                  head_layers:     Annotated[int,   dict(help='number of head MLP layers')] = 1,
                  activation:      Annotated[str,   dict(help='type of activation function', choices=supported_activations)] = 'selu',
