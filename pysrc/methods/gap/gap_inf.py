@@ -6,6 +6,9 @@ from torch.optim import Adam, SGD, Optimizer
 from torch.utils.data import TensorDataset, DataLoader
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
+from pysrc.attacks.base import AttackModelBase
+from pysrc.attacks import LinkStealingAttack
+from pysrc.attacks import NodeMembershipInference
 from pysrc.console import console
 from pysrc.methods.base import MethodBase
 from pysrc.trainer import Trainer
@@ -20,6 +23,12 @@ class GAPINF (MethodBase):
         'relu': torch.relu_,
         'selu': torch.selu_,
         'tanh': torch.tanh,
+    }
+
+    supported_attacks = {
+        'none': lambda *args, **kwargs: None,
+        'lsa': LinkStealingAttack,
+        'nmi': NodeMembershipInference,
     }
 
     def __init__(self,
@@ -42,6 +51,7 @@ class GAPINF (MethodBase):
                  batch_size:      Annotated[Union[Literal['full'], int],   dict(help='batch size, or "full" for full-batch training')] = 'full',
                  full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
                  use_amp:         Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
+                 attack:          Annotated[str,   dict(help='attack method', choices=['none', 'lsa', 'nmi'])] = 'none',
                  ):
 
         super().__init__(num_classes)
@@ -61,6 +71,7 @@ class GAPINF (MethodBase):
         self.batch_size = batch_size
         self.full_batch_eval = full_batch_eval
         self.use_amp = use_amp
+        self.attack_model: AttackModelBase = self.supported_attacks[attack]()
         activation_fn = self.supported_activations[activation]
 
         self.encoder = MultiMLPClassifier(
@@ -113,6 +124,11 @@ class GAPINF (MethodBase):
 
         logging.info('step 3: classification module')
         metrics = self.train_classifier()
+
+        # if self.attack_model:
+        #     logging.info('step 4: training attack model')
+
+
         return metrics
 
     def aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
@@ -165,10 +181,16 @@ class GAPINF (MethodBase):
             optimizer=self.configure_optimizers(self.classifier),
             train_dataloader=self.data_loader('train'), 
             val_dataloader=self.data_loader('val'),
-            test_dataloader=self.data_loader('test'),
-            checkpoint=False,
+            test_dataloader=None,
+            checkpoint=True,
         )
 
+        test_metics = self.trainer.test(
+            dataloader=self.data_loader('test'),
+            load_best=True,
+        )
+
+        metrics.update(test_metics)
         self.classifier.to('cpu')
         return metrics
 

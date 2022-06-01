@@ -155,6 +155,13 @@ class Trainer:
         if self.logger: self.logger.log_summary(self.best_metrics)
         return self.best_metrics
 
+    def test(self, dataloader: Iterable, load_best: bool = True) -> Metrics:
+        if load_best:
+            self.model = self.load_best_model()
+
+        metrics = self.loop(dataloader, stage='test')
+        return metrics
+
     def loop(self, dataloader: Iterable, stage: Stage) -> Metrics:
         self.model.train(stage == 'train')
         self.progress.update(stage, visible=len(dataloader) > 1)

@@ -90,10 +90,16 @@ class SAGEINF (MethodBase):
             optimizer=self.configure_optimizer(),
             train_dataloader=self.data_loader('train'), 
             val_dataloader=self.data_loader('val'),
-            test_dataloader=self.data_loader('test'),
-            checkpoint=False,
+            test_dataloader=None,
+            checkpoint=True,
         )
 
+        test_metics = self.trainer.test(
+            dataloader=self.data_loader('test'),
+            load_best=True,
+        )
+
+        metrics.update(test_metics)
         return metrics
 
     def data_loader(self, stage: Stage) -> NeighborLoader:
