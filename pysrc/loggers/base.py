@@ -2,6 +2,7 @@ import functools
 from typing import Callable
 from uuid import uuid1
 from abc import ABC, abstractmethod
+from torch import Module
 from pysrc.utils import RT
 
 
@@ -33,6 +34,9 @@ class LoggerBase(ABC):
     
     @abstractmethod
     def log_summary(self, metrics: dict[str, object]): pass
+
+    @abstractmethod
+    def watch(self, model: Module, **kwargs): pass
     
     @abstractmethod
     def finish(self): pass

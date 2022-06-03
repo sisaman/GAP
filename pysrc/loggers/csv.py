@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from torch import Module
 from pysrc.loggers.base import LoggerBase, if_enabled
 
 
@@ -17,6 +18,9 @@ class CSVLogger(LoggerBase):
     @if_enabled
     def log_summary(self, metrics: dict[str, object]):
         self.experiment.update(metrics)
+
+    def watch(self, model: Module, **kwargs):
+        pass
 
     @if_enabled
     def finish(self):
