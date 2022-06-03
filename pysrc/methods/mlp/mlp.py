@@ -81,7 +81,6 @@ class MLP (MethodBase):
 
     def train_classifier(self):
         self.classifier.to(self.device)
-        self.data.x = torch.stack([self.data.x], dim=-1)
 
         self.trainer.reset()
         metrics = self.trainer.fit(
@@ -105,6 +104,7 @@ class MLP (MethodBase):
     def data_loader(self, stage: Stage) -> DataLoader:
         mask = self.data[f'{stage}_mask']
         x = self.data.x[mask]
+        x = torch.stack([x], dim=-1)
         y = self.data.y[mask]
         if self.batch_size == 'full' or (stage != 'train' and self.full_batch_eval):
             return [(x, y)]
