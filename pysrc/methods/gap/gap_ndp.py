@@ -59,8 +59,11 @@ class GAPNDP (GAPINF):
 
         composed_mechanism = ComposedNoisyMechanism(
             noise_scale=0.0,
-            mechanism_list=[self.encoder_noisy_sgd, self.pma_mechanism, self.classifier_noisy_sgd],
-            coeff_list=[1, 1, 1]
+            mechanism_list=[
+                self.encoder_noisy_sgd, 
+                self.pma_mechanism, 
+                self.classifier_noisy_sgd
+            ]
         )
 
         with console.status('calibrating noise to privacy budget'):

@@ -8,10 +8,12 @@ class ComposedNoisyMechanism(NoisyMechanism):
     def __init__(self, 
                  noise_scale: float, 
                  mechanism_list: list[NoisyMechanism], 
-                 coeff_list: list[float],
+                 coeff_list: list[float]=None,
                  weight_list: list[float]=None,
                  ):
         super().__init__(noise_scale)
+        if coeff_list is None:
+            coeff_list = [1] * len(mechanism_list)
         if weight_list is None:
             weight_list = [1] * len(mechanism_list)
         self.params = {
