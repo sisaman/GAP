@@ -4,8 +4,6 @@ from typing import Annotated, Literal, Union
 from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
-from pysrc.attacks import LinkStealingAttack, NodeMembershipInference
-from pysrc.attacks.base import AttackModelBase
 from pysrc.methods.base import MethodBase
 from pysrc.trainer import Trainer
 from pysrc.classifiers import GraphSAGEClassifier
@@ -19,12 +17,6 @@ class SAGEINF (MethodBase):
         'relu': torch.relu_,
         'selu': torch.selu_,
         'tanh': torch.tanh,
-    }
-
-    supported_attacks = {
-        'none': lambda *args, **kwargs: None,
-        'lsa': LinkStealingAttack,
-        'nmi': NodeMembershipInference,
     }
 
     def __init__(self,
@@ -44,7 +36,6 @@ class SAGEINF (MethodBase):
                  batch_size:      Annotated[Union[Literal['full'], int],   dict(help='batch size, or "full" for full-batch training')] = 'full',
                  full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
                  use_amp:         Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
-                 attack:          Annotated[str,   dict(help='attack method', choices=['none', 'lsa', 'nmi'])] = 'none',
                  ):
 
         assert mp_layers >= 1, 'number of message-passing layers must be at least 1'
@@ -60,7 +51,6 @@ class SAGEINF (MethodBase):
         self.batch_size = batch_size
         self.full_batch_eval = full_batch_eval
         self.use_amp = use_amp
-        self.attack_model: AttackModelBase = self.supported_attacks[attack]()
         activation_fn = self.supported_activations[activation]
 
         self.classifier = GraphSAGEClassifier(
@@ -86,15 +76,10 @@ class SAGEINF (MethodBase):
     def reset_parameters(self):
         self.classifier.reset_parameters()
         self.trainer.reset()
-        if self.attack_model:
-            self.attack_model.reset_parameters()
 
     def fit(self, data: Data) -> Metrics:
         self.data = data
         metrics = self.train_classifier()
-        if self.attack_model:
-            attack_metrics = self.train_attacker()
-            metrics.update(attack_metrics)
         return metrics
 
     def train_classifier(self) -> Metrics:
@@ -118,15 +103,6 @@ class SAGEINF (MethodBase):
 
         metrics.update(test_metics)
         return metrics
-
-    def train_attacker(self):
-        logging.info('training attack model')
-        self.data.logits = self.classifier.predict(self.data)
-        metrics = self.attack_model.fit(self.data)
-        return {
-            'attack/acc': metrics['test/acc'],
-        }
-
 
     def data_loader(self, stage: Stage) -> NeighborLoader:
         if self.batch_size == 'full' or (stage != 'train' and self.full_batch_eval):

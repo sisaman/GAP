@@ -39,7 +39,6 @@ def run(
         data_initial = invoke(DatasetLoader, **kwargs).load(verbose=True)
 
     test_acc = []
-    attack_acc = []
     run_metrics = {}
     num_classes = data_initial.y.max().item() + 1
     config = dict(**kwargs, name=name, seed=seed, repeats=repeats)
@@ -59,21 +58,16 @@ def run(
         method.reset_parameters()
         metrics = method.fit(data)
         end_time = time()
-        metrics['time'] = end_time - start_time
+        metrics['fit_time'] = end_time - start_time
+        test_acc.append(metrics['test/acc'])
 
         ### process results ###
         for metric, value in metrics.items():
             run_metrics[metric] = run_metrics.get(metric, []) + [value]
-
-        test_acc.append(metrics['test/acc'])
-        if 'attack/acc' in metrics:
-            attack_acc.append(metrics['attack/acc'])
         
         console.print()
         logging.info(f'run: {iteration + 1}/{repeats}')
         logging.info(f'test/acc: {test_acc[-1]:.2f}\t average: {np.mean(test_acc).item():.2f}')
-        if 'attack/acc' in metrics:
-            logging.info(f'attack/acc: {attack_acc[-1]:.2f}\t average: {np.mean(attack_acc).item():.2f}')
         console.print()
 
     logger.enable()
