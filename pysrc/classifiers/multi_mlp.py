@@ -97,7 +97,9 @@ class MultiMLPClassifier(ClassifierBase):
 
         return loss, metrics
 
+    @torch.no_grad()
     def predict(self, x_stack: Tensor) -> Tensor:
+        self.eval()
         logits = self.forward(x_stack)
         return torch.exp(logits)
 
