@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from torch import Module
+from torch.nn import Module
 from pysrc.loggers.base import LoggerBase, if_enabled
 
 

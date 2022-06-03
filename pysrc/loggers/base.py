@@ -2,7 +2,7 @@ import functools
 from typing import Callable
 from uuid import uuid1
 from abc import ABC, abstractmethod
-from torch import Module
+from torch.nn import Module
 from pysrc.utils import RT
 
 
