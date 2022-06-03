@@ -39,8 +39,8 @@ class WandbLogger(LoggerBase):
             self.experiment.summary[metric] = value
 
     @if_enabled
-    def watch(self, model: Module):
-        self.experiment.watch(model, log_freq=50)
+    def watch(self, model: Module, **kwargs):
+        self.experiment.watch(model, **kwargs)
 
     @if_enabled
     def finish(self):
