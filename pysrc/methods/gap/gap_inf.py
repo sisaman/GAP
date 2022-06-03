@@ -112,6 +112,8 @@ class GAPINF (MethodBase):
         self.encoder.reset_parameters()
         self.classifier.reset_parameters()
         self.trainer.reset()
+        if self.attack_model:
+            self.attack_model.reset_parameters()
 
     def fit(self, data: Data) -> Metrics:
         self.data = data
@@ -125,9 +127,9 @@ class GAPINF (MethodBase):
         logging.info('step 3: classification module')
         metrics = self.train_classifier()
 
-        # if self.attack_model:
-        #     logging.info('step 4: training attack model')
-
+        if self.attack_model:
+            attack_metrics = self.train_attacker()
+            metrics.update(attack_metrics)
 
         return metrics
 
@@ -169,7 +171,7 @@ class GAPINF (MethodBase):
 
             self.data.x = torch.stack(x_list, dim=-1)
         
-        self.data.to('cpu', 'adj_t')
+        # self.data.to('cpu', 'adj_t')
 
     def train_classifier(self) -> Metrics:
         self.classifier.to(self.device)
@@ -191,8 +193,16 @@ class GAPINF (MethodBase):
         )
 
         metrics.update(test_metics)
-        self.classifier.to('cpu')
+        # self.classifier.to('cpu')
         return metrics
+
+    def train_attacker(self):
+        logging.info('training attack model')
+        self.data.logits = self.classifier.predict(self.data.x)
+        metrics = self.attack_model.fit(self.data)
+        return {
+            'attack/acc': metrics['test/acc'],
+        }
 
     def data_loader(self, stage: Stage) -> DataLoader:
         mask = self.data[f'{stage}_mask']
