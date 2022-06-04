@@ -1,11 +1,11 @@
 import torch
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal, Optional, Union
 from torch.optim import Adam, SGD, Optimizer
 from torch.utils.data import TensorDataset, DataLoader
 from torch_geometric.data import Data
 from pysrc.methods.base import MethodBase
 from pysrc.trainer import Trainer
-from pysrc.classifiers import MultiMLPClassifier
+from pysrc.classifiers import MLPClassifier
 from pysrc.classifiers.base import Metrics, Stage
 
 
@@ -50,14 +50,10 @@ class MLP (MethodBase):
         self.use_amp = use_amp
         activation_fn = self.supported_activations[activation]
 
-        self.classifier = MultiMLPClassifier(
-            num_inputs=1,
+        self.classifier = MLPClassifier(
+            num_classes=num_classes,
             hidden_dim=hidden_dim,
-            output_dim=num_classes,
-            base_layers=num_layers-1,
-            head_layers=1,
-            combination='cat',
-            normalize=False,
+            num_layers=num_layers,
             activation_fn=activation_fn,
             dropout=dropout,
             batch_norm=batch_norm,
@@ -79,6 +75,11 @@ class MLP (MethodBase):
         self.data = data
         metrics = self.train_classifier()
         return metrics
+
+    def predict(self, data: Optional[Data] = None) -> torch.Tensor:
+        if data is None:
+            data = self.data
+        return self.classifier.predict(data.x)
 
     def train_classifier(self):
         self.classifier.to(self.device)
@@ -105,7 +106,6 @@ class MLP (MethodBase):
     def data_loader(self, stage: Stage) -> DataLoader:
         mask = self.data[f'{stage}_mask']
         x = self.data.x[mask]
-        x = torch.stack([x], dim=-1)
         y = self.data.y[mask]
         if self.batch_size == 'full' or (stage != 'train' and self.full_batch_eval):
             return [(x, y)]

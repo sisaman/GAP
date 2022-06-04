@@ -1,6 +1,6 @@
 import torch
 import logging
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal, Optional, Union
 import torch.nn.functional as F
 from torch.optim import Adam, SGD, Optimizer
 from torch.utils.data import TensorDataset, DataLoader
@@ -9,7 +9,7 @@ from torch_sparse import SparseTensor, matmul
 from pysrc.console import console
 from pysrc.methods.base import MethodBase
 from pysrc.trainer import Trainer
-from pysrc.classifiers import MultiMLPClassifier
+from pysrc.classifiers import Encoder, MultiMLPClassifier
 from pysrc.classifiers.base import ClassifierBase, Metrics, Stage
 
 
@@ -64,13 +64,11 @@ class GAP (MethodBase):
         self.use_amp = use_amp
         activation_fn = self.supported_activations[activation]
 
-        self.encoder = MultiMLPClassifier(
-            num_inputs=1,
+        self.encoder = Encoder(
+            num_classes=num_classes,
             hidden_dim=hidden_dim,
-            output_dim=num_classes,
-            base_layers=encoder_layers,
+            encoder_layers=encoder_layers,
             head_layers=1,
-            combination='cat',
             normalize=True,
             activation_fn=activation_fn,
             dropout=dropout,
@@ -79,12 +77,11 @@ class GAP (MethodBase):
 
         self.classifier = MultiMLPClassifier(
             num_inputs=hops+1,
+            num_classes=num_classes,
             hidden_dim=hidden_dim,
-            output_dim=num_classes,
             base_layers=base_layers,
             head_layers=head_layers,
             combination=combine,
-            normalize=True,
             activation_fn=activation_fn,
             dropout=dropout,
             batch_norm=batch_norm,
@@ -110,6 +107,14 @@ class GAP (MethodBase):
         metrics = self.train_classifier()
         return metrics
 
+    def predict(self, data: Optional[Data] = None) -> torch.Tensor:
+        if data is None:
+            data = self.data
+        else:
+            data.x = self.encoder.predict(data.x)
+            self.precompute_aggregations(data)
+        return self.classifier.predict(data.x)
+
     def aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
         return matmul(adj_t, x)
 
@@ -120,7 +125,6 @@ class GAP (MethodBase):
         if self.encoder_layers > 0:
             logging.info('pretraining encoder module')
             self.encoder.to(self.device)
-            self.data.x = torch.stack([self.data.x], dim=-1)
 
             self.trainer.reset()
             self.trainer.fit(
@@ -134,20 +138,21 @@ class GAP (MethodBase):
             )
 
             self.encoder = self.trainer.load_best_model()
-            self.data.x = self.encoder.encode(self.data.x)
-            self.encoder.to('cpu')
+            self.data.x = self.encoder.predict(self.data.x)
 
-    def precompute_aggregations(self):
+    def precompute_aggregations(self, data: Optional[Data] = None):
+        if data is None:
+            data = self.data
         with console.status('computing aggregations'):
-            x = F.normalize(self.data.x, p=2, dim=-1)
+            x = F.normalize(data.x, p=2, dim=-1)
             x_list = [x]
 
             for _ in range(self.hops):
-                x = self.aggregate(x, self.data.adj_t)
+                x = self.aggregate(x, data.adj_t)
                 x = self.normalize(x)
                 x_list.append(x)
 
-            self.data.x = torch.stack(x_list, dim=-1)
+            data.x = torch.stack(x_list, dim=-1)
         
     def train_classifier(self) -> Metrics:
         logging.info('training classification module')
