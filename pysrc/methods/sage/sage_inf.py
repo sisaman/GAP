@@ -56,7 +56,7 @@ class SAGE (MethodBase):
 
         self.classifier = GraphSAGEClassifier(
             hidden_dim=hidden_dim, 
-            output_dim=num_classes, 
+            num_classes=num_classes, 
             base_layers=base_layers,
             mp_layers=mp_layers, 
             head_layers=head_layers, 
