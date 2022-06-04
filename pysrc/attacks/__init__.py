@@ -1,2 +1,3 @@
-from pysrc.attacks.link_inference import LinkStealingAttack
-from pysrc.attacks.node_inference import NodeMembershipInference
+from pysrc.attacks.base import AttackBase
+from pysrc.attacks.lsa import LinkStealingAttack
+from pysrc.attacks.nmi import NodeMembershipInference
