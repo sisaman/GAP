@@ -26,12 +26,12 @@ class ArgWithLiteral:
             else:
                 raise ArgumentTypeError(f'{arg} is not a valid literal')
 
-def str2bool(v: Union[str, bool]) -> bool:
+def boolean(v: Union[str, bool]) -> bool:
     if isinstance(v, bool):
         return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+    if v.lower() in ('yes', 'true', 't', 'y', '1', 'on'):
         return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+    elif v.lower() in ('no', 'false', 'f', 'n', '0', 'off'):
         return False
     else:
         raise ArgumentTypeError('Boolean value expected.')
@@ -64,18 +64,30 @@ def invoke(callable: Callable[..., RT], **kwargs) -> RT:
 def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list = []) -> list[str]:
     arguments_added = []
     parameters = inspect.signature(callable).parameters
+
+    # iterate over the parameters
     for param_name, param_obj in parameters.items():
+
+        # skip the parameters that are in the exclude list
         if param_name in exclude:
             continue
         
-        annotation = param_obj.annotation
-        if get_origin(annotation) is Annotated:
-            annotation = get_args(annotation)
+        # get the annotation
+        annot_obj = param_obj.annotation
+
+        # only process annotated parameters
+        if get_origin(annot_obj) is Annotated:
+
+            # extract parameter type and metadata from annotation
+            annotation = get_args(annot_obj)
             param_type = annotation[0]
             metadata: dict = annotation[1]
 
+            # get the base callable arguments
             bases = metadata.get('bases', False)
+
             if bases:
+                # if there are base callables, recursively add their args to the parser
                 for base_callable in bases:
                     arguments_added += create_arguments(
                         callable=base_callable, 
@@ -83,35 +95,50 @@ def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list =
                         exclude=metadata.get('exclude', []) + arguments_added
                     )
             else:
+                # if there are no base callables, add the parameter to the parser
                 metadata['type'] = param_type
                 metadata['dest'] = param_name
 
+                # if the parameter has a default value, add it to the parser
+                # otherwise, set the parameter as required
                 if param_obj.default is not inspect.Parameter.empty:
                     metadata['default'] = param_obj.default
                 else:
                     metadata['required'] = True
                     metadata['default'] = 'required'
 
+                # tweak specific data types
                 if param_type is bool:
-                    metadata['type'] = str2bool
+                    # process boolean parameters
+                    metadata['type'] = boolean
                     metadata['nargs'] = '?'
                     metadata['const'] = True
                 elif get_origin(param_type) is Union:
+                    # process union parameters
                     sub_types = get_args(param_type)
                     if len(sub_types) == 2 and get_origin(sub_types[0]) is Literal:
                         metadata['type'] = ArgWithLiteral(main_type=sub_types[1], literals=get_args(sub_types[0]))
                         metadata['metavar'] = f"<{sub_types[1].__name__}>" + '|{' +  ','.join(map(str, get_args(sub_types[0]))) + '}'
 
+                # if metadata contains "choices", the parser uses that as meta variable
+                # otherwise, if "metavar" is not provided, set the meta variable to  <parameter type>
                 if 'choices' not in metadata:
                     try:
                         metadata['metavar'] = metadata.get('metavar', f'<{param_type.__name__}>')
                     except: pass
 
+                # create options based on parameter name
                 options = {f'--{param_name}', f'--{param_name.replace("_", "-")}'}
+
+                # add custome options if provided
                 custom_options = metadata.pop('option', [])
                 custom_options = [custom_options] if isinstance(custom_options, str) else custom_options
                 options.update(custom_options)
+
+                # sort option names based on their length
                 options = sorted(sorted(list(options)), key=len)
+
+                # add the parameter to the parser
                 parser.add_argument(*options, **metadata)
                 arguments_added.append(param_name)
     
