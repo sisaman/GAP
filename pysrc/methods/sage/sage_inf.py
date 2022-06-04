@@ -1,6 +1,6 @@
 import logging
 import torch
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal, Optional, Union
 from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
@@ -82,6 +82,11 @@ class SAGE (MethodBase):
         self.data = data
         metrics = self.train_classifier()
         return metrics
+
+    def predict(self, data: Optional[Data] = None) -> torch.Tensor:
+        if data is None:
+            data = self.data
+        return self.classifier.predict(data)
 
     def train_classifier(self) -> Metrics:
         logging.info('training classifier')

@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from typing import Optional
+from torch import Tensor
 from torch_geometric.data import Data
 
 class MethodBase(ABC):
@@ -10,3 +12,6 @@ class MethodBase(ABC):
 
     @abstractmethod
     def fit(self, data: Data) -> dict[str, object]: pass
+
+    @abstractmethod
+    def predict(self, data: Optional[Data] = None) -> Tensor: pass

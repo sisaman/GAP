@@ -86,13 +86,14 @@ class GraphSAGEClassifier(ClassifierBase):
             h = self.activation_fn(h)
             h = self.head_mlp(h)
 
-        return F.log_softmax(h, dim=-1)
+        return h
 
     def step(self, data: Data, stage: Stage) -> tuple[Tensor, Metrics]:
         mask = data[f'{stage}_mask']
         target = data.y[mask][:data.batch_size]
         adj_t = data.adj_t[:data.num_nodes, :data.num_nodes]
-        preds: Tensor = self(data.x, adj_t)[mask][:data.batch_size]
+        h = self(data.x, adj_t)[mask][:data.batch_size]
+        preds = F.log_softmax(h, dim=-1)
         acc = preds.argmax(dim=1).eq(target).float().mean() * 100
         metrics = {f'{stage}/acc': acc}
 
@@ -106,8 +107,8 @@ class GraphSAGEClassifier(ClassifierBase):
     @torch.no_grad()
     def predict(self, data: Data) -> Tensor:
         self.eval()
-        logits = self(data.x, data.adj_t)
-        return torch.exp(logits)
+        h = self(data.x, data.adj_t)
+        return torch.softmax(h, dim=-1)
 
     def reset_parameters(self):
         if self.batch_norm:
