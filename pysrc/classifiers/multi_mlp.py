@@ -23,6 +23,15 @@ class MultiMLPClassifier(MLPClassifier):
                  batch_norm: bool = False,
                  ):
 
+        super().__init__(
+            num_classes=num_classes,
+            hidden_dim=hidden_dim,
+            num_layers=head_layers,
+            dropout=dropout,
+            activation_fn=activation_fn,
+            batch_norm=batch_norm,
+        )
+
         self.base_mlps: list[MLP] = ModuleList([
             MLP(
                 hidden_dim=hidden_dim,
@@ -36,15 +45,6 @@ class MultiMLPClassifier(MLPClassifier):
 
         self.combination = combination
         self.bn = BatchNorm1d(hidden_dim * num_inputs) if batch_norm else False
-
-        super().__init__(
-            num_classes=num_classes,
-            hidden_dim=hidden_dim,
-            num_layers=head_layers,
-            dropout=dropout,
-            activation_fn=activation_fn,
-            batch_norm=batch_norm,
-        )
 
     def forward(self, x_stack: Tensor) -> Tensor:
         x_stack = x_stack.permute(2, 0, 1) # (hop, batch, input_dim)

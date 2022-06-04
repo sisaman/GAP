@@ -37,8 +37,6 @@ class MLP(torch.nn.Module):
         if batch_norm:
             self.bns = ModuleList([BatchNorm1d(hidden_dim) for _ in range(num_bns)])
         
-        self.reset_parameters()
-
     def forward(self, x: Tensor) -> Tensor:
         for i, layer in enumerate(self.layers):
             x = layer(x)

@@ -21,6 +21,15 @@ class Encoder(MLPClassifier):
 
         assert encoder_layers and head_layers, "base_layers and head_layers must be non-zero"
 
+        super().__init__(
+            num_classes=num_classes,
+            hidden_dim=hidden_dim,
+            num_layers=head_layers,
+            dropout=dropout,
+            activation_fn=activation_fn,
+            batch_norm=batch_norm,
+        )
+
         self.encoder_mlp = MLP(
             hidden_dim=hidden_dim,
             output_dim=hidden_dim,
@@ -32,15 +41,6 @@ class Encoder(MLPClassifier):
 
         self.normalize = normalize
         self.bn = BatchNorm1d(hidden_dim) if batch_norm else False
-
-        super().__init__(
-            num_classes=num_classes,
-            hidden_dim=hidden_dim,
-            num_layers=head_layers,
-            dropout=dropout,
-            activation_fn=activation_fn,
-            batch_norm=batch_norm,
-        )
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.encoder_mlp(x)
