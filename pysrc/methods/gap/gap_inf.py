@@ -104,16 +104,9 @@ class GAPINF (MethodBase):
 
     def fit(self, data: Data) -> Metrics:
         self.data = data
-
-        logging.info('step 1: encoder module')
         self.pretrain_encoder()
-
-        logging.info('step 2: aggregation module')
         self.precompute_aggregations()
-
-        logging.info('step 3: classification module')
         metrics = self.train_classifier()
-
         return metrics
 
     def aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
@@ -124,6 +117,7 @@ class GAPINF (MethodBase):
 
     def pretrain_encoder(self):
         if self.encoder_layers > 0:
+            logging.info('pretraining encoder module')
             self.encoder.to(self.device)
             self.data.x = torch.stack([self.data.x], dim=-1)
 
@@ -155,6 +149,7 @@ class GAPINF (MethodBase):
             self.data.x = torch.stack(x_list, dim=-1)
         
     def train_classifier(self) -> Metrics:
+        logging.info('training classification module')
         self.classifier.to(self.device)
 
         self.trainer.reset()
