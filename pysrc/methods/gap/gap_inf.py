@@ -39,7 +39,8 @@ class GAPINF (MethodBase):
                  device:          Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
                  encoder_epochs:  Annotated[int,   dict(help='number of epochs for encoder pre-training (ignored if encoder_layers=0)')] = 100,
                  epochs:          Annotated[int,   dict(help='number of epochs for classifier training')] = 100,
-                 batch_size:      Annotated[Union[Literal['full'], int],   dict(help='batch size, or "full" for full-batch training')] = 'full',
+                 batch_size:      Annotated[Union[Literal['full'], int],   
+                                                   dict(help='batch size, or "full" for full-batch training')] = 'full',
                  full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
                  use_amp:         Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
                  ):

@@ -30,7 +30,8 @@ class MLP (MethodBase):
                  weight_decay:    Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
                  device:          Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
                  epochs:          Annotated[int,   dict(help='number of epochs for training')] = 100,
-                 batch_size:      Annotated[Union[Literal['full'], int],   dict(help='batch size, or "full" for full-batch training')] = 'full',
+                 batch_size:      Annotated[Union[Literal['full'], int],   
+                                                   dict(help='batch size, or "full" for full-batch training')] = 'full',
                  full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
                  use_amp:         Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
                  ):

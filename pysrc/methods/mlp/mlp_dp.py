@@ -16,7 +16,8 @@ class MLPDP (MLP):
     def __init__(self,
                  num_classes,
                  epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')],
-                 delta:         Annotated[Union[Literal['auto'], float], dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
+                 delta:         Annotated[Union[Literal['auto'], float], 
+                                                 dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
                  max_grad_norm: Annotated[float, dict(help='maximum norm of the per-sample gradients')] = 1.0,
                  batch_size:    Annotated[int,   dict(help='batch size')] = 256,
                  **kwargs:      Annotated[dict,  dict(help='extra options passed to base class', bases=[MLP], exclude=['batch_norm'])]

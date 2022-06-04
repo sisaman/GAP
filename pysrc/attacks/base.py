@@ -5,11 +5,15 @@ from torch import Tensor
 from torch.utils.data import TensorDataset, DataLoader
 from torch_geometric.data import Data
 from pysrc.classifiers.base import Stage
+from pysrc.methods.base import MethodBase
 from pysrc.methods.mlp import MLP
 
 
-class AttackModelBase(MLP, ABC):
+class AttackBase(MLP, ABC):
     def __init__(self, 
+                 method: MethodBase,
+                 shadow_ratio: float = 0.5,
+                 
                  max_samples: Annotated[int,   dict(help='maximum number of attack dataset samples')] = 10000,
                  val_ratio:   Annotated[float, dict(help='ratio of validation set size')] = 0.2,
                  test_ratio:  Annotated[float, dict(help='ratio of test set size')] = 0.3,

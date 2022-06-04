@@ -2,13 +2,13 @@ from typing import Annotated
 import torch
 from torch import Tensor
 from torch_geometric.data import Data
-from pysrc.attacks.base import AttackModelBase
+from pysrc.attacks.base import AttackBase
 
 
-class NodeMembershipInference (AttackModelBase):
+class NodeMembershipInference (AttackBase):
     """node membership inference attack model"""
 
-    def __init__(self, **kwargs: Annotated[dict,  dict(help='extra options passed to base class', bases=[AttackModelBase])]):
+    def __init__(self, **kwargs: Annotated[dict,  dict(help='extra options passed to base class', bases=[AttackBase])]):
         super().__init__(**kwargs)
         
     def prepare_attack_dataset(self, data: Data) -> tuple[Tensor, Tensor]:

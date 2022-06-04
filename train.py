@@ -1,5 +1,4 @@
 from pysrc.console import console
-from pysrc.methods.base import MethodBase
 with console.status('importing modules'):
     import sys
     import torch
@@ -11,6 +10,7 @@ with console.status('importing modules'):
     from pysrc.datasets import DatasetLoader
     from pysrc.args.utils import print_args, invoke, create_arguments
     from pysrc.loggers import Logger
+    from pysrc.methods.base import MethodBase
     from pysrc.methods.gap import GAPINF, GAPEDP, GAPNDP
     from pysrc.methods.sage import SAGEINF, SAGEEDP, SAGENDP
     from pysrc.methods.mlp import MLP, MLPDP
