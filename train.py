@@ -1,4 +1,5 @@
 from pysrc.console import console
+from pysrc.methods.base import MethodBase
 with console.status('importing modules'):
     import sys
     import torch
@@ -27,12 +28,11 @@ supported_methods = {
     'mlp-dp': MLPDP
 }
 
-def run(
-    name: Annotated[str, dict(help='experiment name')] = '',
-    seed: Annotated[int, dict(help='initial random seed')] = 12345,
-    repeats: Annotated[int, dict(help='number of times the experiment is repeated')] = 1,
-    **kwargs
+def run(seed:    Annotated[int, dict(help='initial random seed')] = 12345,
+        repeats: Annotated[int, dict(help='number of times the experiment is repeated')] = 1,
+        **kwargs
     ):
+
     seed_everything(seed)
 
     with console.status('loading dataset'):
@@ -41,12 +41,12 @@ def run(
     test_acc = []
     run_metrics = {}
     num_classes = data_initial.y.max().item() + 1
-    config = dict(**kwargs, name=name, seed=seed, repeats=repeats)
+    config = dict(**kwargs, seed=seed, repeats=repeats)
     logger = invoke(Logger.setup, enabled=False, config=config, **kwargs)
 
     ### initiallize method ###
     Method = supported_methods[kwargs['method']]
-    method = invoke(Method, num_classes=num_classes, **kwargs)
+    method: MethodBase = invoke(Method, num_classes=num_classes, **kwargs)
 
     ### run experiment ###
     for iteration in range(repeats):
@@ -67,7 +67,7 @@ def run(
         
         console.print()
         logging.info(f'run: {iteration + 1}/{repeats}')
-        logging.info(f'test/acc: {test_acc[-1]:.2f}\t average: {np.mean(test_acc).item():.2f}')
+        logging.info(f'test/acc: {test_acc[-1]:.2f}\t average: {np.mean(test_acc):.2f}')
         console.print()
 
     logger.enable()
