@@ -12,7 +12,7 @@ from torch_geometric.data import Data
 
 class GraphSAGEClassifier(ClassifierBase):
     def __init__(self, 
-                 output_dim: int, 
+                 num_classes: int, 
                  hidden_dim: int = 16, 
                  base_layers: int = 0, 
                  mp_layers: int = 2, 
@@ -49,7 +49,7 @@ class GraphSAGEClassifier(ClassifierBase):
             in_channels=-1,
             hidden_channels=hidden_dim,
             num_layers=mp_layers,
-            out_channels=output_dim if head_layers == 0 else hidden_dim,
+            out_channels=num_classes if head_layers == 0 else hidden_dim,
             dropout=dropout,
             act=activation_fn,
             norm=BatchNorm1d(hidden_dim) if batch_norm else None,
@@ -61,7 +61,7 @@ class GraphSAGEClassifier(ClassifierBase):
 
         self.head_mlp = MLP(
             hidden_dim=hidden_dim,
-            output_dim=output_dim,
+            output_dim=num_classes,
             num_layers=head_layers,
             activation_fn=activation_fn,
             dropout=dropout,
