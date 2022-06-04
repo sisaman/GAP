@@ -5,7 +5,6 @@ from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
 from pysrc.methods.base import MethodBase
-from pysrc.trainer import Trainer
 from pysrc.classifiers import GraphSAGEClassifier
 from pysrc.classifiers.base import Metrics, Stage
 
@@ -31,27 +30,25 @@ class SAGE (MethodBase):
                  optimizer:       Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
                  learning_rate:   Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
                  weight_decay:    Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
-                 device:          Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
                  epochs:          Annotated[int,   dict(help='number of epochs for training')] = 100,
                  batch_size:      Annotated[Union[Literal['full'], int],   
                                                    dict(help='batch size, or "full" for full-batch training')] = 'full',
                  full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
-                 use_amp:         Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
+                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[MethodBase])]
                  ):
 
         assert mp_layers >= 1, 'number of message-passing layers must be at least 1'
-
+        super().__init__(num_classes=num_classes, **kwargs)
+        
         self.base_layers = base_layers
         self.mp_layers = mp_layers
         self.head_layers = head_layers
-        self.device = device
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.optimizer_name = optimizer
         self.epochs = epochs
         self.batch_size = batch_size
         self.full_batch_eval = full_batch_eval
-        self.use_amp = use_amp
         activation_fn = self.supported_activations[activation]
 
         self.classifier = GraphSAGEClassifier(
@@ -66,17 +63,9 @@ class SAGE (MethodBase):
             batch_norm=batch_norm,
         )
 
-        self.trainer = Trainer(
-            use_amp=self.use_amp, 
-            monitor='val/acc', monitor_mode='max', 
-            device=self.device,
-        )
-
-        self.reset_parameters()
-
     def reset_parameters(self):
+        super().reset_parameters()
         self.classifier.reset_parameters()
-        self.trainer.reset()
 
     def fit(self, data: Data) -> Metrics:
         self.data = data

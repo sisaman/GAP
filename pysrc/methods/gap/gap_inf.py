@@ -8,7 +8,6 @@ from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
 from pysrc.console import console
 from pysrc.methods.base import MethodBase
-from pysrc.trainer import Trainer
 from pysrc.classifiers import Encoder, MultiMLPClassifier
 from pysrc.classifiers.base import ClassifierBase, Metrics, Stage
 
@@ -36,16 +35,15 @@ class GAP (MethodBase):
                  optimizer:       Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
                  learning_rate:   Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
                  weight_decay:    Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
-                 device:          Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
                  encoder_epochs:  Annotated[int,   dict(help='number of epochs for encoder pre-training (ignored if encoder_layers=0)')] = 100,
                  epochs:          Annotated[int,   dict(help='number of epochs for classifier training')] = 100,
                  batch_size:      Annotated[Union[Literal['full'], int],   
                                                    dict(help='batch size, or "full" for full-batch training')] = 'full',
                  full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
-                 use_amp:         Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
+                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[MethodBase])]
                  ):
 
-        super().__init__(num_classes)
+        super().__init__(num_classes, **kwargs)
 
         if encoder_layers == 0 and encoder_epochs > 0:
             logging.warn('encoder_layers is 0, setting encoder_epochs to 0')
@@ -53,7 +51,6 @@ class GAP (MethodBase):
 
         self.hops = hops
         self.encoder_layers = encoder_layers
-        self.device = device
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.optimizer_name = optimizer
@@ -61,7 +58,6 @@ class GAP (MethodBase):
         self.epochs = epochs
         self.batch_size = batch_size
         self.full_batch_eval = full_batch_eval
-        self.use_amp = use_amp
         activation_fn = self.supported_activations[activation]
 
         self.encoder = Encoder(
@@ -87,18 +83,10 @@ class GAP (MethodBase):
             batch_norm=batch_norm,
         )
 
-        self.trainer = Trainer(
-            use_amp=self.use_amp, 
-            monitor='val/acc', monitor_mode='max', 
-            device=self.device,
-        )
-
-        self.reset_parameters()
-
     def reset_parameters(self):
+        super().reset_parameters()
         self.encoder.reset_parameters()
         self.classifier.reset_parameters()
-        self.trainer.reset()
 
     def fit(self, data: Data) -> Metrics:
         self.data = data
