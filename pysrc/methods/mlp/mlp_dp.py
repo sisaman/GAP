@@ -10,7 +10,7 @@ from pysrc.privacy.algorithms.noisy_sgd import NoisySGD
 from pysrc.classifiers.base import Metrics, Stage
 
 
-class MLPDP (MLP):
+class PrivMLP (MLP):
     """node-private MLP method"""
 
     def __init__(self,

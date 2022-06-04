@@ -13,7 +13,7 @@ from pysrc.classifiers import MultiMLPClassifier
 from pysrc.classifiers.base import ClassifierBase, Metrics, Stage
 
 
-class GAPINF (MethodBase):
+class GAP (MethodBase):
     """non-private GAP method"""
 
     supported_activations = {

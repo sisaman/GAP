@@ -5,12 +5,12 @@ from typing import Annotated, Literal, Union
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
 from pysrc.console import console
-from pysrc.methods.gap import GAPINF
+from pysrc.methods.gap import GAP
 from pysrc.privacy.algorithms import PMA
 from pysrc.classifiers.base import Metrics
 
 
-class GAPEDP (GAPINF):
+class EdgePrivGAP (GAP):
     """edge-private GAP method"""
 
     def __init__(self,
@@ -18,7 +18,7 @@ class GAPEDP (GAPINF):
                  epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')],
                  delta:         Annotated[Union[Literal['auto'], float], 
                                                  dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
-                 **kwargs:      Annotated[dict,  dict(help='extra options passed to base class', bases=[GAPINF])]
+                 **kwargs:      Annotated[dict,  dict(help='extra options passed to base class', bases=[GAP])]
                  ):
 
         super().__init__(num_classes, **kwargs)

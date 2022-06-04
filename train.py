@@ -11,21 +11,21 @@ with console.status('importing modules'):
     from pysrc.args.utils import print_args, invoke, create_arguments
     from pysrc.loggers import Logger
     from pysrc.methods.base import MethodBase
-    from pysrc.methods.gap import GAPINF, GAPEDP, GAPNDP
-    from pysrc.methods.sage import SAGEINF, SAGEEDP, SAGENDP
-    from pysrc.methods.mlp import MLP, MLPDP
+    from pysrc.methods.gap import GAP, EdgePrivGAP, NodePrivGAP
+    from pysrc.methods.sage import SAGE, EdgePrivSAGE, NodePrivSAGE
+    from pysrc.methods.mlp import MLP, PrivMLP
     from pysrc.utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
 
 supported_methods = {
-    'gap-inf': GAPINF,
-    'gap-edp': GAPEDP,
-    'gap-ndp': GAPNDP,
-    'sage-inf': SAGEINF,
-    'sage-edp': SAGEEDP,
-    'sage-ndp': SAGENDP,
-    'mlp': MLP,
-    'mlp-dp': MLPDP
+    'gap-inf':  GAP,
+    'gap-edp':  EdgePrivGAP,
+    'gap-ndp':  NodePrivGAP,
+    'sage-inf': SAGE,
+    'sage-edp': EdgePrivSAGE,
+    'sage-ndp': NodePrivSAGE,
+    'mlp':      MLP,
+    'mlp-dp':   PrivMLP
 }
 
 def run(seed:    Annotated[int, dict(help='initial random seed')] = 12345,

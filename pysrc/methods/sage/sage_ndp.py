@@ -6,14 +6,14 @@ from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
 from pysrc.console import console
 from pysrc.data.transforms import NeighborSampler
-from pysrc.methods.sage.sage_inf import SAGEINF
+from pysrc.methods.sage.sage_inf import SAGE
 from pysrc.classifiers.base import Metrics, Stage
 from pysrc.privacy.algorithms import GNNBasedNoisySGD
 from pysrc.privacy.mechanisms import GaussianMechanism
 from pysrc.privacy.mechanisms import ComposedNoisyMechanism
 
 
-class SAGENDP (SAGEINF):
+class NodePrivSAGE (SAGE):
     """node-private GraphSAGE method"""
     
     def __init__(self,
@@ -24,7 +24,7 @@ class SAGENDP (SAGEINF):
                  max_degree:    Annotated[int,   dict(help='max degree to sample per each node')] = 100,
                  max_grad_norm: Annotated[float, dict(help='maximum norm of the per-sample gradients')] = 1.0,
                  batch_size:    Annotated[int,   dict(help='batch size')] = 256,
-                 **kwargs:      Annotated[dict,  dict(help='extra options passed to base class', bases=[SAGEINF], exclude=['batch_norm', 'mp_layers'])]
+                 **kwargs:      Annotated[dict,  dict(help='extra options passed to base class', bases=[SAGE], exclude=['batch_norm', 'mp_layers'])]
                  ):
 
         super().__init__(num_classes, mp_layers=1, batch_size=batch_size, batch_norm=False, **kwargs)

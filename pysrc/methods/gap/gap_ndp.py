@@ -7,13 +7,13 @@ from torch_sparse import SparseTensor, matmul
 from opacus.optimizers import DPOptimizer
 from pysrc.console import console
 from pysrc.data.loader.poisson import PoissonDataLoader
-from pysrc.methods.gap import GAPINF
+from pysrc.methods.gap import GAP
 from pysrc.privacy.mechanisms import ComposedNoisyMechanism
 from pysrc.privacy.algorithms import PMA, NoisySGD
 from pysrc.data.transforms import NeighborSampler
 from pysrc.classifiers.base import ClassifierBase, Metrics, Stage
 
-class GAPNDP (GAPINF):
+class NodePrivGAP (GAP):
     """node-private GAP method"""
 
     def __init__(self,
@@ -24,7 +24,7 @@ class GAPNDP (GAPINF):
                  max_degree:    Annotated[int,   dict(help='max degree to sample per each node')] = 100,
                  max_grad_norm: Annotated[float, dict(help='maximum norm of the per-sample gradients')] = 1.0,
                  batch_size:    Annotated[int,   dict(help='batch size')] = 256,
-                 **kwargs:      Annotated[dict,  dict(help='extra options passed to base class', bases=[GAPINF], exclude=['batch_norm'])]
+                 **kwargs:      Annotated[dict,  dict(help='extra options passed to base class', bases=[GAP], exclude=['batch_norm'])]
                  ):
 
         super().__init__(num_classes, 

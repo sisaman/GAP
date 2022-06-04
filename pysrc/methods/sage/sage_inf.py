@@ -10,7 +10,7 @@ from pysrc.classifiers import GraphSAGEClassifier
 from pysrc.classifiers.base import Metrics, Stage
 
 
-class SAGEINF (MethodBase):
+class SAGE (MethodBase):
     """non-private GraphSAGE method"""
     
     supported_activations = {
