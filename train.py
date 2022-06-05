@@ -1,6 +1,5 @@
 from pysrc.console import console
 with console.status('importing modules'):
-    import sys
     import torch
     import logging
     import numpy as np
@@ -109,9 +108,7 @@ def main():
 
     parser = ArgumentParser(parents=[init_parser], formatter_class=ArgumentDefaultsHelpFormatter)
     args = vars(parser.parse_args())
-
     print_args(args, num_cols=4)
-    args['cmd'] = ' '.join(sys.argv)  # store calling command
 
     if args['device'] == 'cuda' and not torch.cuda.is_available():
         logging.warn('CUDA is not available, proceeding with CPU') 
