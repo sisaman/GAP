@@ -16,11 +16,23 @@ class NoisyMechanism(Mechanism):
         self.__init__(noise_scale, **self.params)
         return self
 
+    def is_zero(self) -> bool:
+        for alpha in range(2,100):
+            if self.RenyiDP(alpha) > 0:
+                return False
+        return True
+
+    def is_inf(self) -> bool:
+        for alpha in range(2,100):
+            if not np.isinf(self.RenyiDP(alpha)):
+                return False
+        return True
+
     def calibrate(self, eps: float, delta: float) -> float:
         if self.params['noise_scale'] == 0:
             self.update(noise_scale=1)  # to avoid is_inf being true
 
-        if np.isinf(eps):
+        if np.isinf(eps) or self.is_inf() or self.is_zero():
             self.update(noise_scale=0)
             return 0.0
         else:
