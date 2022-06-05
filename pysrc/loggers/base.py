@@ -23,7 +23,6 @@ class LoggerBase(ABC):
         self.output_dir = output_dir
         self.enabled = enabled
         self.config = config
-        self.config[experiment_id] = experiment_id
 
     @property
     @abstractmethod
