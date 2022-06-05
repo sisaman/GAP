@@ -1,5 +1,5 @@
 from typing_extensions import Self
-from scipy.optimize import minimize_scalar
+from scipy.optimize import minimize_scalar, OptimizeResult
 from autodp.mechanism_zoo import Mechanism
 import numpy as np
 
@@ -30,11 +30,14 @@ class NoisyMechanism(Mechanism):
             if fn_err(self.params['noise_scale']) < 1e-3:
                 return self.params['noise_scale']
             
-            results = minimize_scalar(fn_err, method='brent', options={'xtol': 1e-5, 'maxiter': 1000})
+            result: OptimizeResult = minimize_scalar(fn_err, 
+                method='brent', 
+                options={'xtol': 1e-5, 'maxiter': 1000000}
+            )
 
-            if results.success and results.fun < 1e-3:
-                noise_scale = np.exp(results.x)
+            if result.success and result.fun < 1e-3:
+                noise_scale = np.exp(result.x)
                 self.update(noise_scale)
                 return noise_scale
             else:
-                raise RuntimeError(f"calibrator failed to find noise scale\n{results}")
+                raise RuntimeError(f"calibrator failed to find noise scale\n{result}")
