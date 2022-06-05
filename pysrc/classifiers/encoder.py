@@ -19,8 +19,6 @@ class Encoder(MLPClassifier):
                  batch_norm: bool = False,
                  ):
 
-        assert encoder_layers and head_layers, "base_layers and head_layers must be non-zero"
-
         super().__init__(
             num_classes=num_classes,
             hidden_dim=hidden_dim,
