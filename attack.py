@@ -150,7 +150,7 @@ def main():
         logging.info(f'Total running time: {(end - start):.2f} seconds.')
     except KeyboardInterrupt:
         print('\n')
-        logging.warn('Graceful Shutdown')
+        logging.warning('Graceful Shutdown')
     except RuntimeError:
         raise
     finally:
