@@ -61,40 +61,45 @@ class MLP (MethodBase):
 
     def fit(self, data: Data) -> Metrics:
         self.data = data
-        metrics = self.train_classifier()
+        metrics = self.train_classifier(self.data)
+        metrics.update(self.test(self.data))
         return metrics
+
+    def test(self, data: Optional[Data] = None) -> Metrics:
+        if data is None:
+            data = self.data
+        
+        test_metics = self.trainer.test(
+            dataloader=self.data_loader(data, 'test'),
+            load_best=True,
+        )
+        return test_metics
 
     def predict(self, data: Optional[Data] = None) -> torch.Tensor:
         if data is None:
             data = self.data
         return self.classifier.predict(data.x)
 
-    def train_classifier(self):
+    def train_classifier(self, data: Data) -> Metrics:
         self.classifier.to(self.device)
-
         self.trainer.reset()
+
         metrics = self.trainer.fit(
             model=self.classifier,
             epochs=self.epochs,
             optimizer=self.configure_optimizer(), 
-            train_dataloader=self.data_loader('train'), 
-            val_dataloader=self.data_loader('val'),
+            train_dataloader=self.data_loader(data, 'train'), 
+            val_dataloader=self.data_loader(data, 'val'),
             test_dataloader=None,
             checkpoint=True
         )
 
-        test_metics = self.trainer.test(
-            dataloader=self.data_loader('test'),
-            load_best=True,
-        )
-
-        metrics.update(test_metics)
         return metrics
 
-    def data_loader(self, stage: Stage) -> DataLoader:
-        mask = self.data[f'{stage}_mask']
-        x = self.data.x[mask]
-        y = self.data.y[mask]
+    def data_loader(self, data: Data, stage: Stage) -> DataLoader:
+        mask = data[f'{stage}_mask']
+        x = data.x[mask]
+        y = data.y[mask]
         if self.batch_size == 'full' or (stage != 'train' and self.full_batch_eval):
             return [(x, y)]
         else:

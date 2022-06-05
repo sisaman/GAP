@@ -54,7 +54,6 @@ class PrivMLP (MLP):
         self.classifier = self.noisy_sgd.prepare_module(self.classifier)
 
     def fit(self, data: Data) -> Metrics:
-        self.data = data
         num_train_nodes = data.train_mask.sum().item()
 
         if num_train_nodes != self.num_train_nodes:
@@ -63,8 +62,8 @@ class PrivMLP (MLP):
 
         return super().fit(data)
 
-    def data_loader(self, stage: Stage) -> DataLoader:
-        dataloader = super().data_loader(stage)
+    def data_loader(self, data: Data, stage: Stage) -> DataLoader:
+        dataloader = super().data_loader(data, stage)
         if stage == 'train':
             dataloader = self.noisy_sgd.prepare_dataloader(dataloader)
         return dataloader
