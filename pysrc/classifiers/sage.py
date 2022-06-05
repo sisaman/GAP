@@ -91,9 +91,10 @@ class GraphSAGEClassifier(ClassifierBase):
     def step(self, data: Data, stage: Stage) -> tuple[Tensor, Metrics]:
         mask = data[f'{stage}_mask']
         batch_size = data.batch_size if hasattr(data, 'batch_size') else data.num_nodes
-        target = data.y[mask][:batch_size]
-        h = self(data.x, data.adj_t)[mask][:batch_size]
+        adj_t = data.adj_t[:data.num_nodes, :data.num_nodes] # required for batched data
+        h = self(data.x, adj_t)[mask][:batch_size]
         preds = F.log_softmax(h, dim=-1)
+        target = data.y[mask][:batch_size]
         acc = preds.argmax(dim=1).eq(target).float().mean() * 100
         metrics = {f'{stage}/acc': acc}
 
