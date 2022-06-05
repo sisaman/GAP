@@ -66,9 +66,9 @@ class DatasetLoader:
             'nodes': f'{data.num_nodes:,}',
             'edges': f'{data.num_edges:,}',
             'features': f'{data.num_features:,}',
-            'classes': f'{int(data.y.max().item() + 1)}',
-            'mean degree': f'{nodes_degree.mean().item():.2f}',
-            'median degree': f'{nodes_degree.median().item()}',
+            'classes': f'{int(data.y.max() + 1)}',
+            'mean degree': f'{nodes_degree.mean():.2f}',
+            'median degree': f'{nodes_degree.median()}',
             'train/val/test (%)': f'{train_ratio:.2f} / {val_ratio:.2f} / {test_ratio:.2f}',
             'baseline (%)': f'{baseline:.2f}'
         }
