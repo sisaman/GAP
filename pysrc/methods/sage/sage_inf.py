@@ -71,10 +71,11 @@ class SAGE (MethodBase):
     def fit(self, data: Data) -> Metrics:
         self.data = data
         metrics = self.train_classifier(self.data)
+        metrics.update(self.test(self.data))
         return metrics
 
     def test(self, data: Optional[Data] = None) -> Metrics:
-        if data is None or data is self.data:
+        if data is None:
             data = self.data
         test_metics = self.trainer.test(
             dataloader=self.data_loader(data, 'test'),
@@ -83,7 +84,7 @@ class SAGE (MethodBase):
         return test_metics
 
     def predict(self, data: Optional[Data] = None) -> torch.Tensor:
-        if data is None or data is self.data:
+        if data is None:
             data = self.data
         return self.classifier.predict(data)
 
@@ -101,7 +102,6 @@ class SAGE (MethodBase):
             checkpoint=True,
         )
 
-        metrics.update(self.test())
         return metrics
 
     def data_loader(self, data: Data, stage: Stage) -> NeighborLoader:
