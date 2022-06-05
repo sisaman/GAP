@@ -79,8 +79,7 @@ class NodePrivGAP (GAP):
         self.classifier = self.classifier_noisy_sgd.prepare_module(self.classifier)
 
     def fit(self, data: Data) -> Metrics:
-        self.data = data
-        num_train_nodes = len(self.data_loader('train').dataset)
+        num_train_nodes = len(self.data_loader(data, 'train').dataset)
 
         if num_train_nodes != self.num_train_nodes:
             self.num_train_nodes = num_train_nodes
@@ -88,18 +87,18 @@ class NodePrivGAP (GAP):
 
         return super().fit(data)
 
-    def precompute_aggregations(self):
+    def precompute_aggregations(self, data: Data) -> Data:
         with console.status('bounding the number of neighbors per node'):
-                self.data = NeighborSampler(self.max_degree)(self.data)
-        super().precompute_aggregations()
+                data = NeighborSampler(self.max_degree)(data)
+        return super().precompute_aggregations(data)
 
     def aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
         x = matmul(adj_t, x)
         x = self.pma_mechanism(x, sensitivity=np.sqrt(self.max_degree))
         return x
 
-    def data_loader(self, stage: Stage) -> PoissonDataLoader:
-        dataloader = super().data_loader(stage)
+    def data_loader(self, data: Data, stage: Stage) -> PoissonDataLoader:
+        dataloader = super().data_loader(data, stage)
         if stage == 'train':
             dataloader = PoissonDataLoader(dataset=dataloader.dataset, batch_size=self.batch_size)
         return dataloader

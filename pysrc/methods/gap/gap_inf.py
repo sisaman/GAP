@@ -87,20 +87,37 @@ class GAP (MethodBase):
         super().reset_parameters()
         self.encoder.reset_parameters()
         self.classifier.reset_parameters()
+        self.data = None
 
     def fit(self, data: Data) -> Metrics:
         self.data = data
-        self.pretrain_encoder()
-        self.precompute_aggregations()
-        metrics = self.train_classifier()
+        self.data = self.pretrain_encoder(self.data)
+        self.data = self.precompute_aggregations(self.data)
+        metrics = self.train_classifier(self.data)
+        metrics.update(self.test(self.data))
         return metrics
 
-    def predict(self, data: Optional[Data] = None) -> torch.Tensor:
-        if data is None:
+    def test(self, data: Optional[Data] = None) -> Metrics:
+        if data is None or data == self.data:
             data = self.data
         else:
             data.x = self.encoder.predict(data.x)
-            self.precompute_aggregations(data)
+            data = self.precompute_aggregations(data)
+
+        test_metics = self.trainer.test(
+            dataloader=self.data_loader(data, 'test'),
+            load_best=True,
+        )
+
+        return test_metics
+
+    def predict(self, data: Optional[Data] = None) -> torch.Tensor:
+        if data is None or data == self.data:
+            data = self.data
+        else:
+            data.x = self.encoder.predict(data.x)
+            data = self.precompute_aggregations(data)
+
         return self.classifier.predict(data.x)
 
     def aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
@@ -109,7 +126,7 @@ class GAP (MethodBase):
     def normalize(self, x: torch.Tensor) -> torch.Tensor:
         return F.normalize(x, p=2, dim=-1)
 
-    def pretrain_encoder(self):
+    def pretrain_encoder(self, data: Data) -> Data:
         if self.encoder_layers > 0:
             logging.info('pretraining encoder module')
             self.encoder.to(self.device)
@@ -119,18 +136,18 @@ class GAP (MethodBase):
                 model=self.encoder,
                 epochs=self.encoder_epochs,
                 optimizer=self.configure_optimizers(self.encoder), 
-                train_dataloader=self.data_loader('train'), 
-                val_dataloader=self.data_loader('val'),
+                train_dataloader=self.data_loader(data, 'train'), 
+                val_dataloader=self.data_loader(data, 'val'),
                 test_dataloader=None,
                 checkpoint=True
             )
 
             self.encoder = self.trainer.load_best_model()
-            self.data.x = self.encoder.predict(self.data.x)
+            data.x = self.encoder.predict(data.x)
 
-    def precompute_aggregations(self, data: Optional[Data] = None):
-        if data is None:
-            data = self.data
+        return data
+
+    def precompute_aggregations(self, data: Data) -> Data:
         with console.status('computing aggregations'):
             x = F.normalize(data.x, p=2, dim=-1)
             x_list = [x]
@@ -141,8 +158,9 @@ class GAP (MethodBase):
                 x_list.append(x)
 
             data.x = torch.stack(x_list, dim=-1)
+        return data
         
-    def train_classifier(self) -> Metrics:
+    def train_classifier(self, data: Data) -> Metrics:
         logging.info('training classification module')
         self.classifier.to(self.device)
 
@@ -151,24 +169,18 @@ class GAP (MethodBase):
             model=self.classifier, 
             epochs=self.epochs,
             optimizer=self.configure_optimizers(self.classifier),
-            train_dataloader=self.data_loader('train'), 
-            val_dataloader=self.data_loader('val'),
+            train_dataloader=self.data_loader(data, 'train'), 
+            val_dataloader=self.data_loader(data, 'val'),
             test_dataloader=None,
             checkpoint=True,
         )
-
-        test_metics = self.trainer.test(
-            dataloader=self.data_loader('test'),
-            load_best=True,
-        )
-
-        metrics.update(test_metics)
+        
         return metrics
 
-    def data_loader(self, stage: Stage) -> DataLoader:
-        mask = self.data[f'{stage}_mask']
-        x = self.data.x[mask]
-        y = self.data.y[mask]
+    def data_loader(self, data, stage: Stage) -> DataLoader:
+        mask = data[f'{stage}_mask']
+        x = data.x[mask]
+        y = data.y[mask]
         if self.batch_size == 'full' or (stage != 'train' and self.full_batch_eval):
             return [(x, y)]
         else:

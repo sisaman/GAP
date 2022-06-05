@@ -1,6 +1,7 @@
 import logging
 import numpy as np
-from typing import Annotated, Union, Literal
+from typing import Annotated, Optional, Union, Literal
+import torch
 from torch.optim import Optimizer
 from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
@@ -72,6 +73,11 @@ class NodePrivSAGE (SAGE):
 
         self.classifier = self.noisy_sgd.prepare_module(self.classifier)
 
+    def sample_neighbors(self, data: Data) -> Data:
+        with console.status('bounding the number of neighbors per node'):
+            data = NeighborSampler(self.max_degree)(data)
+        return data
+
     def fit(self, data: Data) -> Metrics:
         num_train_nodes = data.train_mask.sum().item()
 
@@ -79,13 +85,21 @@ class NodePrivSAGE (SAGE):
             self.num_train_nodes = num_train_nodes
             self.calibrate()
 
-        with console.status('bounding the number of neighbors per node'):
-            data = NeighborSampler(self.max_degree)(data)
-
+        data = self.sample_neighbors(data)
         return super().fit(data)
 
-    def data_loader(self, stage: Stage) -> NeighborLoader:
-        dataloader = super().data_loader(stage)
+    def test(self, data: Optional[Data] = None) -> Metrics:
+        if data is not None and data != self.data:
+            data = self.sample_neighbors(data)
+        return super().test(data)
+
+    def predict(self, data: Optional[Data] = None) -> torch.Tensor:
+        if data is not None and data != self.data:
+            data = self.sample_neighbors(data)
+        return super().predict(data)
+
+    def data_loader(self, data: Data, stage: Stage) -> NeighborLoader:
+        dataloader = super().data_loader(data, stage)
         if stage == 'train':
             dataloader = self.noisy_sgd.prepare_dataloader(dataloader)
         return dataloader

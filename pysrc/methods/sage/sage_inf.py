@@ -66,18 +66,28 @@ class SAGE (MethodBase):
     def reset_parameters(self):
         super().reset_parameters()
         self.classifier.reset_parameters()
+        self.data = None
 
     def fit(self, data: Data) -> Metrics:
         self.data = data
-        metrics = self.train_classifier()
+        metrics = self.train_classifier(self.data)
         return metrics
 
+    def test(self, data: Optional[Data] = None) -> Metrics:
+        if data is None or data is self.data:
+            data = self.data
+        test_metics = self.trainer.test(
+            dataloader=self.data_loader(data, 'test'),
+            load_best=True,
+        )
+        return test_metics
+
     def predict(self, data: Optional[Data] = None) -> torch.Tensor:
-        if data is None:
+        if data is None or data is self.data:
             data = self.data
         return self.classifier.predict(data)
 
-    def train_classifier(self) -> Metrics:
+    def train_classifier(self, data: Data) -> Metrics:
         logging.info('training classifier')
         self.classifier.to(self.device)
 
@@ -85,29 +95,23 @@ class SAGE (MethodBase):
             model=self.classifier, 
             epochs=self.epochs, 
             optimizer=self.configure_optimizer(),
-            train_dataloader=self.data_loader('train'), 
-            val_dataloader=self.data_loader('val'),
+            train_dataloader=self.data_loader(data, 'train'), 
+            val_dataloader=self.data_loader(data, 'val'),
             test_dataloader=None,
             checkpoint=True,
         )
 
-        test_metics = self.trainer.test(
-            dataloader=self.data_loader('test'),
-            load_best=True,
-        )
-
-        metrics.update(test_metics)
+        metrics.update(self.test())
         return metrics
 
-    def data_loader(self, stage: Stage) -> NeighborLoader:
+    def data_loader(self, data: Data, stage: Stage) -> NeighborLoader:
         if self.batch_size == 'full' or (stage != 'train' and self.full_batch_eval):
-            self.data.batch_size = self.data.num_nodes
-            return [self.data]
+            return [data]
         else:
             return NeighborLoader(
-                data=self.data, 
+                data=data, 
                 num_neighbors=[-1]*self.mp_layers, 
-                input_nodes=self.data[f'{stage}_mask'],
+                input_nodes=data[f'{stage}_mask'],
                 replace=False,
                 batch_size=self.batch_size,
                 shuffle=True,
