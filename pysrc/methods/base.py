@@ -1,17 +1,15 @@
 from abc import ABC, abstractmethod
 from typing import Annotated, Optional
-import torch
 from torch import Tensor
 from torch_geometric.data import Data
 from pysrc.classifiers.base import Metrics
 from pysrc.trainer import Trainer
 
-default_device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class MethodBase(ABC):
     def __init__(self, 
                  num_classes: int,
-                 device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = default_device,
+                 device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
                  use_amp: Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
                  ):
 
