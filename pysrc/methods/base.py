@@ -1,14 +1,17 @@
 from abc import ABC, abstractmethod
 from typing import Annotated, Optional
+import torch
 from torch import Tensor
 from torch_geometric.data import Data
+from pysrc.classifiers.base import Metrics
 from pysrc.trainer import Trainer
 
+default_device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class MethodBase(ABC):
     def __init__(self, 
                  num_classes: int,
-                 device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
+                 device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = default_device,
                  use_amp: Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
                  ):
 
@@ -26,7 +29,13 @@ class MethodBase(ABC):
         self.trainer.reset()
 
     @abstractmethod
-    def fit(self, data: Data) -> dict[str, object]: pass
+    def fit(self, data: Data) -> Metrics:
+        """Fit the model to the given data."""
 
     @abstractmethod
-    def predict(self, data: Optional[Data] = None) -> Tensor: pass
+    def test(self, data: Optional[Data] = None) -> Metrics:
+        """Test the model on the given data, or the training data if data is None."""
+
+    @abstractmethod
+    def predict(self, data: Optional[Data] = None) -> Tensor:
+        """Predict the labels for the given data, or the training data if data is None."""
