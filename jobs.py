@@ -148,7 +148,7 @@ class JobManager:
 
         parser_resubmit = command_subparser.add_parser('resubmit')
         parser_resubmit.add_argument('-n', '--new-file', type=str, help='name of new jobs file', required=True)
-        parser_resubmit.add_argument('--gpumem', type=int, required=False, default=10, help='minimum required GPU memory in GB')
+        parser_resubmit.add_argument('--gpumem', type=int, required=False, default=20, help='minimum required GPU memory in GB')
 
         parser_exec = command_subparser.add_parser('exec')
         parser_exec.add_argument('--id', type=int)
