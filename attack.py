@@ -141,13 +141,7 @@ def main():
 
     parser = ArgumentParser(parents=[init_parser], formatter_class=ArgumentDefaultsHelpFormatter)
     kwargs = vars(parser.parse_args())
-
     print_args(kwargs, num_cols=4)
-    kwargs['cmd'] = ' '.join(sys.argv)  # store calling command
-
-    if kwargs['device'] == 'cuda' and not torch.cuda.is_available():
-        logging.warn('CUDA is not available, proceeding with CPU') 
-        kwargs['device'] = 'cpu'
 
     try:
         start = time()
