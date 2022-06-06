@@ -6,7 +6,7 @@ from rich.table import Table
 from rich.highlighter import ReprHighlighter
 from rich import box
 from tabulate import tabulate
-from argparse import ArgumentParser, ArgumentTypeError, Namespace
+from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError, Namespace
 from pysrc.utils import RT
 
 
@@ -111,7 +111,8 @@ def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list =
                     metadata['default'] = param_obj.default
                 else:
                     metadata['required'] = True
-                    metadata['default'] = 'required'
+                    metadata['default'] = SUPPRESS
+                    metadata['help'] += ' (required)'
 
                 # tweak specific data types
                 if param_type is bool:
