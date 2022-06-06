@@ -37,10 +37,17 @@ def boolean(v: Union[str, bool]) -> bool:
         raise ArgumentTypeError('Boolean value expected.')
 
 
-def strip_unexpected_kwargs(callable: Callable, kwargs: dict) -> dict[str, object]:
+def remove_prefix(kwargs: dict, prefix: str) -> dict:
+    return {k[len(prefix):]: v for k, v in kwargs.items() if k.startswith(prefix)}
+
+
+def strip_kwargs(callable: Callable, kwargs: dict, prefix: str='') -> dict[str, object]:
     signature = inspect.signature(callable)
     parameters = signature.parameters
-    out_kwargs = {arg: value for arg, value in kwargs.items() if arg in parameters}
+    out_kwargs = {}
+    for arg, value in kwargs.items():
+        if arg.startswith(prefix) and arg[len(prefix):] in parameters:
+            out_kwargs[arg] = value
 
     # check if the function has kwargs
     for _, param in parameters.items():
@@ -48,28 +55,25 @@ def strip_unexpected_kwargs(callable: Callable, kwargs: dict) -> dict[str, objec
         if get_origin(annotation) is Annotated:
             metadata = get_args(annotation)[1]
             bases = metadata.get('bases', [])
-            for base_callable in bases:
-                out_kwargs.update(strip_unexpected_kwargs(base_callable, kwargs))
+            prefixes = metadata.get('prefixes', [''] * len(bases))
+            for base_callable, pr in zip(bases, prefixes):
+                out_kwargs.update(strip_kwargs(base_callable, kwargs, prefix=prefix+pr))
         elif param.kind == inspect.Parameter.VAR_KEYWORD:
             return kwargs
 
     return out_kwargs
 
 
-def invoke(callable: Callable[..., RT], **kwargs) -> RT:
-    kwargs = strip_unexpected_kwargs(callable, kwargs)
-    return callable(**kwargs)
-
-
-def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list = []) -> list[str]:
-    arguments_added = []
+def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list = [], prefix: str = ''):
+    arguments_added = [action.dest for action in parser._actions]
     parameters = inspect.signature(callable).parameters
 
     # iterate over the parameters
     for param_name, param_obj in parameters.items():
+        arg_name = prefix + param_name
 
         # skip the parameters that are in the exclude list
-        if param_name in exclude:
+        if param_name in exclude or arg_name in arguments_added:
             continue
         
         # get the annotation
@@ -88,16 +92,18 @@ def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list =
 
             if bases:
                 # if there are base callables, recursively add their args to the parser
-                for base_callable in bases:
-                    arguments_added += create_arguments(
+                prefixes = metadata.get('prefixes', [''] * len(bases))
+                for base_callable, pr in zip(bases, prefixes):
+                    create_arguments(
                         callable=base_callable, 
                         parser=parser, 
-                        exclude=metadata.get('exclude', []) + arguments_added
+                        exclude=metadata.get('exclude', []),
+                        prefix=prefix+pr
                     )
             else:
                 # if there are no base callables, add the parameter to the parser
                 metadata['type'] = param_type
-                metadata['dest'] = param_name
+                metadata['dest'] = arg_name
 
                 # if the parameter has a default value, add it to the parser
                 # otherwise, set the parameter as required
@@ -128,21 +134,21 @@ def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list =
                     except: pass
 
                 # create options based on parameter name
-                options = {f'--{param_name}', f'--{param_name.replace("_", "-")}'}
+                options = {f'--{arg_name}', f'--{arg_name.replace("_", "-")}'}
 
                 # add custome options if provided
                 custom_options = metadata.pop('option', [])
                 custom_options = [custom_options] if isinstance(custom_options, str) else custom_options
-                options.update(custom_options)
+                for option in custom_options:
+                    idx = max([i for i,c in enumerate(option) if c == '-'])
+                    option = option[:idx+1] + prefix + option[idx+1:]
+                    options.add(option)
 
                 # sort option names based on their length
                 options = sorted(sorted(list(options)), key=len)
 
                 # add the parameter to the parser
                 parser.add_argument(*options, **metadata)
-                arguments_added.append(param_name)
-    
-    return arguments_added
 
 
 def print_args(args: ArgType, num_cols: int = 4):

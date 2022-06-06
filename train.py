@@ -7,7 +7,7 @@ with console.status('importing modules'):
     from typing import Annotated
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
     from pysrc.datasets import DatasetLoader
-    from pysrc.args.utils import print_args, invoke, create_arguments
+    from pysrc.args.utils import print_args, create_arguments, strip_kwargs
     from pysrc.loggers import Logger
     from pysrc.methods.base import MethodBase
     from pysrc.methods.gap import GAP, EdgePrivGAP, NodePrivGAP
@@ -35,17 +35,20 @@ def run(seed:    Annotated[int, dict(help='initial random seed')] = 12345,
     seed_everything(seed)
 
     with console.status('loading dataset'):
-        data_initial = invoke(DatasetLoader, **kwargs).load(verbose=True)
+        loader_args = strip_kwargs(DatasetLoader, kwargs)
+        data_initial = DatasetLoader(**loader_args).load(verbose=True)
 
     test_acc = []
     run_metrics = {}
     num_classes = data_initial.y.max().item() + 1
     config = dict(**kwargs, seed=seed, repeats=repeats)
-    logger = invoke(Logger.setup, enabled=False, config=config, **kwargs)
+    logger_args = strip_kwargs(Logger.setup, kwargs)
+    logger = Logger.setup(enabled=False, config=config, **logger_args)
 
     ### initiallize method ###
     Method = supported_methods[kwargs['method']]
-    method: MethodBase = invoke(Method, num_classes=num_classes, **kwargs)
+    method_args = strip_kwargs(Method, kwargs)
+    method: MethodBase = Method(num_classes=num_classes, **method_args)
 
     ### run experiment ###
     for iteration in range(repeats):
@@ -107,12 +110,12 @@ def main():
         create_arguments(Logger.setup, group_expr)
 
     parser = ArgumentParser(parents=[init_parser], formatter_class=ArgumentDefaultsHelpFormatter)
-    args = vars(parser.parse_args())
-    print_args(args, num_cols=4)
+    kwargs = vars(parser.parse_args())
+    print_args(kwargs, num_cols=4)
 
     try:
         start = time()
-        invoke(run, **args)
+        run(**kwargs)
         end = time()
         logging.info(f'Total running time: {(end - start):.2f} seconds.')
     except KeyboardInterrupt:
@@ -121,7 +124,7 @@ def main():
     except RuntimeError:
         raise
     finally:
-        if args['device'] == 'cuda':
+        if kwargs['device'] == 'cuda':
             gpu_mem = torch.cuda.max_memory_allocated() / 1024 ** 3
             logging.info(f'Max GPU memory used = {gpu_mem:.2f} GB\n')
 

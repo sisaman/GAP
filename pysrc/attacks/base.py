@@ -1,10 +1,12 @@
 import logging
 from abc import ABC, abstractmethod
 from typing import Annotated
+from sklearn.metrics import roc_curve
 import torch
 from torch import Tensor
 from torch_geometric.data import Data
 from torch_geometric.transforms import RandomNodeSplit
+from pysrc.args.utils import remove_prefix
 from pysrc.console import console
 from pysrc.classifiers.base import Metrics
 from pysrc.methods.base import MethodBase
@@ -14,26 +16,19 @@ from pysrc.methods.mlp import MLP
 class AttackBase(MLP, ABC):
     def __init__(self, 
                  method: MethodBase,
-                 target_train_ratio: Annotated[float, dict(help='ratio of training nodes in the target dataset')] = 0.3,
-                 target_val_ratio: Annotated[float, dict(help='ratio of validation nodes in the target dataset')] = 0.1,
-                 shadow_train_ratio: Annotated[float, dict(help='ratio of training nodes in the shadow dataset')] = 0.3,
-                 shadow_val_ratio: Annotated[float, dict(help='ratio of validation nodes in the shadow dataset')] = 0.1,
+                 train_ratio: Annotated[float, dict(help='ratio of training nodes in both target and shadow datasets')] = 0.3,
+                 val_ratio:   Annotated[float, dict(help='ratio of validation nodes in both target and shadow datasets')] = 0.1,
+                 **kwargs:           Annotated[dict,  dict(help='extra options passed to base class', bases=[MLP], prefixes=['attack_'])]
                 ):
 
         super().__init__(
             num_classes=2,  # either member or non-member
-            hidden_dim=16,
-            num_layers=3,
-            activation='selu',
-            batch_norm=True,
-            device=method.device
+            **remove_prefix(kwargs, prefix='attack_'),
         )
 
         self.method = method
-        self.target_train_ratio = target_train_ratio
-        self.target_val_ratio = target_val_ratio
-        self.shadow_train_ratio = shadow_train_ratio
-        self.shadow_val_ratio = shadow_val_ratio
+        self.train_ratio = train_ratio
+        self.val_ratio = val_ratio
 
     def reset_parameters(self):
         super().reset_parameters()
@@ -62,6 +57,10 @@ class AttackBase(MLP, ABC):
         logging.info('step 3: training attack model')
         attack_metrics = self.fit(data_attack)
         metrics['attack/acc'] = attack_metrics['test/acc']
+        y_score = self.predict(data_attack)[data_attack.test_mask]
+        y_true = data_attack.y[data_attack.test_mask]
+        fpr, tpr, _ = roc_curve(y_true=y_true, y_score=y_score)
+        metrics['attack/adv'] = tpr[1] - fpr[1]
         
         return metrics
 
@@ -71,14 +70,14 @@ class AttackBase(MLP, ABC):
         
         data_target = RandomNodeSplit(
             split='test_rest',
-            num_train_per_class=int(self.target_train_ratio * data.num_nodes / self.method.num_classes),
-            num_val=self.target_val_ratio
+            num_train_per_class=int(self.train_ratio * data.num_nodes / self.method.num_classes),
+            num_val=self.val_ratio
         )(data_target)
 
         data_shadow = RandomNodeSplit(
             split='test_rest',
-            num_train_per_class=int(self.shadow_train_ratio * data.num_nodes / self.method.num_classes),
-            num_val=self.shadow_val_ratio
+            num_train_per_class=int(self.train_ratio * data.num_nodes / self.method.num_classes),
+            num_val=self.val_ratio
         )(data_shadow)
 
         logging.debug(f'target dataset: {data_target.train_mask.sum()} train nodes')

@@ -1,3 +1,4 @@
+from pysrc.args.utils import remove_prefix
 from pysrc.console import console
 with console.status('importing modules'):
     import sys
@@ -8,7 +9,7 @@ with console.status('importing modules'):
     from typing import Annotated
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
     from pysrc.datasets import DatasetLoader
-    from pysrc.args.utils import print_args, invoke, create_arguments
+    from pysrc.args.utils import print_args, strip_kwargs, create_arguments, remove_prefix
     from pysrc.loggers import Logger
     from pysrc.methods.base import MethodBase
     from pysrc.methods.gap import GAP, EdgePrivGAP, NodePrivGAP
@@ -42,22 +43,27 @@ def run(seed:    Annotated[int, dict(help='initial random seed')] = 12345,
     seed_everything(seed)
 
     with console.status('loading dataset'):
-        data_initial = invoke(DatasetLoader, **kwargs).load(verbose=True)
+        loader_args = strip_kwargs(DatasetLoader, kwargs)
+        data_initial = DatasetLoader(**loader_args).load(verbose=True)
 
     task_acc = []
     attack_acc = []
     run_metrics = {}
     num_classes = data_initial.y.max().item() + 1
     config = dict(**kwargs, seed=seed, repeats=repeats)
-    logger = invoke(Logger.setup, enabled=False, config=config, **kwargs)
+    logger_args = strip_kwargs(Logger.setup, kwargs)
+    logger = Logger.setup(enabled=False, config=config, **logger_args)
 
     ### initiallize method ###
     Method = supported_methods[kwargs.pop('method')]
-    method: MethodBase = invoke(Method, num_classes=num_classes, **kwargs)
+    method_args = strip_kwargs(Method, kwargs)
+    method_args = remove_prefix(method_args, 'target_')
+    method: MethodBase = Method(num_classes=num_classes, **method_args)
 
     ### initialize attack ###
     Attack = supported_attacks[kwargs['attack']]
-    attack: AttackBase = invoke(Attack, method=method, **kwargs)
+    attack_args = strip_kwargs(Attack, kwargs)
+    attack: AttackBase = Attack(method=method, **attack_args)
 
     ### run experiment ###
     for iteration in range(repeats):
@@ -120,11 +126,11 @@ def main():
             group_dataset = attack_parser.add_argument_group('dataset arguments')
             create_arguments(DatasetLoader, group_dataset)
 
-            # method args
+            # target method args
             group_method = attack_parser.add_argument_group('method arguments')
-            create_arguments(method_class, group_method)
+            create_arguments(method_class, group_method, prefix='target_')
 
-            # attack args
+            # attack method args
             group_attack = attack_parser.add_argument_group('attack arguments')
             create_arguments(attack_class, group_attack)
             
@@ -134,18 +140,18 @@ def main():
             create_arguments(Logger.setup, group_expr)
 
     parser = ArgumentParser(parents=[init_parser], formatter_class=ArgumentDefaultsHelpFormatter)
-    args = vars(parser.parse_args())
+    kwargs = vars(parser.parse_args())
 
-    print_args(args, num_cols=4)
-    args['cmd'] = ' '.join(sys.argv)  # store calling command
+    print_args(kwargs, num_cols=4)
+    kwargs['cmd'] = ' '.join(sys.argv)  # store calling command
 
-    if args['device'] == 'cuda' and not torch.cuda.is_available():
+    if kwargs['device'] == 'cuda' and not torch.cuda.is_available():
         logging.warn('CUDA is not available, proceeding with CPU') 
-        args['device'] = 'cpu'
+        kwargs['device'] = 'cpu'
 
     try:
         start = time()
-        invoke(run, **args)
+        run(**kwargs)
         end = time()
         logging.info(f'Total running time: {(end - start):.2f} seconds.')
     except KeyboardInterrupt:
@@ -154,7 +160,7 @@ def main():
     except RuntimeError:
         raise
     finally:
-        if args['device'] == 'cuda':
+        if kwargs['device'] == 'cuda':
             gpu_mem = torch.cuda.max_memory_allocated() / 1024 ** 3
             logging.info(f'Max GPU memory used = {gpu_mem:.2f} GB\n')
 
