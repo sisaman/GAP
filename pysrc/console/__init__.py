@@ -23,4 +23,4 @@ def setup(log_level: str='INFO', ignore_warnings: bool=True) -> Console:
     return console
 
 
-console = setup(log_level='DEBUG', ignore_warnings=True)
+console = setup(log_level='INFO', ignore_warnings=True)
