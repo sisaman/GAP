@@ -4,6 +4,8 @@ from typing import Annotated
 import torch
 from torch import Tensor
 from torch_geometric.data import Data
+from torch_geometric.transforms import RandomNodeSplit
+from pysrc.console import console
 from pysrc.classifiers.base import Metrics
 from pysrc.methods.base import MethodBase
 from pysrc.methods.mlp import MLP
@@ -12,20 +14,26 @@ from pysrc.methods.mlp import MLP
 class AttackBase(MLP, ABC):
     def __init__(self, 
                  method: MethodBase,
-                 shadow_ratio: Annotated[float, dict(help='ratio of shadow nodes')] = 0.3,
+                 target_train_ratio: Annotated[float, dict(help='ratio of training nodes in the target dataset')] = 0.3,
+                 target_val_ratio: Annotated[float, dict(help='ratio of validation nodes in the target dataset')] = 0.1,
+                 shadow_train_ratio: Annotated[float, dict(help='ratio of training nodes in the shadow dataset')] = 0.3,
+                 shadow_val_ratio: Annotated[float, dict(help='ratio of validation nodes in the shadow dataset')] = 0.1,
                 ):
 
         super().__init__(
             num_classes=2,  # either member or non-member
             hidden_dim=16,
-            num_layers=2,
-            activation='relu',
+            num_layers=3,
+            activation='selu',
             batch_norm=True,
             device=method.device
         )
 
         self.method = method
-        self.shadow_ratio = shadow_ratio
+        self.target_train_ratio = target_train_ratio
+        self.target_val_ratio = target_val_ratio
+        self.shadow_train_ratio = shadow_train_ratio
+        self.shadow_val_ratio = shadow_val_ratio
 
     def reset_parameters(self):
         super().reset_parameters()
@@ -34,7 +42,7 @@ class AttackBase(MLP, ABC):
     def execute(self, data: Data) -> Metrics:
         # split data into target and shadow dataset
         data_target, data_shadow = self.target_shadow_split(data)
-
+        
         # train target model and obtain logits
         logging.info('step 1: training target model')
         metrics = self.method.fit(data_target)
@@ -47,7 +55,8 @@ class AttackBase(MLP, ABC):
         data_shadow.logits = self.method.predict()
 
         # construct attack dataset
-        data_attack = self.prepare_attack_dataset(data_target, data_shadow)
+        with console.status('constructing attack dataset'):
+            data_attack = self.prepare_attack_dataset(data_target, data_shadow)
 
         # train attack model and get attack accuracy
         logging.info('step 3: training attack model')
@@ -57,12 +66,24 @@ class AttackBase(MLP, ABC):
         return metrics
 
     def target_shadow_split(self, data: Data) -> tuple[Data, Data]:
-        n: int = data.num_nodes
-        num_shadow_nodes = int(self.shadow_ratio * n)
-        shadow_nodes = torch.randperm(n, device=self.device)[:num_shadow_nodes]
-        shadow_mask = shadow_nodes.new_zeros(n, dtype=torch.bool).scatter_(0, shadow_nodes, True)
-        data_shadow = self.subgraph(data, shadow_mask)
-        data_target = self.subgraph(data, ~shadow_mask)
+        data_target = Data(**data.to_dict())
+        data_shadow = Data(**data.to_dict())
+        
+        data_target = RandomNodeSplit(
+            split='test_rest',
+            num_train_per_class=int(self.target_train_ratio * data.num_nodes / self.method.num_classes),
+            num_val=self.target_val_ratio
+        )(data_target)
+
+        data_shadow = RandomNodeSplit(
+            split='test_rest',
+            num_train_per_class=int(self.shadow_train_ratio * data.num_nodes / self.method.num_classes),
+            num_val=self.shadow_val_ratio
+        )(data_shadow)
+
+        logging.debug(f'target dataset: {data_target.train_mask.sum()} train nodes')
+        logging.debug(f'shadow dataset: {data_shadow.train_mask.sum()} train nodes')
+
         return data_target, data_shadow
 
     def subgraph(self, data: Data, mask: Tensor) -> Data:

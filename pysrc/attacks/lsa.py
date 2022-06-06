@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated, Optional
 import torch
 from torch import Tensor
@@ -47,5 +48,11 @@ class LinkStealingAttack (AttackBase):
             torch.zeros(num_half, dtype=torch.long, device=self.device),
             torch.ones(num_half, dtype=torch.long, device=self.device),
         ])
+
+        num_classes = x.size(1) // 2
+        label_left = x[:, :num_classes].argmax(dim=1)
+        label_right = x[:, num_classes:].argmax(dim=1)
+        acc = label_left.eq(label_right).eq(y.bool()).float().mean()
+        logging.debug(f'baseline accuracy: {acc}')
 
         return x, y

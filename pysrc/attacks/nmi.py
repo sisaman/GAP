@@ -10,11 +10,9 @@ class NodeMembershipInference (AttackBase):
     """node membership inference attack"""
 
     def __init__(self, 
-                 max_samples: Annotated[Optional[int], dict(help='max number of samples to generate')] = None,
                  **kwargs: Annotated[dict,  dict(help='extra options passed to base class', bases=[AttackBase])]
                  ):
         super().__init__(**kwargs)
-        self.max_samples = max_samples
         
     def generate_attack_xy(self, data: Data) -> tuple[Tensor, Tensor]:
         assert hasattr(data, 'logits'), 'data must have attribute "logits"'
@@ -22,8 +20,6 @@ class NodeMembershipInference (AttackBase):
         num_train = data.train_mask.sum()
         num_test = data.test_mask.sum()
         num_half = min(num_train, num_test)
-        if self.max_samples is not None:
-            num_half = min(self.max_samples // 2, num_half)
 
         perm = torch.randperm(num_train, device=self.device)[:num_half]
         pos_samples = data.logits[data.train_mask][perm]
