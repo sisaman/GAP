@@ -18,7 +18,7 @@ class AttackBase(MLP, ABC):
                  method: MethodBase,
                  train_ratio: Annotated[float, dict(help='ratio of training nodes in both target and shadow datasets')] = 0.3,
                  val_ratio:   Annotated[float, dict(help='ratio of validation nodes in both target and shadow datasets')] = 0.1,
-                 **kwargs:           Annotated[dict,  dict(help='extra options passed to base class', bases=[MLP], prefixes=['attack_'])]
+                 **kwargs:    Annotated[dict,  dict(help='extra options passed to base class', bases=[MLP], prefixes=['attack_'])]
                 ):
 
         super().__init__(
