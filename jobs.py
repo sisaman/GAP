@@ -143,7 +143,7 @@ class JobManager:
         command_subparser = parser.add_subparsers(dest='command')
 
         parser_command = command_subparser.add_parser('submit')
-        parser_command.add_argument('--gpumem', type=int, required=False, default=10, help='minimum required GPU memory in GB')
+        parser_command.add_argument('--gpumem', type=int, required=False, default=20, help='minimum required GPU memory in GB')
         command_subparser.add_parser('status')
 
         parser_resubmit = command_subparser.add_parser('resubmit')
