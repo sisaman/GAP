@@ -60,7 +60,7 @@ def run(device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cu
     ### run experiment ###
     for iteration in range(repeats):
         data = Data(**data_initial.to_dict())
-        with console.status(f'moving data to {kwargs["device"]}'):
+        with console.status(f'moving data to {device}'):
             data.to(device)
 
         start_time = time()
