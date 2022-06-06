@@ -27,8 +27,10 @@ supported_methods = {
     'mlp-dp':   PrivMLP
 }
 
-def run(seed:    Annotated[int, dict(help='initial random seed')] = 12345,
-        repeats: Annotated[int, dict(help='number of times the experiment is repeated')] = 1,
+def run(device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
+        use_amp: Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
+        seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
+        repeats: Annotated[int,   dict(help='number of times the experiment is repeated')] = 1,
         **kwargs
     ):
 
@@ -48,13 +50,18 @@ def run(seed:    Annotated[int, dict(help='initial random seed')] = 12345,
     ### initiallize method ###
     Method = supported_methods[kwargs['method']]
     method_args = strip_kwargs(Method, kwargs)
-    method: MethodBase = Method(num_classes=num_classes, **method_args)
+    method: MethodBase = Method(
+        num_classes=num_classes, 
+        device=device,
+        use_amp=use_amp,
+        **method_args
+    )
 
     ### run experiment ###
     for iteration in range(repeats):
         data = Data(**data_initial.to_dict())
         with console.status(f'moving data to {kwargs["device"]}'):
-            data.to(kwargs['device'])
+            data.to(device)
 
         start_time = time()
         method.reset_parameters()
@@ -112,6 +119,10 @@ def main():
     parser = ArgumentParser(parents=[init_parser], formatter_class=ArgumentDefaultsHelpFormatter)
     kwargs = vars(parser.parse_args())
     print_args(kwargs, num_cols=4)
+
+    if kwargs['device'] == 'cuda' and not torch.cuda.is_available():
+        logging.warning('CUDA is not available, proceeding with CPU') 
+        kwargs['device'] = 'cpu'
 
     try:
         start = time()

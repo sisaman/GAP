@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Annotated, Optional
+from typing import Literal, Optional
 from torch import Tensor
 from torch_geometric.data import Data
 from pysrc.classifiers.base import Metrics
@@ -7,12 +7,7 @@ from pysrc.trainer import Trainer
 
 
 class MethodBase(ABC):
-    def __init__(self, 
-                 num_classes: int,
-                 device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
-                 use_amp: Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
-                 ):
-
+    def __init__(self, num_classes: int, device:  Literal['cpu', 'cuda'] = 'cuda', use_amp: bool = False):
         self.num_classes = num_classes
         self.device = device
         self.use_amp = use_amp
