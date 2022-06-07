@@ -12,4 +12,5 @@ class ClassifierBase(Module, ABC):
     def step(self, batch: tuple[Tensor, Tensor], stage: Stage) -> tuple[Tensor, Metrics]: pass
     @abstractmethod
     def predict(self, x: Tensor) -> Tensor: pass
+    @abstractmethod
     def reset_parameters(self): pass
