@@ -184,4 +184,4 @@ class Trainer:
             self.scaler.step(self.optimizer)
             self.scaler.update()
 
-        return metrics
+        return {f'{stage}/{key}': value for key, value in metrics.items()}

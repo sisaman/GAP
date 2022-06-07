@@ -3,6 +3,7 @@ from rich.console import Group
 from rich.padding import Padding
 from rich.text import Text
 from rich.table import Column, Table
+from pysrc.classifiers.base import Metrics
 from pysrc.console import console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn, Task
 
@@ -46,10 +47,10 @@ class TrainerProgress(Progress):
     def reset(self, task: Task, **kwargs):
         super().reset(self.trainer_tasks[task], **kwargs)
 
-    def render_metrics(self, metrics: dict[str, object]) -> str:
+    def render_metrics(self, metrics: Metrics) -> str:
         out = []
         for split in ['train', 'val', 'test']:
-            metric_str = ' '.join(f'{k}: {v:.3f}' for k, v in metrics.items() if k.startswith(split))
+            metric_str = ' '.join(f'{k}: {v:.3f}' for k, v in metrics.items() if f'{split}/' in k)
             out.append(metric_str)
         
         return '  '.join(out)

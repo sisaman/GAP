@@ -29,12 +29,12 @@ class MLPClassifier(MLP, ClassifierBase):
         x, y = batch
         preds = F.log_softmax(self(x), dim=-1)
         acc = preds.argmax(dim=1).eq(y).float().mean() * 100
-        metrics = {f'{stage}/acc': acc}
+        metrics = {'acc': acc}
 
         loss = None
         if stage != 'test':
             loss = F.nll_loss(input=preds, target=y)
-            metrics[f'{stage}/loss'] = loss.detach()
+            metrics['loss'] = loss.detach()
 
         return loss, metrics
 

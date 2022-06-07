@@ -96,12 +96,12 @@ class GraphSAGEClassifier(ClassifierBase):
         preds = F.log_softmax(h, dim=-1)
         target = data.y[mask][:batch_size]
         acc = preds.argmax(dim=1).eq(target).float().mean() * 100
-        metrics = {f'{stage}/acc': acc}
+        metrics = {'acc': acc}
 
         loss = None
         if stage != 'test':
             loss = F.nll_loss(input=preds, target=target)
-            metrics[f'{stage}/loss'] = loss.detach()
+            metrics['loss'] = loss.detach()
 
         return loss, metrics
 
