@@ -33,14 +33,7 @@ class Trainer:
         self.scaler = GradScaler(enabled=self.use_amp)
         self.best_metrics: dict[str, object] = None
         self.checkpoint_path: str = None
-        
-        self.metrics = {
-            'train/loss': MeanMetric(compute_on_step=False).to(device),
-            'train/acc': MeanMetric(compute_on_step=False).to(device),
-            'val/loss': MeanMetric(compute_on_step=False).to(device),
-            'val/acc': MeanMetric(compute_on_step=False).to(device),
-            'test/acc': MeanMetric(compute_on_step=False).to(device),
-        }
+        self.metrics: dict[str, MeanMetric] = {}
 
     def reset(self):
         self.model: ClassifierBase = None
@@ -51,11 +44,23 @@ class Trainer:
         for metric in self.metrics.values():
             metric.reset()
 
+        self.metrics = {}
+        
+
+    def update_metrics(self, metric_name: str, metric_value: object, weight: int = 1) -> None:
+        # if this is a new metric, add it to self.metrics
+        if metric_name not in self.metrics:
+            self.metrics[metric_name] = MeanMetric(compute_on_step=False).to(self.device)
+
+        # update the metric
+        self.metrics[metric_name].update(metric_value, weight=weight)
+
+
     def aggregate_metrics(self, stage: Stage='train') -> Metrics:
         metrics = {}
 
         for metric_name, metric_value in self.metrics.items():
-            if metric_name.startswith(stage):
+            if stage in metric_name.split('/'):
                 value = metric_value.compute()
                 metric_value.reset()
                 if torch.is_tensor(value):
@@ -163,7 +168,7 @@ class Trainer:
         for batch in dataloader:
             metrics = self.step(batch, stage)
             for item in metrics:
-                self.metrics[item].update(metrics[item], weight=len(batch))
+                self.update_metrics(item, metrics[item], weight=len(batch))
             self.progress.update(stage, advance=1)
 
         self.progress.reset(stage, visible=False)
