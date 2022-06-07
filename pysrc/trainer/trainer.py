@@ -75,11 +75,9 @@ class Trainer:
             raise ValueError(f'Unknown metric mode: {self.monitor_mode}')
 
     def load_best_model(self) -> ClassifierBase:
-        if self.checkpoint_path:
+        if self.val_interval and self.checkpoint_path:
             self.model.load_state_dict(torch.load(self.checkpoint_path))
-            return self.model
-        else:
-            raise Exception('No checkpoint found')
+        return self.model
 
     def fit(self, 
             model: ClassifierBase, 
@@ -121,20 +119,16 @@ class Trainer:
                 # train loop
                 train_metrics = self.loop(train_dataloader, stage='train')
                 metrics.update(train_metrics)
-
-                # validation loop
-                if val_dataloader:
-                    val_metrics = self.loop(val_dataloader, stage='val')
-                    metrics.update(val_metrics)
-
-                # test loop
-                if test_dataloader:
-                    test_metrics = self.loop(test_dataloader, stage='test')
-                    metrics.update(test_metrics)
                     
                 # update best metrics
                 if val_dataloader and self.val_interval:
                     if epoch % self.val_interval == 0:
+                        
+                        # validation loop
+                        if val_dataloader:
+                            val_metrics = self.loop(val_dataloader, stage='val')
+                            metrics.update(val_metrics)
+
                         if self.performs_better(metrics):
                             self.best_metrics = metrics
                             num_epochs_without_improvement = 0
@@ -156,7 +150,7 @@ class Trainer:
         return self.best_metrics
 
     def test(self, dataloader: Iterable, load_best: bool = True) -> Metrics:
-        if load_best and self.val_interval:
+        if load_best:
             self.model = self.load_best_model()
 
         metrics = self.loop(dataloader, stage='test')
