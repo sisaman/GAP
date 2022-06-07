@@ -47,9 +47,6 @@ def run(device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cu
         loader_args = strip_kwargs(DatasetLoader, kwargs)
         data_initial = DatasetLoader(**loader_args).load(verbose=True)
 
-    task_acc = []
-    attack_acc = []
-    run_metrics = {}
     num_classes = data_initial.y.max().item() + 1
     config = dict(**kwargs, seed=seed, repeats=repeats)
     logger_args = strip_kwargs(Logger.setup, kwargs)
@@ -57,8 +54,8 @@ def run(device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cu
 
     ### initiallize method ###
     Method = supported_methods[kwargs.pop('method')]
-    method_args = strip_kwargs(Method, kwargs)
-    method_args = remove_prefix(method_args, 'target_')
+    method_args = strip_kwargs(Method, kwargs, prefix='target_')
+    method_args = remove_prefix(method_args, prefix='target_')
     method: MethodBase = Method(
         num_classes=num_classes, 
         device=device,
@@ -76,6 +73,8 @@ def run(device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cu
         **attack_args
     )
 
+    run_metrics = {}
+
     ### run experiment ###
     for iteration in range(repeats):
         data = Data(**data_initial.to_dict())
@@ -86,8 +85,6 @@ def run(device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cu
         metrics = attack.execute(data)
         end_time = time()
         metrics['fit_time'] = end_time - start_time
-        task_acc.append(metrics['test/acc'])
-        attack_acc.append(metrics['attack/acc'])
 
         ### process results ###
         for metric, value in metrics.items():
@@ -95,8 +92,12 @@ def run(device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cu
         
         console.print()
         logging.info(f'run: {iteration + 1}/{repeats}')
-        logging.info(f'task/acc: {task_acc[-1]:.2f}\t average: {np.mean(task_acc):.2f}')
-        logging.info(f'attack/acc: {attack_acc[-1]:.2f}\t average: {np.mean(attack_acc):.2f}')
+        logging.info(f'target/train/acc: {run_metrics["target/train/acc"][-1]:.2f}\t average: {np.mean(run_metrics["target/train/acc"]):.2f}')
+        logging.info(f'target/test/acc: {run_metrics["target/test/acc"][-1]:.2f}\t average: {np.mean(run_metrics["target/test/acc"]):.2f}')
+        logging.info(f'shadow/train/acc: {run_metrics["shadow/train/acc"][-1]:.2f}\t average: {np.mean(run_metrics["shadow/train/acc"]):.2f}')
+        logging.info(f'shadow/test/acc: {run_metrics["shadow/test/acc"][-1]:.2f}\t average: {np.mean(run_metrics["shadow/test/acc"]):.2f}')
+        logging.info(f'attack/test/acc: {run_metrics["attack/test/acc"][-1]:.2f}\t average: {np.mean(run_metrics["attack/test/acc"]):.2f}')
+        logging.info(f'attack/adv: {run_metrics["attack/adv"][-1]:.4f}\t average: {np.mean(run_metrics["attack/adv"]):.4f}')
         console.print()
 
         attack.reset_parameters()
