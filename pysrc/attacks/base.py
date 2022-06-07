@@ -1,12 +1,12 @@
 import logging
 from abc import ABC, abstractmethod
 from typing import Annotated
-from sklearn.metrics import roc_curve
 import torch
 from torch import Tensor
 from torch_geometric.data import Data
 from torch_geometric.transforms import RandomNodeSplit
 from pysrc.args.utils import remove_prefix
+from pysrc.attacks.utils import membership_advantage
 from pysrc.console import console
 from pysrc.classifiers.base import Metrics
 from pysrc.methods.base import MethodBase
@@ -16,9 +16,9 @@ from pysrc.methods.mlp import MLP
 class AttackBase(MLP, ABC):
     def __init__(self, 
                  method: MethodBase,
-                 train_ratio: Annotated[float, dict(help='ratio of training nodes in both target and shadow datasets')] = 0.3,
-                 val_ratio:   Annotated[float, dict(help='ratio of validation nodes in both target and shadow datasets')] = 0.1,
-                 **kwargs:    Annotated[dict,  dict(help='extra options passed to base class', bases=[MLP], prefixes=['attack_'])]
+                 num_train_nodes: Annotated[int,  dict(help='number of training nodes in both target and shadow datasets')] = 10000,
+                 num_val_nodes:   Annotated[int,  dict(help='number of validation nodes in both target and shadow datasets')] = 100,
+                 **kwargs:        Annotated[dict, dict(help='extra options passed to base class', bases=[MLP], prefixes=['attack_'])]
                 ):
 
         super().__init__(
@@ -27,8 +27,8 @@ class AttackBase(MLP, ABC):
         )
 
         self.method = method
-        self.train_ratio = train_ratio
-        self.val_ratio = val_ratio
+        self.num_train_nodes = num_train_nodes
+        self.num_val_nodes = num_val_nodes
 
     def reset_parameters(self):
         super().reset_parameters()
@@ -37,30 +37,37 @@ class AttackBase(MLP, ABC):
     def execute(self, data: Data) -> Metrics:
         # split data into target and shadow dataset
         data_target, data_shadow = self.target_shadow_split(data)
-        
+        metrics = {}
         # train target model and obtain logits
         logging.info('step 1: training target model')
-        metrics = self.method.fit(data_target)
+        target_metrics = self.method.fit(data_target)
         data_target.logits = self.method.predict()
+        data_target = data_target.to('cpu')
 
         # train shadow model and obtain logits
         logging.info('step 2: training shadow model')
         self.method.reset_parameters()
-        self.method.fit(data_shadow)
+        shadow_metrics = self.method.fit(data_shadow)
         data_shadow.logits = self.method.predict()
+        data_shadow = data_shadow.to('cpu')
 
         # construct attack dataset
         with console.status('constructing attack dataset'):
             data_attack = self.prepare_attack_dataset(data_target, data_shadow)
+            data_attack = data_attack.to(self.device)
+            logging
 
         # train attack model and get attack accuracy
         logging.info('step 3: training attack model')
         attack_metrics = self.fit(data_attack)
-        metrics['attack/acc'] = attack_metrics['test/acc']
-        y_score = self.predict(data_attack)[data_attack.test_mask]
-        y_true = data_attack.y[data_attack.test_mask]
-        fpr, tpr, _ = roc_curve(y_true=y_true, y_score=y_score)
-        metrics['attack/adv'] = tpr[1] - fpr[1]
+
+        # aggregate metrics
+        metrics.update({f'target/{k}': v for k, v in target_metrics.items()})
+        metrics.update({f'shadow/{k}': v for k, v in shadow_metrics.items()})
+        metrics.update({f'attack/{k}': v for k, v in attack_metrics.items()})
+        
+
+        metrics['attack/adv'] = 2 * metrics['attack/test/acc'] - 100
         
         return metrics
 
@@ -70,31 +77,21 @@ class AttackBase(MLP, ABC):
         
         data_target = RandomNodeSplit(
             split='test_rest',
-            num_train_per_class=int(self.train_ratio * data.num_nodes / self.method.num_classes),
-            num_val=self.val_ratio
+            num_train_per_class=self.num_train_nodes // self.method.num_classes,
+            num_val=self.num_val_nodes
         )(data_target)
 
         data_shadow = RandomNodeSplit(
             split='test_rest',
-            num_train_per_class=int(self.train_ratio * data.num_nodes / self.method.num_classes),
-            num_val=self.val_ratio
+            num_train_per_class=self.num_train_nodes // self.method.num_classes,
+            num_val=self.num_val_nodes
         )(data_shadow)
 
-        logging.debug(f'target dataset: {data_target.train_mask.sum()} train nodes')
-        logging.debug(f'shadow dataset: {data_shadow.train_mask.sum()} train nodes')
+        logging.debug(f'target dataset: {data_target.train_mask.sum()} train nodes, {data_target.val_mask.sum()} val nodes')
+        logging.debug(f'shadow dataset: {data_shadow.train_mask.sum()} train nodes, {data_shadow.val_mask.sum()} val nodes')
 
         return data_target, data_shadow
 
-    def subgraph(self, data: Data, mask: Tensor) -> Data:
-        return Data(
-            x=data.x[mask], 
-            y=data.y[mask], 
-            train_mask=data.train_mask[mask], 
-            val_mask=data.val_mask[mask], 
-            test_mask=data.test_mask[mask],
-            adj_t=data.adj_t[mask, mask],
-        )
-    
     def prepare_attack_dataset(self, data_target: Data, data_shadow: Data) -> Data:
         # get train+val data from shadow data
         logging.debug('preparing attack dataset: train')
