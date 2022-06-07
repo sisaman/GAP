@@ -29,11 +29,11 @@ class MethodBase(ABC):
         self.trainer.reset()
 
     @abstractmethod
-    def fit(self, data: Data) -> Metrics:
+    def fit(self, data: Data, prefix: str = '') -> Metrics:
         """Fit the model to the given data."""
 
     @abstractmethod
-    def test(self, data: Optional[Data] = None) -> Metrics:
+    def test(self, data: Optional[Data] = None, prefix: str = '') -> Metrics:
         """Test the model on the given data, or the training data if data is None."""
 
     @abstractmethod

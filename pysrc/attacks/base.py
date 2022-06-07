@@ -6,7 +6,6 @@ from torch import Tensor
 from torch_geometric.data import Data
 from torch_geometric.transforms import RandomNodeSplit
 from pysrc.args.utils import remove_prefix
-from pysrc.attacks.utils import membership_advantage
 from pysrc.console import console
 from pysrc.classifiers.base import Metrics
 from pysrc.methods.base import MethodBase
@@ -40,14 +39,14 @@ class AttackBase(MLP, ABC):
         metrics = {}
         # train target model and obtain logits
         logging.info('step 1: training target model')
-        target_metrics = self.method.fit(data_target)
+        target_metrics = self.method.fit(data_target, prefix='target/')
         data_target.logits = self.method.predict()
         data_target = data_target.to('cpu')
 
         # train shadow model and obtain logits
         logging.info('step 2: training shadow model')
         self.method.reset_parameters()
-        shadow_metrics = self.method.fit(data_shadow)
+        shadow_metrics = self.method.fit(data_shadow, prefix='shadow/')
         data_shadow.logits = self.method.predict()
         data_shadow = data_shadow.to('cpu')
 
@@ -59,15 +58,15 @@ class AttackBase(MLP, ABC):
 
         # train attack model and get attack accuracy
         logging.info('step 3: training attack model')
-        attack_metrics = self.fit(data_attack)
+        attack_metrics = self.fit(data_attack, prefix='attack/')
 
         # aggregate metrics
-        metrics.update({f'target/{k}': v for k, v in target_metrics.items()})
-        metrics.update({f'shadow/{k}': v for k, v in shadow_metrics.items()})
-        metrics.update({f'attack/{k}': v for k, v in attack_metrics.items()})
-        
-
-        metrics['attack/adv'] = 2 * metrics['attack/test/acc'] - 100
+        metrics = {
+            **target_metrics,
+            **shadow_metrics,
+            **attack_metrics,
+            'attack/adv': 2 * attack_metrics['attack/test/acc'] - 100
+        }
         
         return metrics
 

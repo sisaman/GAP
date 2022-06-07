@@ -53,14 +53,14 @@ class PrivMLP (MLP):
 
         self.classifier = self.noisy_sgd.prepare_module(self.classifier)
 
-    def fit(self, data: Data) -> Metrics:
+    def fit(self, data: Data, prefix: str = '') -> Metrics:
         num_train_nodes = data.train_mask.sum().item()
 
         if num_train_nodes != self.num_train_nodes:
             self.num_train_nodes = num_train_nodes
             self.calibrate()
 
-        return super().fit(data)
+        return super().fit(data, prefix=prefix)
 
     def data_loader(self, data: Data, stage: Stage) -> DataLoader:
         dataloader = super().data_loader(data, stage)

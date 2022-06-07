@@ -69,13 +69,13 @@ class Trainer:
 
         return metrics
 
-    def performs_better(self, metrics: Metrics) -> bool:
+    def performs_better(self, metrics: Metrics, monitor_key: str) -> bool:
         if self.best_metrics is None:
             return True
         elif self.monitor_mode == 'max':
-            return metrics[self.monitor] > self.best_metrics[self.monitor]
+            return metrics[monitor_key] > self.best_metrics[monitor_key]
         elif self.monitor_mode == 'min':
-            return metrics[self.monitor] < self.best_metrics[self.monitor]
+            return metrics[monitor_key] < self.best_metrics[monitor_key]
         else:
             raise ValueError(f'Unknown metric mode: {self.monitor_mode}')
 
@@ -91,7 +91,8 @@ class Trainer:
             train_dataloader: Iterable, 
             val_dataloader: Optional[Iterable]=None, 
             test_dataloader: Optional[Iterable]=None, 
-            checkpoint: bool=False
+            checkpoint: bool=False,
+            prefix: str = ''
             ) -> Metrics:
 
         self.model = model.to(self.device)
@@ -122,7 +123,7 @@ class Trainer:
                 metrics = {'epoch': epoch}
 
                 # train loop
-                train_metrics = self.loop(train_dataloader, stage='train')
+                train_metrics = self.loop(train_dataloader, stage='train', prefix=prefix)
                 metrics.update(train_metrics)
                     
                 # update best metrics
@@ -131,10 +132,10 @@ class Trainer:
                         
                         # validation loop
                         if val_dataloader:
-                            val_metrics = self.loop(val_dataloader, stage='val')
+                            val_metrics = self.loop(val_dataloader, stage='val', prefix=prefix)
                             metrics.update(val_metrics)
 
-                        if self.performs_better(metrics):
+                        if self.performs_better(metrics, monitor_key=f'{prefix}{self.monitor}'):
                             self.best_metrics = metrics
                             num_epochs_without_improvement = 0
 
@@ -154,19 +155,19 @@ class Trainer:
         if self.logger: self.logger.log_summary(self.best_metrics)
         return self.best_metrics
 
-    def test(self, dataloader: Iterable, load_best: bool = True) -> Metrics:
+    def test(self, dataloader: Iterable, load_best: bool = True, prefix: str = '') -> Metrics:
         if load_best:
             self.model = self.load_best_model()
 
-        metrics = self.loop(dataloader, stage='test')
+        metrics = self.loop(dataloader, stage='test', prefix=prefix)
         return metrics
 
-    def loop(self, dataloader: Iterable, stage: Stage) -> Metrics:
+    def loop(self, dataloader: Iterable, stage: Stage, prefix: str) -> Metrics:
         self.model.train(stage == 'train')
         self.progress.update(stage, visible=len(dataloader) > 1)
 
         for batch in dataloader:
-            metrics = self.step(batch, stage)
+            metrics = self.step(batch, stage, prefix)
             for item in metrics:
                 self.update_metrics(item, metrics[item], weight=len(batch))
             self.progress.update(stage, advance=1)
@@ -174,7 +175,7 @@ class Trainer:
         self.progress.reset(stage, visible=False)
         return self.aggregate_metrics(stage)
 
-    def step(self, batch, stage: Stage) -> Metrics:
+    def step(self, batch, stage: Stage, prefix: str) -> Metrics:
         if stage == 'train':
             self.optimizer.zero_grad(set_to_none=True)
 
@@ -189,4 +190,4 @@ class Trainer:
             self.scaler.step(self.optimizer)
             self.scaler.update()
 
-        return {f'{stage}/{key}': value for key, value in metrics.items()}
+        return {f'{prefix}{stage}/{key}': value for key, value in metrics.items()}

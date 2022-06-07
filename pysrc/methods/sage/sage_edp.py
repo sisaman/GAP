@@ -24,14 +24,14 @@ class EdgePrivSAGE (SAGE):
             data.adj_t = self.mechanism(data.adj_t, chunk_size=500)
         return data
 
-    def fit(self, data: Data) -> Metrics:
+    def fit(self, data: Data, prefix: str = '') -> Metrics:
         data = self.perturb_data(data)
-        return super().fit(data)
+        return super().fit(data, prefix=prefix)
 
-    def test(self, data: Optional[Data] = None) -> Metrics:
+    def test(self, data: Optional[Data] = None, prefix: str = '') -> Metrics:
         if data is not None and data != self.data:
             data = self.perturb_data(data)
-        return super().test(data)
+        return super().test(data, prefix=prefix)
 
     def predict(self, data: Optional[Data] = None) -> torch.Tensor:
         if data is not None and data != self.data:

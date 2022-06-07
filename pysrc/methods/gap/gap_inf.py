@@ -89,15 +89,15 @@ class GAP (MethodBase):
         self.classifier.reset_parameters()
         self.data = None
 
-    def fit(self, data: Data) -> Metrics:
+    def fit(self, data: Data, prefix: str = '') -> Metrics:
         self.data = data
-        self.data = self.pretrain_encoder(self.data)
+        self.data = self.pretrain_encoder(self.data, prefix=prefix)
         self.data = self.precompute_aggregations(self.data)
-        metrics = self.train_classifier(self.data)
+        metrics = self.train_classifier(self.data, prefix=prefix)
         metrics.update(self.test(self.data))
         return metrics
 
-    def test(self, data: Optional[Data] = None) -> Metrics:
+    def test(self, data: Optional[Data] = None, prefix: str = '') -> Metrics:
         if data is None or data == self.data:
             data = self.data
         else:
@@ -107,6 +107,7 @@ class GAP (MethodBase):
         test_metics = self.trainer.test(
             dataloader=self.data_loader(data, 'test'),
             load_best=True,
+            prefix=prefix,
         )
 
         return test_metics
@@ -126,7 +127,7 @@ class GAP (MethodBase):
     def normalize(self, x: torch.Tensor) -> torch.Tensor:
         return F.normalize(x, p=2, dim=-1)
 
-    def pretrain_encoder(self, data: Data) -> Data:
+    def pretrain_encoder(self, data: Data, prefix: str) -> Data:
         if self.encoder_layers > 0:
             logging.info('pretraining encoder module')
             self.encoder.to(self.device)
@@ -139,7 +140,8 @@ class GAP (MethodBase):
                 train_dataloader=self.data_loader(data, 'train'), 
                 val_dataloader=self.data_loader(data, 'val'),
                 test_dataloader=None,
-                checkpoint=True
+                checkpoint=True,
+                prefix=f'{prefix}encoder/',
             )
 
             self.encoder = self.trainer.load_best_model()
@@ -160,7 +162,7 @@ class GAP (MethodBase):
             data.x = torch.stack(x_list, dim=-1)
         return data
         
-    def train_classifier(self, data: Data) -> Metrics:
+    def train_classifier(self, data: Data, prefix: str) -> Metrics:
         logging.info('training classification module')
         self.classifier.to(self.device)
 
@@ -173,6 +175,7 @@ class GAP (MethodBase):
             val_dataloader=self.data_loader(data, 'val'),
             test_dataloader=None,
             checkpoint=True,
+            prefix=prefix,
         )
         
         return metrics

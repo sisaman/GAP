@@ -38,12 +38,12 @@ class EdgePrivGAP (GAP):
             logging.info(f'noise scale: {self.noise_scale:.4f}\n')
 
 
-    def fit(self, data: Data) -> Metrics:
+    def fit(self, data: Data, prefix: str = '') -> Metrics:
         if data.num_edges != self.num_edges:
             self.num_edges = data.num_edges
             self.calibrate()
 
-        return super().fit(data)
+        return super().fit(data, prefix=prefix)
 
     def aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
         x = matmul(adj_t, x)

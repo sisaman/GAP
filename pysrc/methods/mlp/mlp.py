@@ -59,19 +59,20 @@ class MLP (MethodBase):
         super().reset_parameters()
         self.classifier.reset_parameters()
 
-    def fit(self, data: Data) -> Metrics:
+    def fit(self, data: Data, prefix: str = '') -> Metrics:
         self.data = data
-        metrics = self.train_classifier(self.data)
-        metrics.update(self.test(self.data))
+        metrics = self.train_classifier(self.data, prefix=prefix)
+        metrics.update(self.test(self.data, prefix=prefix))
         return metrics
 
-    def test(self, data: Optional[Data] = None) -> Metrics:
+    def test(self, data: Optional[Data] = None, prefix: str = '') -> Metrics:
         if data is None:
             data = self.data
         
         test_metics = self.trainer.test(
             dataloader=self.data_loader(data, 'test'),
             load_best=True,
+            prefix=prefix,
         )
         return test_metics
 
@@ -80,7 +81,7 @@ class MLP (MethodBase):
             data = self.data
         return self.classifier.predict(data.x)
 
-    def train_classifier(self, data: Data) -> Metrics:
+    def train_classifier(self, data: Data, prefix: str) -> Metrics:
         self.classifier.to(self.device)
         self.trainer.reset()
 
@@ -91,7 +92,8 @@ class MLP (MethodBase):
             train_dataloader=self.data_loader(data, 'train'), 
             val_dataloader=self.data_loader(data, 'val'),
             test_dataloader=None,
-            checkpoint=True
+            checkpoint=True,
+            prefix=prefix,
         )
 
         return metrics

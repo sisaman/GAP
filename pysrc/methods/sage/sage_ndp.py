@@ -78,7 +78,7 @@ class NodePrivSAGE (SAGE):
             data = NeighborSampler(self.max_degree)(data)
         return data
 
-    def fit(self, data: Data) -> Metrics:
+    def fit(self, data: Data, prefix: str = '') -> Metrics:
         num_train_nodes = data.train_mask.sum().item()
 
         if num_train_nodes != self.num_train_nodes:
@@ -86,12 +86,12 @@ class NodePrivSAGE (SAGE):
             self.calibrate()
 
         data = self.sample_neighbors(data)
-        return super().fit(data)
+        return super().fit(data, prefix=prefix)
 
-    def test(self, data: Optional[Data] = None) -> Metrics:
+    def test(self, data: Optional[Data] = None, prefix: str = '') -> Metrics:
         if data is not None and data != self.data:
             data = self.sample_neighbors(data)
-        return super().test(data)
+        return super().test(data, prefix=prefix)
 
     def predict(self, data: Optional[Data] = None) -> torch.Tensor:
         if data is not None and data != self.data:
