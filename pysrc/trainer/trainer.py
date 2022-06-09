@@ -120,7 +120,7 @@ class Trainer:
             num_epochs_without_improvement = 0
             
             for epoch in range(1, epochs + 1):
-                metrics = {'epoch': epoch}
+                metrics = {f'{prefix}epoch': epoch}
 
                 # train loop
                 train_metrics = self.loop(train_dataloader, stage='train', prefix=prefix)
@@ -150,7 +150,7 @@ class Trainer:
 
                 # log and update progress
                 if self.logger: self.logger.log(metrics)
-                self.progress.update('epoch', metrics=metrics, advance=1)
+                self.progress.update(task='epoch', metrics=metrics, advance=1)
         
         if self.logger: self.logger.log_summary(self.best_metrics)
         return self.best_metrics
