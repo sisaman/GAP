@@ -2,6 +2,7 @@ from typing_extensions import Self
 from scipy.optimize import minimize_scalar, OptimizeResult
 from autodp.mechanism_zoo import Mechanism
 import numpy as np
+from core.console import console
 
 
 class NoisyMechanism(Mechanism):
@@ -31,11 +32,13 @@ class NoisyMechanism(Mechanism):
     def calibrate(self, eps: float, delta: float) -> float:
         if self.params['noise_scale'] == 0:
             self.update(noise_scale=1)  # to avoid is_inf being true
-
+        
+        console.debug('checking if the mechanism is inf or zero...')
         if np.isinf(eps) or self.is_inf() or self.is_zero():
             self.update(noise_scale=0)
             return 0.0
         else:
+            console.debug('calibration begins...')
             fn_err = lambda x: abs(eps - self.update(np.exp(x)).get_approxDP(delta))
 
             # check if the mechanism is already calibrated
@@ -44,7 +47,7 @@ class NoisyMechanism(Mechanism):
             
             result: OptimizeResult = minimize_scalar(fn_err, 
                 method='brent', 
-                options={'xtol': 1e-5, 'maxiter': 1000000}
+                options={'xtol': 1e-5, 'maxiter': 1000000, 'disp': 3}
             )
 
             if result.success and result.fun < 1e-3:
