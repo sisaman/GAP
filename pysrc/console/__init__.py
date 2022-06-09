@@ -1,26 +1,28 @@
 import logging
-import warnings
 from rich.traceback import install
 from rich.logging import RichHandler
-from pysrc.console.console import Console
+from pysrc.console.console import *
 
+log_level = DEBUG
 
-def setup(log_level: str='INFO', ignore_warnings: bool=True) -> Console:
-    console = Console(tab_size=4)
-    error_console = Console(stderr=True, tab_size=4)
-    install(console=error_console, width=error_console.width)
-    if ignore_warnings:
-        warnings.simplefilter('ignore')
-    logging.basicConfig(
-        level=log_level,
-        format='%(message)s', 
-        datefmt="[%X]", 
-        handlers=[RichHandler(
-            console=console, 
-            omit_repeated_times=True,
-        )]
-    )
-    return console
+# define main and error consoles
+console = Console(tab_size=4, log_level=log_level)
+error_console = Console(stderr=True, tab_size=4, log_level=log_level)
 
+# setup console for tracebacks
+install(console=error_console, width=error_console.width)
 
-console = setup(log_level='DEBUG', ignore_warnings=True)
+# create logger
+log_handler = RichHandler(
+    console=console, 
+    omit_repeated_times=True,
+    log_time_format="[%X]"
+)
+logger = logging.getLogger('gap')
+logger.setLevel(log_level)
+logger.addHandler(log_handler)
+
+# setup warnings
+logging.getLogger("py.warnings").addHandler(log_handler)
+logging.getLogger("py.warnings").propagate = False
+logging.captureWarnings(True)

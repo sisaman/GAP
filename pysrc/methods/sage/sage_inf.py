@@ -1,9 +1,9 @@
-import logging
 import torch
 from typing import Annotated, Literal, Optional, Union
 from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
+from pysrc.console import console
 from pysrc.methods.base import MethodBase
 from pysrc.classifiers import GraphSAGEClassifier
 from pysrc.classifiers.base import Metrics, Stage
@@ -90,7 +90,7 @@ class SAGE (MethodBase):
         return self.classifier.predict(data)
 
     def train_classifier(self, data: Data, prefix: str = '') -> Metrics:
-        logging.info('training classifier')
+        console.info('training classifier')
         self.classifier.to(self.device)
 
         metrics = self.trainer.fit(

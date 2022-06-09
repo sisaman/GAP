@@ -14,6 +14,7 @@ class LogStatus(Status):
         status,
         console: RichConsole,
         level: int = logging.INFO,
+        enabled: bool = True,
         speed: float = 1.0,
         refresh_per_second: float = 12.5,
     ):
@@ -26,6 +27,7 @@ class LogStatus(Status):
         
         self.status = status
         self.level = level
+        self.enabled = enabled
         spinner = Spinner('simpleDots', style='status.spinner', speed=speed)
         record = logging.LogRecord(name=None, level=level, pathname=None, lineno=None, msg=None, args=None, exc_info=None)
         handler = RichHandler(console=console)
@@ -45,10 +47,12 @@ class LogStatus(Status):
         )
         
     def __enter__(self):
-        self._start_time = time()
-        return super().__enter__()
+        if self.enabled:
+            self._start_time = time()
+            return super().__enter__()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.stop()
-        self._end_time = time()
-        self.console.log(f'{self.status}...done in {self._end_time - self._start_time:.2f} s', level=self.level)
+        if self.enabled:
+            super().__exit__(exc_type, exc_val, exc_tb)
+            self._end_time = time()
+            self.console.log(f'{self.status}...done in {self._end_time - self._start_time:.2f} s', level=self.level)

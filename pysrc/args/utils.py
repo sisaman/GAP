@@ -181,5 +181,5 @@ def print_args(args: ArgType, num_cols: int = 4):
     table.add_row(highlighter(message))
 
     console.print()
-    console.log(table)
+    console.info(table)
     console.print()

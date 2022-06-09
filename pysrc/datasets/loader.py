@@ -76,5 +76,5 @@ class DatasetLoader:
         highlighter = ReprHighlighter()
         table = Table(*stat.keys(), title="dataset stats", box=box.HORIZONTALS)
         table.add_row(*map(highlighter, stat.values()))
-        console.log(table)
+        console.info(table)
         console.print()

@@ -1,9 +1,9 @@
-import logging
 from typing import Annotated
 import torch
 from torch import Tensor
 from torch_geometric.data import Data
 from pysrc.attacks.base import AttackBase
+from pysrc.console import console
 
 
 class NodeMembershipInference (AttackBase):
@@ -30,7 +30,7 @@ class NodeMembershipInference (AttackBase):
         pos_entropy = torch.distributions.Categorical(probs=pos_samples).entropy().mean()
         neg_entropy = torch.distributions.Categorical(probs=neg_samples).entropy().mean()
 
-        logging.debug(f'pos_entropy: {pos_entropy:.4f}, neg_entropy: {neg_entropy:.4f}')
+        console.debug(f'pos_entropy: {pos_entropy:.4f}, neg_entropy: {neg_entropy:.4f}')
 
         x = torch.cat([neg_samples, pos_samples], dim=0)
         y = torch.cat([

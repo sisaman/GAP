@@ -10,13 +10,22 @@ from rich.styled import Styled
 from rich.style import Style
 from pysrc.console.status import LogStatus
 
+CRITICAL = logging.CRITICAL
+FATAL = logging.FATAL
+ERROR = logging.ERROR
+WARNING = logging.WARNING
+WARN = logging.WARN
+INFO = logging.INFO
+DEBUG = logging.DEBUG
+NOTSET = logging.NOTSET
 
 class Console(RichConsole):
-    def __init__(self, *args, **kwrags):
+    def __init__(self, *args, log_level: int = INFO, **kwrags):
         super().__init__(*args, **kwrags)
+        self.log_level = log_level
 
-    def status (self, status: str, level: int=logging.INFO) -> LogStatus:
-        return LogStatus(status, self, level)
+    def status (self, status: str, level: int=INFO) -> LogStatus:
+        return LogStatus(status, console=self, level=level, enabled=level >= self.log_level)
 
     def log(
         self,
@@ -46,6 +55,9 @@ class Console(RichConsole):
                 was called. Defaults to False.
             _stack_offset (int, optional): Offset of caller from end of call stack. Defaults to 1.
         """
+        if level < self.log_level:
+            return
+
         if not objects:
             objects = (NewLine(),)
 
@@ -91,3 +103,15 @@ class Console(RichConsole):
             buffer_extend = self._buffer.extend
             for line in Segment.split_and_crop_lines(new_segments, self.width, pad=False):
                 buffer_extend(line)
+
+    def debug(self, *args, **kwargs):
+        self.log(*args, level=DEBUG, **kwargs)
+
+    def info(self, *args, **kwargs):
+        self.log(*args, level=INFO, **kwargs)
+
+    def warning(self, *args, **kwargs):
+        self.log(*args, level=WARNING, **kwargs)
+
+    def error(self, *args, **kwargs):
+        self.log(*args, level=ERROR, **kwargs)

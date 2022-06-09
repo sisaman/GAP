@@ -1,5 +1,4 @@
 from pysrc.console import console
-import logging
 import os
 import time
 import subprocess
@@ -73,10 +72,10 @@ class JobManager:
             try:
                 subprocess.check_call(['qsub', job_file], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
             except subprocess.CalledProcessError as e:
-                logging.error(e.output)
+                console.error(e.output)
                 raise e
 
-        logging.info('job file submitted')
+        console.info('job file submitted')
 
     def resubmit(self):
         failed_jobs = self.get_failed_jobs()
@@ -91,7 +90,7 @@ class JobManager:
                 for run in track(run_cmds, description='writing new jobs file'):
                     file.write(run + '\n')
 
-            logging.info(f'new job file created: {self.args.new_file}')
+            console.info(f'new job file created: {self.args.new_file}')
             self.file = self.args.new_file
             self.submit()
 

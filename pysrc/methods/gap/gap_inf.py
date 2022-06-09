@@ -1,5 +1,4 @@
 import torch
-import logging
 from typing import Annotated, Literal, Optional, Union
 import torch.nn.functional as F
 from torch.optim import Adam, SGD, Optimizer
@@ -46,7 +45,7 @@ class GAP (MethodBase):
         super().__init__(num_classes, **kwargs)
 
         if encoder_layers == 0 and encoder_epochs > 0:
-            logging.warn('encoder_layers is 0, setting encoder_epochs to 0')
+            console.warning('encoder_layers is 0, setting encoder_epochs to 0')
             encoder_epochs = 0
 
         self.hops = hops
@@ -129,7 +128,7 @@ class GAP (MethodBase):
 
     def pretrain_encoder(self, data: Data, prefix: str) -> Data:
         if self.encoder_layers > 0:
-            logging.info('pretraining encoder module')
+            console.info('pretraining encoder module')
             self.encoder.to(self.device)
 
             self.trainer.reset()
@@ -163,7 +162,7 @@ class GAP (MethodBase):
         return data
         
     def train_classifier(self, data: Data, prefix: str) -> Metrics:
-        logging.info('training classification module')
+        console.info('training classification module')
         self.classifier.to(self.device)
 
         self.trainer.reset()

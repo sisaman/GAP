@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-import logging
 from typing import Annotated, Literal, Union
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
@@ -32,10 +31,10 @@ class EdgePrivGAP (GAP):
         with console.status('calibrating noise to privacy budget'):
             if self.delta == 'auto':
                 delta = 0.0 if np.isinf(self.epsilon) else 1. / (10 ** len(str(self.num_edges)))
-                logging.info('delta = %.0e', delta)
+                console.info('delta = %.0e', delta)
             
             self.noise_scale = self.pma_mechanism.calibrate(eps=self.epsilon, delta=delta)
-            logging.info(f'noise scale: {self.noise_scale:.4f}\n')
+            console.info(f'noise scale: {self.noise_scale:.4f}\n')
 
 
     def fit(self, data: Data, prefix: str = '') -> Metrics:

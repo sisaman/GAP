@@ -1,4 +1,3 @@
-import logging
 from abc import ABC, abstractmethod
 from typing import Annotated
 import torch
@@ -38,13 +37,13 @@ class AttackBase(MLP, ABC):
         data_target, data_shadow = self.target_shadow_split(data)
         metrics = {}
         # train target model and obtain logits
-        logging.info('step 1: training target model')
+        console.info('step 1: training target model')
         target_metrics = self.method.fit(data_target, prefix='target/')
         data_target.logits = self.method.predict()
         data_target = data_target.to('cpu')
 
         # train shadow model and obtain logits
-        logging.info('step 2: training shadow model')
+        console.info('step 2: training shadow model')
         self.method.reset_parameters()
         shadow_metrics = self.method.fit(data_shadow, prefix='shadow/')
         data_shadow.logits = self.method.predict()
@@ -54,10 +53,9 @@ class AttackBase(MLP, ABC):
         with console.status('constructing attack dataset'):
             data_attack = self.prepare_attack_dataset(data_target, data_shadow)
             data_attack = data_attack.to(self.device)
-            logging
 
         # train attack model and get attack accuracy
-        logging.info('step 3: training attack model')
+        console.info('step 3: training attack model')
         attack_metrics = self.fit(data_attack, prefix='attack/')
 
         # aggregate metrics
@@ -86,14 +84,14 @@ class AttackBase(MLP, ABC):
             num_val=self.num_val_nodes
         )(data_shadow)
 
-        logging.debug(f'target dataset: {data_target.train_mask.sum()} train nodes, {data_target.val_mask.sum()} val nodes')
-        logging.debug(f'shadow dataset: {data_shadow.train_mask.sum()} train nodes, {data_shadow.val_mask.sum()} val nodes')
+        console.debug(f'target dataset: {data_target.train_mask.sum()} train nodes, {data_target.val_mask.sum()} val nodes')
+        console.debug(f'shadow dataset: {data_shadow.train_mask.sum()} train nodes, {data_shadow.val_mask.sum()} val nodes')
 
         return data_target, data_shadow
 
     def prepare_attack_dataset(self, data_target: Data, data_shadow: Data) -> Data:
         # get train+val data from shadow data
-        logging.debug('preparing attack dataset: train')
+        console.debug('preparing attack dataset: train')
         x_train_val, y_train_val = self.generate_attack_xy(data_shadow)
 
         # shuffle train+val data
@@ -101,7 +99,7 @@ class AttackBase(MLP, ABC):
         x_train_val, y_train_val = x_train_val[perm], y_train_val[perm]
         
         # get test data from target data
-        logging.debug('preparing attack dataset: test')
+        console.debug('preparing attack dataset: test')
         x_test, y_test = self.generate_attack_xy(data_target)
         
         # combine train+val and test data

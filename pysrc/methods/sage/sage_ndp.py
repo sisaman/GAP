@@ -1,4 +1,3 @@
-import logging
 import numpy as np
 from typing import Annotated, Optional, Union, Literal
 import torch
@@ -66,10 +65,10 @@ class NodePrivSAGE (SAGE):
         with console.status('calibrating noise to privacy budget'):
             if self.delta == 'auto':
                 delta = 0.0 if np.isinf(self.epsilon) else 1. / (10 ** len(str(self.num_train_nodes)))
-                logging.info('delta = %.0e', delta)
+                console.info('delta = %.0e', delta)
             
             self.noise_scale = composed_mechanism.calibrate(eps=self.epsilon, delta=delta)
-            logging.info(f'noise scale: {self.noise_scale:.4f}\n')
+            console.info(f'noise scale: {self.noise_scale:.4f}\n')
 
         self.classifier = self.noisy_sgd.prepare_module(self.classifier)
 

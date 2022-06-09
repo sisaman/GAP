@@ -2,7 +2,6 @@ from pysrc.args.utils import remove_prefix
 from pysrc.console import console
 with console.status('importing modules'):
     import torch
-    import logging
     import numpy as np
     from time import time
     from typing import Annotated
@@ -91,13 +90,13 @@ def run(device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cu
             run_metrics[metric] = run_metrics.get(metric, []) + [value]
         
         console.print()
-        logging.info(f'run: {iteration + 1}/{repeats}')
-        logging.info(f'target/train/acc: {run_metrics["target/train/acc"][-1]:.2f}\t average: {np.mean(run_metrics["target/train/acc"]):.2f}')
-        logging.info(f'target/test/acc: {run_metrics["target/test/acc"][-1]:.2f}\t average: {np.mean(run_metrics["target/test/acc"]):.2f}')
-        logging.info(f'shadow/train/acc: {run_metrics["shadow/train/acc"][-1]:.2f}\t average: {np.mean(run_metrics["shadow/train/acc"]):.2f}')
-        logging.info(f'shadow/test/acc: {run_metrics["shadow/test/acc"][-1]:.2f}\t average: {np.mean(run_metrics["shadow/test/acc"]):.2f}')
-        logging.info(f'attack/test/acc: {run_metrics["attack/test/acc"][-1]:.2f}\t average: {np.mean(run_metrics["attack/test/acc"]):.2f}')
-        logging.info(f'attack/adv: {run_metrics["attack/adv"][-1]:.4f}\t average: {np.mean(run_metrics["attack/adv"]):.4f}')
+        console.info(f'run: {iteration + 1}/{repeats}')
+        console.info(f'target/train/acc: {run_metrics["target/train/acc"][-1]:.2f}\t average: {np.mean(run_metrics["target/train/acc"]):.2f}')
+        console.info(f'target/test/acc: {run_metrics["target/test/acc"][-1]:.2f}\t average: {np.mean(run_metrics["target/test/acc"]):.2f}')
+        console.info(f'shadow/train/acc: {run_metrics["shadow/train/acc"][-1]:.2f}\t average: {np.mean(run_metrics["shadow/train/acc"]):.2f}')
+        console.info(f'shadow/test/acc: {run_metrics["shadow/test/acc"][-1]:.2f}\t average: {np.mean(run_metrics["shadow/test/acc"]):.2f}')
+        console.info(f'attack/test/acc: {run_metrics["attack/test/acc"][-1]:.2f}\t average: {np.mean(run_metrics["attack/test/acc"]):.2f}')
+        console.info(f'attack/adv: {run_metrics["attack/adv"][-1]:.4f}\t average: {np.mean(run_metrics["attack/adv"]):.4f}')
         console.print()
 
         attack.reset_parameters()
@@ -156,23 +155,23 @@ def main():
     print_args(kwargs, num_cols=4)
 
     if kwargs['device'] == 'cuda' and not torch.cuda.is_available():
-        logging.warning('CUDA is not available, proceeding with CPU') 
+        console.warning('CUDA is not available, proceeding with CPU') 
         kwargs['device'] = 'cpu'
 
     try:
         start = time()
         run(**kwargs)
         end = time()
-        logging.info(f'Total running time: {(end - start):.2f} seconds.')
+        console.info(f'Total running time: {(end - start):.2f} seconds.')
     except KeyboardInterrupt:
         print('\n')
-        logging.warning('Graceful Shutdown')
+        console.warning('Graceful Shutdown')
     except RuntimeError:
         raise
     finally:
         if kwargs['device'] == 'cuda':
             gpu_mem = torch.cuda.max_memory_allocated() / 1024 ** 3
-            logging.info(f'Max GPU memory used = {gpu_mem:.2f} GB\n')
+            console.info(f'Max GPU memory used = {gpu_mem:.2f} GB\n')
 
 
 if __name__ == '__main__':

@@ -1,10 +1,10 @@
-import logging
 from typing import Annotated, Optional
 import torch
 from torch import Tensor
 from torch_geometric.data import Data
 from torch_geometric.utils import negative_sampling
 from pysrc.attacks.base import AttackBase
+from pysrc.console import console
 
 
 class LinkStealingAttack (AttackBase):
@@ -53,6 +53,6 @@ class LinkStealingAttack (AttackBase):
         label_left = x[:, :num_classes].argmax(dim=1)
         label_right = x[:, num_classes:].argmax(dim=1)
         acc = label_left.eq(label_right).eq(y.bool()).float().mean()
-        logging.debug(f'baseline accuracy: {acc}')
+        console.debug(f'baseline accuracy: {acc}')
 
         return x, y
