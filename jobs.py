@@ -1,4 +1,4 @@
-from pysrc.console import console
+from core.console import console
 import os
 import time
 import subprocess

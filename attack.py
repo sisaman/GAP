@@ -1,20 +1,20 @@
-from pysrc.args.utils import remove_prefix
-from pysrc.console import console
+from core.args.utils import remove_prefix
+from core.console import console
 with console.status('importing modules'):
     import torch
     import numpy as np
     from time import time
     from typing import Annotated
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-    from pysrc.datasets import DatasetLoader
-    from pysrc.args.utils import print_args, strip_kwargs, create_arguments, remove_prefix
-    from pysrc.loggers import Logger
-    from pysrc.methods.base import MethodBase
-    from pysrc.methods.gap import GAP, EdgePrivGAP, NodePrivGAP
-    from pysrc.methods.sage import SAGE, EdgePrivSAGE, NodePrivSAGE
-    from pysrc.methods.mlp import MLP, PrivMLP
-    from pysrc.attacks import AttackBase, LinkStealingAttack, NodeMembershipInference
-    from pysrc.utils import seed_everything, confidence_interval
+    from core.datasets import DatasetLoader
+    from core.args.utils import print_args, strip_kwargs, create_arguments, remove_prefix
+    from core.loggers import Logger
+    from core.methods.base import MethodBase
+    from core.methods.gap import GAP, EdgePrivGAP, NodePrivGAP
+    from core.methods.sage import SAGE, EdgePrivSAGE, NodePrivSAGE
+    from core.methods.mlp import MLP, PrivMLP
+    from core.attacks import AttackBase, LinkStealingAttack, NodeMembershipInference
+    from core.utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
 
 supported_methods = {
