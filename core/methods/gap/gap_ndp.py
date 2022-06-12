@@ -9,7 +9,7 @@ from core.data.loader.poisson import PoissonDataLoader
 from core.methods.gap import GAP
 from core.privacy.mechanisms import ComposedNoisyMechanism
 from core.privacy.algorithms import PMA, NoisySGD
-from core.data.transforms import NeighborSampler
+from core.data.transforms import BoundOutDegree
 from core.classifiers.base import ClassifierBase, Metrics, Stage
 
 
@@ -89,7 +89,7 @@ class NodePrivGAP (GAP):
 
     def precompute_aggregations(self, data: Data) -> Data:
         with console.status('bounding the number of neighbors per node'):
-                data = NeighborSampler(self.max_degree)(data)
+                data = BoundOutDegree(self.max_degree)(data)
         return super().precompute_aggregations(data)
 
     def aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:

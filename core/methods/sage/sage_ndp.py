@@ -5,7 +5,7 @@ from torch.optim import Optimizer
 from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
 from core.console import console
-from core.data.transforms import NeighborSampler
+from core.data.transforms import BoundDegree
 from core.methods.sage.sage_inf import SAGE
 from core.classifiers.base import Metrics, Stage
 from core.privacy.algorithms import GNNBasedNoisySGD
@@ -74,7 +74,7 @@ class NodePrivSAGE (SAGE):
 
     def sample_neighbors(self, data: Data) -> Data:
         with console.status('bounding the number of neighbors per node'):
-            data = NeighborSampler(self.max_degree)(data)
+            data = BoundDegree(self.max_degree)(data)
         return data
 
     def fit(self, data: Data, prefix: str = '') -> Metrics:
