@@ -3,8 +3,8 @@
 This repository is the official implementation of the paper:  
 [**GAP: Differentially Private Graph Neural Networks with Aggregation Perturbation**](https://arxiv.org/abs/2203.00949)
 
-## Results
-<img src="https://i.imgur.com/Xlv0E7E.png" alt="results" width="500"/>
+<!-- ## Results
+<img src="https://i.imgur.com/Xlv0E7E.png" alt="results" width="500"/> -->
 
 ## Requirements
 
@@ -43,22 +43,18 @@ To reproduce the paper's results, please follow the below steps:
 
 1. Run [experiments.ipynb](./experiments.ipynb) notebook. It creates a file "jobs/experiments.sh" containing all individual commands for running the experiments in the paper. You must specify your WandB username and (optionally) project name in this notebook.
 
-2. Run ``sh jobs/experiments.sh`` to run all the experiments one by one. This will train all the methods and log the results to the WandB project you specified in step 1.  
+2. Run ``sh jobs/experiments.sh`` to train all the models required for the experiments one by one. The results will be logged to the WandB project you specified in step 1.  
 WARNING: This step will take a lot of time. For faster execution, consider running the commands in parallel or using a distributed job scheduler.
 
 3. Run [results.ipynb](./results.ipynb) notebook to visualize the results as shown in the paper. It will fetch the experiment results from the WandB server, so you must set the same WandB username and project as in step 1 in this notebook as well. Note that we used the [Linux Libertine](https://libertine-fonts.org/) font in the figures, so you either need to have this font installed or change the font in the notebook.
 
 ### Training individual models
 
-To train and evaluate the GAP model, run 
+Run the following command to see the list of available options for training individual models:  
+
 ```
-python src/train.py gap --help
+python train.py --help
 ``` 
-to see the list of available options. Analogously, you can run 
-```
-python src/train.py sage --help
-``` 
-for the list of parameters of the GraphSAGE model.
 
 
 ## Contact
