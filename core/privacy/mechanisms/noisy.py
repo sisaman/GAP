@@ -47,7 +47,7 @@ class NoisyMechanism(Mechanism):
             
             result: OptimizeResult = minimize_scalar(fn_err, 
                 method='brent', 
-                options={'xtol': 1e-5, 'maxiter': 1000000, 'disp': 3}
+                options={'xtol': 1e-5, 'maxiter': 1000000, 'disp': 0}
             )
 
             if result.success and result.fun < 1e-3:
