@@ -14,18 +14,16 @@ class NodeMembershipInference (AttackBase):
                  ):
         super().__init__(**kwargs)
         
-    def generate_attack_xy(self, data: Data) -> tuple[Tensor, Tensor]:
-        assert hasattr(data, 'logits'), 'data must have attribute "logits"'
-
+    def generate_attack_samples(self, data: Data, logits: Tensor) -> tuple[Tensor, Tensor]:
         num_train = data.train_mask.sum()
         num_test = data.test_mask.sum()
         num_half = min(num_train, num_test)
 
         perm = torch.randperm(num_train, device=self.device)[:num_half]
-        pos_samples = data.logits[data.train_mask][perm]
+        pos_samples = logits[data.train_mask][perm]
 
         perm = torch.randperm(num_test, device=self.device)[:num_half]
-        neg_samples = data.logits[data.test_mask][perm]
+        neg_samples = logits[data.test_mask][perm]
 
         pos_entropy = torch.distributions.Categorical(probs=pos_samples).entropy().mean()
         neg_entropy = torch.distributions.Categorical(probs=neg_samples).entropy().mean()

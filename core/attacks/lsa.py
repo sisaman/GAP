@@ -17,7 +17,7 @@ class LinkStealingAttack (AttackBase):
         super().__init__(**kwargs)
         self.max_samples = max_samples
         
-    def generate_attack_xy(self, data: Data) -> tuple[Tensor, Tensor]:
+    def generate_attack_samples(self, data: Data, logits: Tensor) -> tuple[Tensor, Tensor]:
         assert hasattr(data, 'logits'), 'data must have attribute "logits"'
 
         # convert adj_t to edge_index
@@ -37,11 +37,11 @@ class LinkStealingAttack (AttackBase):
         # randomly sample num_half edges
         perm = torch.randperm(edge_index.size(1), device=self.device)[:num_half]
         pos_idx = edge_index[:, perm]
-        pos_samples = torch.cat([data.logits[pos_idx[0]], data.logits[pos_idx[1]]], dim=1)
+        pos_samples = torch.cat([logits[pos_idx[0]], logits[pos_idx[1]]], dim=1)
 
         # negative sampling
         neg_idx = negative_sampling(edge_index, num_nodes=data.num_nodes, num_neg_samples=num_half, method='sparse')
-        neg_samples = torch.cat([data.logits[neg_idx[0]], data.logits[neg_idx[1]]], dim=1)
+        neg_samples = torch.cat([logits[neg_idx[0]], logits[neg_idx[1]]], dim=1)
         
         x = torch.cat([neg_samples, pos_samples], dim=0)
         y = torch.cat([
