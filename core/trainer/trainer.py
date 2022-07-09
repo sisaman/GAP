@@ -1,6 +1,7 @@
 import os
 import uuid
 import torch
+from torch.types import Number
 from torch.optim import Optimizer
 from torch.cuda.amp import GradScaler
 from typing import Iterable, Literal, Optional
@@ -21,6 +22,8 @@ class Trainer:
                  device:        Literal['cpu', 'cuda'] = 'cuda',
                  ):
 
+        assert monitor_mode in ['min', 'max']
+
         self.patience = patience
         self.val_interval = val_interval
         self.use_amp = use_amp
@@ -28,24 +31,15 @@ class Trainer:
         self.monitor_mode = monitor_mode
         self.device = device
         
-        self.logger = Logger.get_instance()
+        # trainer internal state
         self.model: ClassifierBase = None
         self.scaler = GradScaler(enabled=self.use_amp)
-        self.best_metrics: dict[str, object] = None
-        self.checkpoint_path: str = None
         self.metrics: dict[str, MeanMetric] = {}
 
     def reset(self):
         self.model: ClassifierBase = None
         self.scaler = GradScaler(enabled=self.use_amp)
-        self.best_metrics: dict[str, object] = None
-        self.checkpoint_path: str = None
-
-        for metric in self.metrics.values():
-            metric.reset()
-
         self.metrics = {}
-        
 
     def update_metrics(self, metric_name: str, metric_value: object, weight: int = 1) -> None:
         # if this is a new metric, add it to self.metrics
@@ -54,7 +48,6 @@ class Trainer:
 
         # update the metric
         self.metrics[metric_name].update(metric_value, weight=weight)
-
 
     def aggregate_metrics(self, stage: Stage='train') -> Metrics:
         metrics = {}
@@ -69,20 +62,13 @@ class Trainer:
 
         return metrics
 
-    def performs_better(self, metrics: Metrics, monitor_key: str) -> bool:
-        if self.best_metrics is None:
-            return True
-        elif self.monitor_mode == 'max':
-            return metrics[monitor_key] > self.best_metrics[monitor_key]
+    def is_better(self, current_metric: Number, previous_metric: Number) -> bool:
+        if self.monitor_mode == 'max':
+            return current_metric > previous_metric
         elif self.monitor_mode == 'min':
-            return metrics[monitor_key] < self.best_metrics[monitor_key]
+            return current_metric < previous_metric
         else:
             raise ValueError(f'Unknown metric mode: {self.monitor_mode}')
-
-    def load_best_model(self) -> ClassifierBase:
-        if self.val_interval and self.checkpoint_path:
-            self.model.load_state_dict(torch.load(self.checkpoint_path))
-        return self.model
 
     def fit(self, 
             model: ClassifierBase, 
@@ -98,10 +84,12 @@ class Trainer:
         self.model = model.to(self.device)
         self.model.train()
         self.optimizer = optimizer
+        monitor_key = f'{prefix}{self.monitor}'
 
         if checkpoint:
             os.makedirs('checkpoints', exist_ok=True)
-            self.checkpoint_path = os.path.join('checkpoints', f'{uuid.uuid1()}.pt')
+            checkpoint_path = os.path.join('checkpoints', f'{uuid.uuid1()}.pt')
+            torch.save(self.model.state_dict(), checkpoint_path)
 
         if val_dataloader is None:
             val_dataloader = []
@@ -117,6 +105,7 @@ class Trainer:
         )
         
         with self.progress:
+            best_metrics = None
             num_epochs_without_improvement = 0
             
             for epoch in range(1, epochs + 1):
@@ -127,38 +116,39 @@ class Trainer:
                 metrics.update(train_metrics)
                     
                 # update best metrics
-                if val_dataloader and self.val_interval:
-                    if epoch % self.val_interval == 0:
-                        
-                        # validation loop
-                        if val_dataloader:
-                            val_metrics = self.loop(val_dataloader, stage='val', prefix=prefix)
-                            metrics.update(val_metrics)
+                if val_dataloader and self.val_interval and epoch % self.val_interval == 0:
 
-                        if self.performs_better(metrics, monitor_key=f'{prefix}{self.monitor}'):
-                            self.best_metrics = metrics
-                            num_epochs_without_improvement = 0
+                    # validation loop
+                    val_metrics = self.loop(val_dataloader, stage='val', prefix=prefix)
+                    metrics.update(val_metrics)
 
-                            if checkpoint:
-                                torch.save(self.model.state_dict(), self.checkpoint_path)
-                        else:
-                            num_epochs_without_improvement += 1
-                            if num_epochs_without_improvement >= self.patience > 0:
-                                break
-                else:
-                    self.best_metrics = metrics
+                    if best_metrics is None or self.is_better(metrics[monitor_key], best_metrics[monitor_key]):
+                        best_metrics = metrics
+                        num_epochs_without_improvement = 0
+
+                        if checkpoint:
+                            torch.save(self.model.state_dict(), checkpoint_path)
+                    else:
+                        num_epochs_without_improvement += 1
+                        if num_epochs_without_improvement >= self.patience > 0:
+                            break
 
                 # log and update progress
-                if self.logger: self.logger.log(metrics)
+                Logger.get_instance().log(metrics)
                 self.progress.update(task='epoch', metrics=metrics, advance=1)
-        
-        if self.logger: self.logger.log_summary(self.best_metrics)
-        return self.best_metrics
 
-    def test(self, dataloader: Iterable, load_best: bool = True, prefix: str = '') -> Metrics:
-        if load_best:
-            self.model = self.load_best_model()
+        if best_metrics is None:
+            best_metrics = metrics
+        else:
+            # load best model if checkpointing is enabled
+            if checkpoint:
+                self.model.load_state_dict(torch.load(checkpoint_path))
 
+        # log and return best metrics
+        Logger.get_instance().log_summary(best_metrics)
+        return best_metrics
+
+    def test(self, dataloader: Iterable, prefix: str = '') -> Metrics:
         metrics = self.loop(dataloader, stage='test', prefix=prefix)
         return metrics
 
