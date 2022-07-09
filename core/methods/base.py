@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Annotated, Iterable, Literal, Optional
+from typing import Annotated, Iterable, Optional
 from torch import Tensor
 from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
@@ -30,26 +30,19 @@ class NodeClassificationBase(MethodBase):
                  optimizer:       Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
                  learning_rate:   Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
                  weight_decay:    Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
-                 val_interval:    Annotated[int, dict(help='interval of validation')] = 1,
-                 use_amp:         bool = False,
-                 device:          Literal['cpu', 'cuda'] = 'cuda', 
+                 **kwargs:        Annotated[dict,  dict(help='extra options passed to the trainer class', bases=[Trainer])]
                  ):
 
         self.num_classes = num_classes
-        self.device = device
-        self.use_amp = use_amp
-        self.val_interval = val_interval
         self.optimizer_name = optimizer
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.epochs = epochs
 
         self.trainer = Trainer(
-            val_interval=val_interval,
-            use_amp=self.use_amp, 
             monitor='val/acc', 
             monitor_mode='max', 
-            device=self.device,
+            **kwargs
         )
         self.data = None  # data is kept for caching purposes
 
@@ -86,8 +79,6 @@ class NodeClassificationBase(MethodBase):
 
     def _train(self, data: Data, prefix: str = '') -> Metrics:
         console.info('training classifier')
-        self.classifier.to(self.device)
-
         metrics = self.trainer.fit(
             model=self.classifier,
             epochs=self.epochs,
@@ -98,7 +89,6 @@ class NodeClassificationBase(MethodBase):
             checkpoint=True,
             prefix=prefix,
         )
-
         return metrics
 
     def _configure_optimizer(self) -> Optimizer:

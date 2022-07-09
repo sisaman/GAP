@@ -115,8 +115,6 @@ class GAP (NodeClassificationBase):
 
     def _pretrain_encoder(self, data: Data, prefix: str) -> Data:
         console.info('pretraining encoder')
-        self._encoder.to(self.device)
-
         self.trainer.fit(
             model=self._encoder,
             epochs=self.encoder_epochs,

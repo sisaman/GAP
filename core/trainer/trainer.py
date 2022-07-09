@@ -4,7 +4,7 @@ import torch
 from torch.types import Number
 from torch.optim import Optimizer
 from torch.cuda.amp import GradScaler
-from typing import Iterable, Literal, Optional
+from typing import Annotated, Iterable, Literal, Optional
 from core.classifiers.base import ClassifierBase
 from core.loggers import Logger
 from torchmetrics import MeanMetric
@@ -15,11 +15,11 @@ from core.classifiers.base import Metrics, Stage
 class Trainer:
     def __init__(self,
                  patience:      int = 0,
-                 val_interval:  int = 1,
-                 use_amp:       bool = False,
                  monitor:       str = 'val/acc',
                  monitor_mode:  Literal['min', 'max'] = 'max',
-                 device:        Literal['cpu', 'cuda'] = 'cuda',
+                 val_interval:  Annotated[int,   dict(help='interval of validation')] = 1,
+                 device:        Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
+                 use_amp:       Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
                  ):
 
         assert monitor_mode in ['min', 'max']

@@ -26,9 +26,7 @@ supported_methods = {
     'mlp-dp':   PrivMLP
 }
 
-def run(device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
-        use_amp: Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
-        seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
+def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
         repeats: Annotated[int,   dict(help='number of times the experiment is repeated')] = 1,
         **kwargs
     ):
@@ -49,16 +47,12 @@ def run(device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cu
     ### initiallize method ###
     Method = supported_methods[kwargs['method']]
     method_args = strip_kwargs(Method, kwargs)
-    method: NodeClassificationBase = Method(
-        num_classes=num_classes, 
-        device=device,
-        use_amp=use_amp,
-        **method_args
-    )
+    method: NodeClassificationBase = Method(num_classes=num_classes, **method_args)
 
     ### run experiment ###
     for iteration in range(repeats):
         data = Data(**data_initial.to_dict())
+        device = kwargs['device']
         with console.status(f'moving data to {device}'):
             data.to(device)
 
