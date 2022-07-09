@@ -10,7 +10,7 @@ from core.methods.gap import GAP
 from core.privacy.mechanisms import ComposedNoisyMechanism
 from core.privacy.algorithms import PMA, NoisySGD
 from core.data.transforms import BoundOutDegree
-from core.classifiers.base import ClassifierBase, Metrics, Stage
+from core.classifiers.base import Metrics, Stage
 
 
 class NodePrivGAP (GAP):
@@ -75,8 +75,8 @@ class NodePrivGAP (GAP):
             self.noise_scale = composed_mechanism.calibrate(eps=self.epsilon, delta=delta)
             console.info(f'noise scale: {self.noise_scale:.4f}\n')
 
-        self.encoder = self.encoder_noisy_sgd.prepare_module(self.encoder)
-        self.classifier = self.classifier_noisy_sgd.prepare_module(self.classifier)
+        self._encoder = self.encoder_noisy_sgd.prepare_module(self._encoder)
+        self._classifier = self.classifier_noisy_sgd.prepare_module(self._classifier)
 
     def fit(self, data: Data, prefix: str = '') -> Metrics:
         num_train_nodes = len(self.data_loader(data, 'train').dataset)
@@ -87,12 +87,12 @@ class NodePrivGAP (GAP):
 
         return super().fit(data, prefix=prefix)
 
-    def precompute_aggregations(self, data: Data) -> Data:
+    def _compute_aggregations(self, data: Data) -> Data:
         with console.status('bounding the number of neighbors per node'):
                 data = BoundOutDegree(self.max_degree)(data)
-        return super().precompute_aggregations(data)
+        return super()._compute_aggregations(data)
 
-    def aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
+    def _aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
         x = matmul(adj_t, x)
         x = self.pma_mechanism(x, sensitivity=np.sqrt(self.max_degree))
         return x
@@ -103,10 +103,12 @@ class NodePrivGAP (GAP):
             dataloader = PoissonDataLoader(dataset=dataloader.dataset, batch_size=self.batch_size)
         return dataloader
 
-    def configure_optimizers(self, model: ClassifierBase) -> DPOptimizer:
-        optimizer = super().configure_optimizers(model)
-        if model == self.encoder:
-            optimizer = self.encoder_noisy_sgd.prepare_optimizer(optimizer)
-        elif model == self.classifier:
-            optimizer = self.classifier_noisy_sgd.prepare_optimizer(optimizer)
+    def _configure_optimizer(self) -> DPOptimizer:
+        optimizer = super()._configure_optimizer()
+        optimizer = self.classifier_noisy_sgd.prepare_optimizer(optimizer)
+        return optimizer
+
+    def _configure_encoder_optimizer(self) -> DPOptimizer:
+        optimizer = super()._configure_encoder_optimizer()
+        optimizer = self.encoder_noisy_sgd.prepare_optimizer(optimizer)
         return optimizer

@@ -50,7 +50,7 @@ class PrivMLP (MLP):
             self.noise_scale = self.noisy_sgd.calibrate(eps=self.epsilon, delta=delta)
             console.info(f'noise scale: {self.noise_scale:.4f}\n')
 
-        self.classifier = self.noisy_sgd.prepare_module(self.classifier)
+        self._classifier = self.noisy_sgd.prepare_module(self._classifier)
 
     def fit(self, data: Data, prefix: str = '') -> Metrics:
         num_train_nodes = data.train_mask.sum().item()
@@ -67,7 +67,7 @@ class PrivMLP (MLP):
             dataloader = self.noisy_sgd.prepare_dataloader(dataloader)
         return dataloader
 
-    def configure_optimizer(self) -> Optimizer:
-        optimizer = super().configure_optimizer()
+    def _configure_optimizer(self) -> Optimizer:
+        optimizer = super()._configure_optimizer()
         optimizer = self.noisy_sgd.prepare_optimizer(optimizer)
         return optimizer

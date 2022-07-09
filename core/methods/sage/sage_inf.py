@@ -1,16 +1,14 @@
 import torch
-from typing import Annotated, Literal, Optional, Union
-from torch.optim import Adam, SGD, Optimizer
+from typing import Annotated, Literal, Union
 from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
-from core.console import console
-from core.methods.base import MethodBase
+from core.methods.base import NodeClassificationBase
 from core.classifiers import GraphSAGEClassifier
-from core.classifiers.base import Metrics, Stage
+from core.classifiers.base import Stage
 
 
-class SAGE (MethodBase):
-    """non-private GraphSAGE method"""
+class SAGE (NodeClassificationBase):
+    """Non-private GraphSAGE method"""
     
     supported_activations = {
         'relu': torch.relu_,
@@ -27,14 +25,10 @@ class SAGE (MethodBase):
                  activation:      Annotated[str,   dict(help='type of activation function', choices=supported_activations)] = 'selu',
                  dropout:         Annotated[float, dict(help='dropout rate')] = 0.0,
                  batch_norm:      Annotated[bool,  dict(help='if true, then model uses batch normalization')] = True,
-                 optimizer:       Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
-                 learning_rate:   Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
-                 weight_decay:    Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
-                 epochs:          Annotated[int,   dict(help='number of epochs for training')] = 100,
                  batch_size:      Annotated[Union[Literal['full'], int],   
                                                    dict(help='batch size, or "full" for full-batch training')] = 'full',
                  full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
-                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[MethodBase])]
+                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[NodeClassificationBase])]
                  ):
 
         assert mp_layers >= 1, 'number of message-passing layers must be at least 1'
@@ -43,15 +37,11 @@ class SAGE (MethodBase):
         self.base_layers = base_layers
         self.mp_layers = mp_layers
         self.head_layers = head_layers
-        self.learning_rate = learning_rate
-        self.weight_decay = weight_decay
-        self.optimizer_name = optimizer
-        self.epochs = epochs
         self.batch_size = batch_size
         self.full_batch_eval = full_batch_eval
         activation_fn = self.supported_activations[activation]
 
-        self.classifier = GraphSAGEClassifier(
+        self._classifier = GraphSAGEClassifier(
             hidden_dim=hidden_dim, 
             num_classes=num_classes, 
             base_layers=base_layers,
@@ -63,47 +53,9 @@ class SAGE (MethodBase):
             batch_norm=batch_norm,
         )
 
-    def reset_parameters(self):
-        super().reset_parameters()
-        self.classifier.reset_parameters()
-        self.data = None
-
-    def fit(self, data: Data, prefix: str = '') -> Metrics:
-        self.data = data
-        metrics = self.train_classifier(self.data, prefix=prefix)
-        metrics.update(self.test(self.data, prefix=prefix))
-        return metrics
-
-    def test(self, data: Optional[Data] = None, prefix: str = '') -> Metrics:
-        if data is None:
-            data = self.data
-        test_metics = self.trainer.test(
-            dataloader=self.data_loader(data, 'test'),
-            prefix=prefix,
-        )
-        return test_metics
-
-    def predict(self, data: Optional[Data] = None) -> torch.Tensor:
-        if data is None:
-            data = self.data
-        return self.classifier.predict(data)
-
-    def train_classifier(self, data: Data, prefix: str = '') -> Metrics:
-        console.info('training classifier')
-        self.classifier.to(self.device)
-
-        metrics = self.trainer.fit(
-            model=self.classifier, 
-            epochs=self.epochs, 
-            optimizer=self.configure_optimizer(),
-            train_dataloader=self.data_loader(data, 'train'), 
-            val_dataloader=self.data_loader(data, 'val'),
-            test_dataloader=None,
-            checkpoint=True,
-            prefix=prefix,
-        )
-
-        return metrics
+    @property
+    def classifier(self) -> GraphSAGEClassifier:
+        return self._classifier
 
     def data_loader(self, data: Data, stage: Stage) -> NeighborLoader:
         if self.batch_size == 'full' or (stage != 'train' and self.full_batch_eval):
@@ -118,7 +70,3 @@ class SAGE (MethodBase):
                 shuffle=True,
                 num_workers=6,
             )
-
-    def configure_optimizer(self) -> Optimizer:
-        Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
-        return Optim(self.classifier.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)

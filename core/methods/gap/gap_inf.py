@@ -6,13 +6,13 @@ from torch.utils.data import TensorDataset, DataLoader
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
 from core.console import console
-from core.methods.base import MethodBase
+from core.methods.base import NodeClassificationBase
 from core.classifiers import Encoder, MultiMLPClassifier
-from core.classifiers.base import ClassifierBase, Metrics, Stage
+from core.classifiers.base import Metrics, Stage
 
 
-class GAP (MethodBase):
-    """non-private GAP method"""
+class GAP (NodeClassificationBase):
+    """Non-private GAP method"""
 
     supported_activations = {
         'relu': torch.relu_,
@@ -31,15 +31,11 @@ class GAP (MethodBase):
                  activation:      Annotated[str,   dict(help='type of activation function', choices=supported_activations)] = 'selu',
                  dropout:         Annotated[float, dict(help='dropout rate')] = 0.0,
                  batch_norm:      Annotated[bool,  dict(help='if true, then model uses batch normalization')] = True,
-                 optimizer:       Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
-                 learning_rate:   Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
-                 weight_decay:    Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
-                 encoder_epochs:  Annotated[int,   dict(help='number of epochs for encoder pre-training (ignored if encoder_layers=0)')] = 100,
-                 epochs:          Annotated[int,   dict(help='number of epochs for classifier training')] = 100,
                  batch_size:      Annotated[Union[Literal['full'], int],   
                                                    dict(help='batch size, or "full" for full-batch training')] = 'full',
                  full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
-                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[MethodBase])]
+                 encoder_epochs:  Annotated[int,   dict(help='number of epochs for encoder pre-training (ignored if encoder_layers=0)')] = 100,
+                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[NodeClassificationBase])]
                  ):
 
         super().__init__(num_classes, **kwargs)
@@ -50,16 +46,12 @@ class GAP (MethodBase):
 
         self.hops = hops
         self.encoder_layers = encoder_layers
-        self.learning_rate = learning_rate
-        self.weight_decay = weight_decay
-        self.optimizer_name = optimizer
         self.encoder_epochs = encoder_epochs
-        self.epochs = epochs
         self.batch_size = batch_size
         self.full_batch_eval = full_batch_eval
         activation_fn = self.supported_activations[activation]
 
-        self.encoder = Encoder(
+        self._encoder = Encoder(
             num_classes=num_classes,
             hidden_dim=hidden_dim,
             encoder_layers=encoder_layers,
@@ -70,7 +62,7 @@ class GAP (MethodBase):
             batch_norm=batch_norm,
         )
 
-        self.classifier = MultiMLPClassifier(
+        self._classifier = MultiMLPClassifier(
             num_inputs=hops+1,
             num_classes=num_classes,
             hidden_dim=hidden_dim,
@@ -82,99 +74,76 @@ class GAP (MethodBase):
             batch_norm=batch_norm,
         )
 
+    @property
+    def classifier(self) -> MultiMLPClassifier:
+        return self._classifier
+
     def reset_parameters(self):
         super().reset_parameters()
-        self.encoder.reset_parameters()
-        self.classifier.reset_parameters()
-        self.data = None
+        self._encoder.reset_parameters()
 
     def fit(self, data: Data, prefix: str = '') -> Metrics:
         self.data = data
-        self.data = self.pretrain_encoder(self.data, prefix=prefix)
-        self.data = self.precompute_aggregations(self.data)
-        metrics = self.train_classifier(self.data, prefix=prefix)
-        metrics.update(self.test(self.data))
-        return metrics
+        if self.encoder_layers > 0:
+            self.data = self._pretrain_encoder(self.data, prefix=prefix)
+        self.data = self._compute_aggregations(self.data)
+        return super().fit(self.data, prefix=prefix)
 
     def test(self, data: Optional[Data] = None, prefix: str = '') -> Metrics:
         if data is None or data == self.data:
             data = self.data
         else:
-            data.x = self.encoder.predict(data)
-            data = self.precompute_aggregations(data)
+            data.x = self._encoder.predict(data)
+            data = self._compute_aggregations(data)
 
-        test_metics = self.trainer.test(
-            dataloader=self.data_loader(data, 'test'),
-            prefix=prefix,
-        )
-
-        return test_metics
+        return super().test(data, prefix=prefix)
 
     def predict(self, data: Optional[Data] = None) -> torch.Tensor:
         if data is None or data == self.data:
             data = self.data
         else:
-            data.x = self.encoder.predict(data)
-            data = self.precompute_aggregations(data)
+            data.x = self._encoder.predict(data)
+            data = self._compute_aggregations(data)
 
-        return self.classifier.predict(data)
+        return super().predict(data)
 
-    def aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
+    def _aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
         return matmul(adj_t, x)
 
-    def normalize(self, x: torch.Tensor) -> torch.Tensor:
+    def _normalize(self, x: torch.Tensor) -> torch.Tensor:
         return F.normalize(x, p=2, dim=-1)
 
-    def pretrain_encoder(self, data: Data, prefix: str) -> Data:
-        if self.encoder_layers > 0:
-            console.info('pretraining encoder module')
-            self.encoder.to(self.device)
+    def _pretrain_encoder(self, data: Data, prefix: str) -> Data:
+        console.info('pretraining encoder')
+        self._encoder.to(self.device)
 
-            self.trainer.fit(
-                model=self.encoder,
-                epochs=self.encoder_epochs,
-                optimizer=self.configure_optimizers(self.encoder), 
-                train_dataloader=self.data_loader(data, 'train'), 
-                val_dataloader=self.data_loader(data, 'val'),
-                test_dataloader=None,
-                checkpoint=True,
-                prefix=f'{prefix}encoder/',
-            )
+        self.trainer.fit(
+            model=self._encoder,
+            epochs=self.encoder_epochs,
+            optimizer=self._configure_encoder_optimizer(), 
+            train_dataloader=self.data_loader(data, 'train'), 
+            val_dataloader=self.data_loader(data, 'val'),
+            test_dataloader=None,
+            checkpoint=True,
+            prefix=f'{prefix}encoder/',
+        )
 
-            self.trainer.reset()
-            data.x = self.encoder.predict(data)
-
+        self.trainer.reset()
+        data.x = self._encoder.predict(data)
         return data
 
-    def precompute_aggregations(self, data: Data) -> Data:
+    def _compute_aggregations(self, data: Data) -> Data:
         with console.status('computing aggregations'):
             x = F.normalize(data.x, p=2, dim=-1)
             x_list = [x]
 
             for _ in range(self.hops):
-                x = self.aggregate(x, data.adj_t)
-                x = self.normalize(x)
+                x = self._aggregate(x, data.adj_t)
+                x = self._normalize(x)
                 x_list.append(x)
 
             data.x = torch.stack(x_list, dim=-1)
         return data
-        
-    def train_classifier(self, data: Data, prefix: str) -> Metrics:
-        console.info('training classification module')
-        self.classifier.to(self.device)
-
-        metrics = self.trainer.fit(
-            model=self.classifier, 
-            epochs=self.epochs,
-            optimizer=self.configure_optimizers(self.classifier),
-            train_dataloader=self.data_loader(data, 'train'), 
-            val_dataloader=self.data_loader(data, 'val'),
-            test_dataloader=None,
-            checkpoint=True,
-            prefix=prefix,
-        )
-        
-        return metrics
 
     def data_loader(self, data, stage: Stage) -> DataLoader:
         mask = data[f'{stage}_mask']
@@ -189,6 +158,6 @@ class GAP (MethodBase):
                 shuffle=True
             )
 
-    def configure_optimizers(self, model: ClassifierBase) -> Optimizer:
+    def _configure_encoder_optimizer(self) -> Optimizer:
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
-        return Optim(model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
+        return Optim(self._encoder.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)

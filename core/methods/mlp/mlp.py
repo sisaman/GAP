@@ -1,15 +1,14 @@
 import torch
-from typing import Annotated, Literal, Optional, Union
-from torch.optim import Adam, SGD, Optimizer
+from typing import Annotated, Literal, Union
 from torch.utils.data import TensorDataset, DataLoader
 from torch_geometric.data import Data
-from core.methods.base import MethodBase
+from core.methods.base import NodeClassificationBase
 from core.classifiers import MLPClassifier
-from core.classifiers.base import Metrics, Stage
+from core.classifiers.base import Stage
 
 
-class MLP (MethodBase):
-    """non-private MLP method"""
+class MLP (NodeClassificationBase):
+    """Non-private MLP method"""
 
     supported_activations = {
         'relu': torch.relu_,
@@ -24,29 +23,21 @@ class MLP (MethodBase):
                  activation:      Annotated[str,   dict(help='type of activation function', choices=supported_activations)] = 'selu',
                  dropout:         Annotated[float, dict(help='dropout rate')] = 0.0,
                  batch_norm:      Annotated[bool,  dict(help='if true, then model uses batch normalization')] = True,
-                 optimizer:       Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
-                 learning_rate:   Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
-                 weight_decay:    Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
-                 epochs:          Annotated[int,   dict(help='number of epochs for training')] = 100,
                  batch_size:      Annotated[Union[Literal['full'], int],   
                                                    dict(help='batch size, or "full" for full-batch training')] = 'full',
                  full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
-                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[MethodBase])]
+                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[NodeClassificationBase])]
                  ):
 
         assert num_layers > 1, 'number of layers must be greater than 1'
         super().__init__(num_classes, **kwargs)
 
         self.num_layers = num_layers
-        self.learning_rate = learning_rate
-        self.weight_decay = weight_decay
-        self.optimizer_name = optimizer
-        self.epochs = epochs
         self.batch_size = batch_size
         self.full_batch_eval = full_batch_eval
         activation_fn = self.supported_activations[activation]
 
-        self.classifier = MLPClassifier(
+        self._classifier = MLPClassifier(
             num_classes=num_classes,
             hidden_dim=hidden_dim,
             num_layers=num_layers,
@@ -55,47 +46,9 @@ class MLP (MethodBase):
             batch_norm=batch_norm,
         )
 
-    def reset_parameters(self):
-        super().reset_parameters()
-        self.classifier.reset_parameters()
-
-    def fit(self, data: Data, prefix: str = '') -> Metrics:
-        self.data = data
-        metrics = self.train_classifier(self.data, prefix=prefix)
-        metrics.update(self.test(self.data, prefix=prefix))
-        return metrics
-
-    def test(self, data: Optional[Data] = None, prefix: str = '') -> Metrics:
-        if data is None:
-            data = self.data
-        
-        test_metics = self.trainer.test(
-            dataloader=self.data_loader(data, 'test'),
-            prefix=prefix,
-        )
-        return test_metics
-
-    def predict(self, data: Optional[Data] = None) -> torch.Tensor:
-        if data is None:
-            data = self.data
-        return self.classifier.predict(data)
-
-    def train_classifier(self, data: Data, prefix: str) -> Metrics:
-        self.classifier.to(self.device)
-        self.trainer.reset()
-
-        metrics = self.trainer.fit(
-            model=self.classifier,
-            epochs=self.epochs,
-            optimizer=self.configure_optimizer(), 
-            train_dataloader=self.data_loader(data, 'train'), 
-            val_dataloader=self.data_loader(data, 'val'),
-            test_dataloader=None,
-            checkpoint=True,
-            prefix=prefix,
-        )
-
-        return metrics
+    @property
+    def classifier(self) -> MLPClassifier:
+        return self._classifier
 
     def data_loader(self, data: Data, stage: Stage) -> DataLoader:
         mask = data[f'{stage}_mask']
@@ -109,7 +62,3 @@ class MLP (MethodBase):
                 batch_size=self.batch_size, 
                 shuffle=True
             )
-
-    def configure_optimizer(self) -> Optimizer:
-        Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
-        return Optim(self.classifier.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)

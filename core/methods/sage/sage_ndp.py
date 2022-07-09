@@ -70,7 +70,7 @@ class NodePrivSAGE (SAGE):
             self.noise_scale = composed_mechanism.calibrate(eps=self.epsilon, delta=delta)
             console.info(f'noise scale: {self.noise_scale:.4f}\n')
 
-        self.classifier = self.noisy_sgd.prepare_module(self.classifier)
+        self._classifier = self.noisy_sgd.prepare_module(self._classifier)
 
     def sample_neighbors(self, data: Data) -> Data:
         with console.status('bounding the number of neighbors per node'):
@@ -103,7 +103,7 @@ class NodePrivSAGE (SAGE):
             dataloader = self.noisy_sgd.prepare_dataloader(dataloader)
         return dataloader
 
-    def configure_optimizer(self) -> Optimizer:
-        optimizer = super().configure_optimizer()
+    def _configure_optimizer(self) -> Optimizer:
+        optimizer = super()._configure_optimizer()
         optimizer = self.noisy_sgd.prepare_optimizer(optimizer)
         return optimizer

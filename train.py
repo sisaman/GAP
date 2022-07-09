@@ -8,7 +8,7 @@ with console.status('importing modules'):
     from core.datasets import DatasetLoader
     from core.args.utils import print_args, create_arguments, strip_kwargs
     from core.loggers import Logger
-    from core.methods.base import MethodBase
+    from core.methods.base import NodeClassificationBase
     from core.methods.gap import GAP, EdgePrivGAP, NodePrivGAP
     from core.methods.sage import SAGE, EdgePrivSAGE, NodePrivSAGE
     from core.methods.mlp import MLP, PrivMLP
@@ -49,7 +49,7 @@ def run(device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cu
     ### initiallize method ###
     Method = supported_methods[kwargs['method']]
     method_args = strip_kwargs(Method, kwargs)
-    method: MethodBase = Method(
+    method: NodeClassificationBase = Method(
         num_classes=num_classes, 
         device=device,
         use_amp=use_amp,

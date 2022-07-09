@@ -44,7 +44,7 @@ class EdgePrivGAP (GAP):
 
         return super().fit(data, prefix=prefix)
 
-    def aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
+    def _aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
         x = matmul(adj_t, x)
         x = self.pma_mechanism(x, sensitivity=1)
         return x
