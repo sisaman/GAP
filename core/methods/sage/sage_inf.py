@@ -79,7 +79,6 @@ class SAGE (MethodBase):
             data = self.data
         test_metics = self.trainer.test(
             dataloader=self.data_loader(data, 'test'),
-            load_best=True,
             prefix=prefix,
         )
         return test_metics

@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.nn import BatchNorm1d
 from core.classifiers import MLPClassifier
 from core.models import MLP
+from torch_geometric.data import Data
 
 
 class Encoder(MLPClassifier):
@@ -51,8 +52,9 @@ class Encoder(MLPClassifier):
         return x
 
     @torch.no_grad()
-    def predict(self, x: Tensor) -> Tensor:
+    def predict(self, data: Data) -> Tensor:
         self.eval()
+        x = data.x
         x = self.encoder_mlp(x)
         if self.normalize:
             x = F.normalize(x, p=2, dim=-1)

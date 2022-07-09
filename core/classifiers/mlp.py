@@ -4,6 +4,7 @@ from torch import Tensor
 import torch.nn.functional as F
 from core.classifiers.base import ClassifierBase, Metrics, Stage
 from core.models import MLP
+from torch_geometric.data import Data
 
 
 class MLPClassifier(MLP, ClassifierBase):
@@ -39,7 +40,7 @@ class MLPClassifier(MLP, ClassifierBase):
         return loss, metrics
 
     @torch.no_grad()
-    def predict(self, x: Tensor) -> Tensor:
+    def predict(self, data: Data) -> Tensor:
         self.eval()
-        h = self(x)
+        h = self(data.x)
         return torch.softmax(h, dim=-1)

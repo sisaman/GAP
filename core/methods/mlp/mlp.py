@@ -71,7 +71,6 @@ class MLP (MethodBase):
         
         test_metics = self.trainer.test(
             dataloader=self.data_loader(data, 'test'),
-            load_best=True,
             prefix=prefix,
         )
         return test_metics
@@ -79,7 +78,7 @@ class MLP (MethodBase):
     def predict(self, data: Optional[Data] = None) -> torch.Tensor:
         if data is None:
             data = self.data
-        return self.classifier.predict(data.x)
+        return self.classifier.predict(data)
 
     def train_classifier(self, data: Data, prefix: str) -> Metrics:
         self.classifier.to(self.device)

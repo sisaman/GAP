@@ -100,12 +100,11 @@ class GAP (MethodBase):
         if data is None or data == self.data:
             data = self.data
         else:
-            data.x = self.encoder.predict(data.x)
+            data.x = self.encoder.predict(data)
             data = self.precompute_aggregations(data)
 
         test_metics = self.trainer.test(
             dataloader=self.data_loader(data, 'test'),
-            load_best=True,
             prefix=prefix,
         )
 
@@ -115,10 +114,10 @@ class GAP (MethodBase):
         if data is None or data == self.data:
             data = self.data
         else:
-            data.x = self.encoder.predict(data.x)
+            data.x = self.encoder.predict(data)
             data = self.precompute_aggregations(data)
 
-        return self.classifier.predict(data.x)
+        return self.classifier.predict(data)
 
     def aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
         return matmul(adj_t, x)
@@ -131,7 +130,6 @@ class GAP (MethodBase):
             console.info('pretraining encoder module')
             self.encoder.to(self.device)
 
-            self.trainer.reset()
             self.trainer.fit(
                 model=self.encoder,
                 epochs=self.encoder_epochs,
@@ -143,8 +141,8 @@ class GAP (MethodBase):
                 prefix=f'{prefix}encoder/',
             )
 
-            self.encoder = self.trainer.load_best_model()
-            data.x = self.encoder.predict(data.x)
+            self.trainer.reset()
+            data.x = self.encoder.predict(data)
 
         return data
 
@@ -165,7 +163,6 @@ class GAP (MethodBase):
         console.info('training classification module')
         self.classifier.to(self.device)
 
-        self.trainer.reset()
         metrics = self.trainer.fit(
             model=self.classifier, 
             epochs=self.epochs,
