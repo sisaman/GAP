@@ -16,13 +16,14 @@ class NodeMembershipInference (AttackBase):
         super().__init__(**kwargs)
         
     def generate_attack_samples(self, data: Data, logits: Tensor) -> tuple[Tensor, Tensor]:
+        num_classes = logits.size(-1)
         num_train = data.train_mask.sum()
         num_test = data.test_mask.sum()
         num_half = min(num_train, num_test)
 
-        num_classes = logits.size(-1)
         labels = F.one_hot(data.y, num_classes).float()
-        # logits = torch.cat([logits, labels], dim=1)
+        logits = logits.sort(dim=1, descending=True).values
+        logits = torch.cat([logits, labels], dim=1)
 
         perm = torch.randperm(num_train, device=self.device)[:num_half]
         pos_samples = logits[data.train_mask][perm]
@@ -40,8 +41,5 @@ class NodeMembershipInference (AttackBase):
             torch.zeros(num_half, dtype=torch.long, device=self.device),
             torch.ones(num_half, dtype=torch.long, device=self.device),
         ])
-
-        if self.sort_scores:
-            x = x.sort(dim=1, descending=True).values
 
         return x, y
