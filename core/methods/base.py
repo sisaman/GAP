@@ -59,8 +59,8 @@ class NodeClassificationBase(MethodBase):
         """Return the underlying classifier."""
 
     def reset_parameters(self):
-        self.trainer.reset()
         self.classifier.reset_parameters()
+        self.trainer.reset()
         self.data = None
 
     def fit(self, data: Data, prefix: str = '') -> Metrics:

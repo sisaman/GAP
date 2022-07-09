@@ -79,8 +79,8 @@ class GAP (NodeClassificationBase):
         return self._classifier
 
     def reset_parameters(self):
-        super().reset_parameters()
         self._encoder.reset_parameters()
+        super().reset_parameters()
 
     def fit(self, data: Data, prefix: str = '') -> Metrics:
         self.data = data
