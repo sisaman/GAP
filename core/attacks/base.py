@@ -16,6 +16,7 @@ class AttackBase(MLP, ABC):
                  method: MethodBase,
                  num_train_nodes: Annotated[int,  dict(help='number of training nodes in both target and shadow datasets')] = 10000,
                  num_val_nodes:   Annotated[int,  dict(help='number of validation nodes in both target and shadow datasets')] = 100,
+                 sort_scores:     Annotated[bool, dict(help='whether to sort scores')] = False,
                  **kwargs:        Annotated[dict, dict(help='extra options passed to base class', bases=[MLP], prefixes=['attack_'])]
                 ):
 
@@ -27,6 +28,7 @@ class AttackBase(MLP, ABC):
         self.method = method
         self.num_train_nodes = num_train_nodes
         self.num_val_nodes = num_val_nodes
+        self.sort_scores = sort_scores
 
     def reset_parameters(self):
         super().reset_parameters()
