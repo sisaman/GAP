@@ -24,7 +24,7 @@ class NodePrivSAGE (SAGE):
                  max_degree:    Annotated[int,   dict(help='max degree to sample per each node')] = 100,
                  max_grad_norm: Annotated[float, dict(help='maximum norm of the per-sample gradients')] = 1.0,
                  batch_size:    Annotated[int,   dict(help='batch size')] = 256,
-                 **kwargs:      Annotated[dict,  dict(help='extra options passed to base class', bases=[SAGE], exclude=['batch_norm', 'mp_layers'])]
+                 **kwargs:      Annotated[dict,  dict(help='extra options passed to base class', bases=[SAGE], exclude=['batch_norm', 'mp_layers', 'val_interval'])]
                  ):
 
         super().__init__(num_classes, mp_layers=1, batch_size=batch_size, batch_norm=False, **kwargs)
