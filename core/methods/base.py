@@ -26,13 +26,13 @@ class MethodBase(ABC):
 
 class NodeClassificationBase(MethodBase):
     def __init__(self, 
-                 num_classes:   int, 
-                 epochs:        Annotated[int,   dict(help='number of epochs for training')] = 100,
-                 optimizer:     Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
-                 learning_rate: Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
-                 weight_decay:  Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
-                 device:        Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
-                 **kwargs:      Annotated[dict,  dict(help='extra options passed to the trainer class', bases=[Trainer])]
+                 num_classes:    int, 
+                 epochs:         Annotated[int,   dict(help='number of epochs for training')] = 100,
+                 optimizer:      Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
+                 learning_rate:  Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
+                 weight_decay:   Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
+                 device:         Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
+                 **trainer_args: Annotated[dict,  dict(help='extra options passed to the trainer class', bases=[Trainer])]
                  ):
 
         self.num_classes = num_classes
@@ -46,12 +46,8 @@ class NodeClassificationBase(MethodBase):
             console.warning('CUDA is not available, proceeding with CPU') 
             self.device = 'cpu'
 
-        self.trainer = Trainer(
-            monitor='val/acc', 
-            monitor_mode='max', 
-            **kwargs
-        )
         self.data = None  # data is kept for caching purposes
+        self.trainer = self.configure_trainer(**trainer_args)
 
     @property
     @abstractmethod
@@ -105,6 +101,14 @@ class NodeClassificationBase(MethodBase):
         )
 
         return metrics
+
+    def configure_trainer(self, **kwargs) -> Trainer:
+        trainer = Trainer(
+            monitor='val/acc', 
+            monitor_mode='max', 
+            **kwargs
+        )
+        return trainer
 
     def configure_optimizer(self) -> Optimizer:
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
