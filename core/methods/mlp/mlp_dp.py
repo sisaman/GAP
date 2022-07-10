@@ -67,7 +67,7 @@ class PrivMLP (MLP):
             dataloader = self.noisy_sgd.prepare_dataloader(dataloader)
         return dataloader
 
-    def _configure_optimizer(self) -> Optimizer:
-        optimizer = super()._configure_optimizer()
+    def configure_optimizer(self) -> Optimizer:
+        optimizer = super().configure_optimizer()
         optimizer = self.noisy_sgd.prepare_optimizer(optimizer)
         return optimizer

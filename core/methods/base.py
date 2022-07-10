@@ -96,7 +96,7 @@ class NodeClassificationBase(MethodBase):
         metrics = self.trainer.fit(
             model=self.classifier,
             epochs=self.epochs,
-            optimizer=self._configure_optimizer(),
+            optimizer=self.configure_optimizer(),
             train_dataloader=self.data_loader(data, 'train'), 
             val_dataloader=self.data_loader(data, 'val'),
             test_dataloader=None,
@@ -106,7 +106,7 @@ class NodeClassificationBase(MethodBase):
 
         return metrics
 
-    def _configure_optimizer(self) -> Optimizer:
+    def configure_optimizer(self) -> Optimizer:
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
         return Optim(self.classifier.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
 

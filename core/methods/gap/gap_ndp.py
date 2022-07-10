@@ -87,10 +87,10 @@ class NodePrivGAP (GAP):
 
         return super().fit(data, prefix=prefix)
 
-    def _compute_aggregations(self, data: Data) -> Data:
+    def compute_aggregations(self, data: Data) -> Data:
         with console.status('bounding the number of neighbors per node'):
             data = BoundOutDegree(self.max_degree)(data)
-        return super()._compute_aggregations(data)
+        return super().compute_aggregations(data)
 
     def _aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:
         x = matmul(adj_t, x)
@@ -103,12 +103,12 @@ class NodePrivGAP (GAP):
             dataloader = PoissonDataLoader(dataset=dataloader.dataset, batch_size=self.batch_size)
         return dataloader
 
-    def _configure_optimizer(self) -> DPOptimizer:
-        optimizer = super()._configure_optimizer()
+    def configure_optimizer(self) -> DPOptimizer:
+        optimizer = super().configure_optimizer()
         optimizer = self.classifier_noisy_sgd.prepare_optimizer(optimizer)
         return optimizer
 
-    def _configure_encoder_optimizer(self) -> DPOptimizer:
-        optimizer = super()._configure_encoder_optimizer()
+    def configure_encoder_optimizer(self) -> DPOptimizer:
+        optimizer = super().configure_encoder_optimizer()
         optimizer = self.encoder_noisy_sgd.prepare_optimizer(optimizer)
         return optimizer

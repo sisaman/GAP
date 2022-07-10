@@ -87,10 +87,10 @@ class GAP (NodeClassificationBase):
         
         # pre-train encoder
         if self.encoder_layers > 0:
-            self.data = self._pretrain_encoder(self.data, prefix=prefix)
+            self.data = self.pretrain_encoder(self.data, prefix=prefix)
 
         # compute aggregations
-        self.data = self._compute_aggregations(self.data)
+        self.data = self.compute_aggregations(self.data)
 
         # train classifier
         return super().fit(self.data, prefix=prefix)
@@ -101,7 +101,7 @@ class GAP (NodeClassificationBase):
         else:
             data = data.to(self.device, non_blocking=True)
             data.x = self._encoder.predict(data)
-            data = self._compute_aggregations(data)
+            data = self.compute_aggregations(data)
 
         return super().test(data, prefix=prefix)
 
@@ -110,7 +110,7 @@ class GAP (NodeClassificationBase):
             data = self.data
         else:
             data.x = self._encoder.predict(data)
-            data = self._compute_aggregations(data)
+            data = self.compute_aggregations(data)
 
         return super().predict(data)
 
@@ -120,14 +120,14 @@ class GAP (NodeClassificationBase):
     def _normalize(self, x: torch.Tensor) -> torch.Tensor:
         return F.normalize(x, p=2, dim=-1)
 
-    def _pretrain_encoder(self, data: Data, prefix: str) -> Data:
+    def pretrain_encoder(self, data: Data, prefix: str) -> Data:
         console.info('pretraining encoder')
         self._encoder.to(self.device)
         
         self.trainer.fit(
             model=self._encoder,
             epochs=self.encoder_epochs,
-            optimizer=self._configure_encoder_optimizer(), 
+            optimizer=self.configure_encoder_optimizer(), 
             train_dataloader=self.data_loader(data, 'train'), 
             val_dataloader=self.data_loader(data, 'val'),
             test_dataloader=None,
@@ -139,7 +139,7 @@ class GAP (NodeClassificationBase):
         data.x = self._encoder.predict(data)
         return data
 
-    def _compute_aggregations(self, data: Data) -> Data:
+    def compute_aggregations(self, data: Data) -> Data:
         with console.status('computing aggregations'):
             x = F.normalize(data.x, p=2, dim=-1)
             x_list = [x]
@@ -165,6 +165,6 @@ class GAP (NodeClassificationBase):
                 shuffle=True
             )
 
-    def _configure_encoder_optimizer(self) -> Optimizer:
+    def configure_encoder_optimizer(self) -> Optimizer:
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
         return Optim(self._encoder.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
