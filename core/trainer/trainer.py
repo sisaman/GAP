@@ -115,10 +115,9 @@ class Trainer:
                 train_metrics = self.loop(train_dataloader, stage='train', prefix=prefix)
                 metrics.update(train_metrics)
                     
-                # update best metrics
+                # validation loop
                 if val_dataloader and self.val_interval and epoch % self.val_interval == 0:
 
-                    # validation loop
                     val_metrics = self.loop(val_dataloader, stage='val', prefix=prefix)
                     metrics.update(val_metrics)
 
@@ -132,6 +131,11 @@ class Trainer:
                         num_epochs_without_improvement += 1
                         if num_epochs_without_improvement >= self.patience > 0:
                             break
+
+                # test loop
+                if test_dataloader:
+                    test_metrics = self.loop(test_dataloader, stage='test', prefix=prefix)
+                    metrics.update(test_metrics)
 
                 # log and update progress
                 Logger.get_instance().log(metrics)
