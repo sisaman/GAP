@@ -10,26 +10,24 @@ from core.console import console
 class NodeMembershipInference (AttackBase):
     """node membership inference attack"""
 
-    def __init__(self, 
-                 **kwargs: Annotated[dict,  dict(help='extra options passed to base class', bases=[AttackBase])]
-                 ):
+    def __init__(self, **kwargs: Annotated[dict,  dict(help='extra options passed to base class', bases=[AttackBase])]):
         super().__init__(**kwargs)
         
-    def generate_attack_samples(self, data: Data, logits: Tensor) -> tuple[Tensor, Tensor]:
-        num_classes = logits.size(-1)
+    def generate_attack_samples(self, data: Data, scores: Tensor) -> tuple[Tensor, Tensor]:
+        num_classes = scores.size(-1)
         num_train = data.train_mask.sum()
         num_test = data.test_mask.sum()
         num_half = min(num_train, num_test)
 
         labels = F.one_hot(data.y, num_classes).float()
-        logits = logits.sort(dim=1, descending=True).values
-        logits = torch.cat([logits, labels], dim=1)
+        scores = scores.sort(dim=1, descending=True).values
+        samples = torch.cat([scores, labels], dim=1)
 
         perm = torch.randperm(num_train, device=self.device)[:num_half]
-        pos_samples = logits[data.train_mask][perm]
+        pos_samples = samples[data.train_mask][perm]
 
         perm = torch.randperm(num_test, device=self.device)[:num_half]
-        neg_samples = logits[data.test_mask][perm]
+        neg_samples = samples[data.test_mask][perm]
 
         pos_entropy = torch.distributions.Categorical(probs=pos_samples).entropy().mean()
         neg_entropy = torch.distributions.Categorical(probs=neg_samples).entropy().mean()
@@ -41,5 +39,9 @@ class NodeMembershipInference (AttackBase):
             torch.zeros(num_half, dtype=torch.long, device=self.device),
             torch.ones(num_half, dtype=torch.long, device=self.device),
         ])
+
+        # shuffle data
+        perm = torch.randperm(2 * num_half, device=self.device)
+        x, y = x[perm], y[perm]
 
         return x, y

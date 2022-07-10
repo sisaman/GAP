@@ -7,17 +7,16 @@ from torch_geometric.transforms import RandomNodeSplit
 from core.args.utils import remove_prefix
 from core.console import console
 from core.classifiers.base import Metrics
-from core.methods.base import MethodBase
+from core.methods.base import NodeClassificationBase
 from core.methods.mlp import MLP
 
 
 class AttackBase(MLP, ABC):
     def __init__(self, 
-                 method: MethodBase,
+                 method:          NodeClassificationBase,
                  num_train_nodes: Annotated[int,  dict(help='number of training nodes in both target and shadow datasets')] = 10000,
                  num_val_nodes:   Annotated[int,  dict(help='number of validation nodes in both target and shadow datasets')] = 100,
-                 sort_scores:     Annotated[bool, dict(help='whether to sort scores')] = False,
-                 **kwargs:        Annotated[dict, dict(help='extra options passed to base class', bases=[MLP], prefixes=['attack_'])]
+                 **kwargs:        Annotated[dict, dict(help='attack method kwargs', bases=[MLP], prefixes=['attack_'], exclude=['device', 'use_amp'])],
                 ):
 
         super().__init__(
@@ -28,7 +27,6 @@ class AttackBase(MLP, ABC):
         self.method = method
         self.num_train_nodes = num_train_nodes
         self.num_val_nodes = num_val_nodes
-        self.sort_scores = sort_scores
 
     def reset_parameters(self):
         super().reset_parameters()
@@ -36,30 +34,34 @@ class AttackBase(MLP, ABC):
 
     def execute(self, data: Data) -> Metrics:
         # split data into target and shadow dataset
-        data_target, data_shadow = self.target_shadow_split(data)
-        metrics = {}
-        # train target model and obtain logits
-        console.info('step 1: training target model')
-        target_metrics = self.method.fit(data_target, prefix='target/')
-        logits_target = self.method.predict()
-        data_target, logits_target = data_target.to('cpu'), logits_target.to('cpu')
+        target_data, shadow_data = self.target_shadow_split(data)
 
-        # train shadow model and obtain logits
+        # train target model and obtain confidence scores
+        console.info('step 1: training target model')
+        target_metrics = self.method.fit(target_data, prefix='target/')
+        target_scores = self.method.predict()
+        target_data, target_scores = target_data.to('cpu'), target_scores.to('cpu')
+
+        # train shadow model and obtain confidence scores
         console.info('step 2: training shadow model')
         self.method.reset_parameters()
-        shadow_metrics = self.method.fit(data_shadow, prefix='shadow/')
-        logits_shadow = self.method.predict()
-        data_shadow, logits_shadow = data_shadow.to('cpu'), logits_shadow.to('cpu')
+        shadow_metrics = self.method.fit(shadow_data, prefix='shadow/')
+        shadow_scores = self.method.predict()
+        shadow_data, shadow_scores = shadow_data.to('cpu'), shadow_scores.to('cpu')
 
         # construct attack dataset
         with console.status('constructing attack dataset'):
-            data_attack = self.prepare_attack_dataset(data_target, logits_target, data_shadow, logits_shadow)
-            data_attack = data_attack.to(self.device)
-            console.debug(f'attack dataset: {data_attack.train_mask.sum()} train nodes, {data_attack.val_mask.sum()} val nodes, {data_attack.test_mask.sum()} test nodes')
+            attack_data = self.prepare_attack_dataset(
+                target_data=target_data, 
+                target_scores=target_scores, 
+                shadow_data=shadow_data, 
+                shadow_scores=shadow_scores,
+            )
+            console.debug(f'attack dataset: {attack_data.train_mask.sum()} train nodes, {attack_data.val_mask.sum()} val nodes, {attack_data.test_mask.sum()} test nodes')
 
         # train attack model and get attack accuracy
         console.info('step 3: training attack model')
-        attack_metrics = self.fit(data_attack, prefix='attack/')
+        attack_metrics = self.fit(attack_data, prefix='attack/')
 
         # aggregate metrics
         metrics = {
@@ -72,38 +74,34 @@ class AttackBase(MLP, ABC):
         return metrics
 
     def target_shadow_split(self, data: Data) -> tuple[Data, Data]:
-        data_target = Data(**data.to_dict())
-        data_shadow = Data(**data.to_dict())
+        target_data = Data(**data.to_dict())
+        shadow_data = Data(**data.to_dict())
         
-        data_target = RandomNodeSplit(
+        target_data = RandomNodeSplit(
             split='test_rest',
             num_train_per_class=self.num_train_nodes // self.method.num_classes,
             num_val=self.num_val_nodes
-        )(data_target)
+        )(target_data)
 
-        data_shadow = RandomNodeSplit(
+        shadow_data = RandomNodeSplit(
             split='test_rest',
             num_train_per_class=self.num_train_nodes // self.method.num_classes,
             num_val=self.num_val_nodes
-        )(data_shadow)
+        )(shadow_data)
 
-        console.debug(f'target dataset: {data_target.train_mask.sum()} train nodes, {data_target.val_mask.sum()} val nodes, {data_target.test_mask.sum()} test nodes')
-        console.debug(f'shadow dataset: {data_shadow.train_mask.sum()} train nodes, {data_shadow.val_mask.sum()} val nodes, {data_shadow.test_mask.sum()} test nodes')
+        console.debug(f'target dataset: {target_data.train_mask.sum()} train nodes, {target_data.val_mask.sum()} val nodes, {target_data.test_mask.sum()} test nodes')
+        console.debug(f'shadow dataset: {shadow_data.train_mask.sum()} train nodes, {shadow_data.val_mask.sum()} val nodes, {shadow_data.test_mask.sum()} test nodes')
 
-        return data_target, data_shadow
+        return target_data, shadow_data
 
-    def prepare_attack_dataset(self, data_target: Data, logits_shadow: Tensor, data_shadow: Data, logits_target: Tensor) -> Data:
+    def prepare_attack_dataset(self, target_data: Data, target_scores: Tensor, shadow_data: Data, shadow_scores: Tensor) -> Data:
         # get train+val data from shadow data
         console.debug('preparing attack dataset: train')
-        x_train_val, y_train_val = self.generate_attack_samples(data_shadow, logits_shadow)
-
-        # shuffle train+val data
-        perm = torch.randperm(x_train_val.size(0), device=self.device)
-        x_train_val, y_train_val = x_train_val[perm], y_train_val[perm]
+        x_train_val, y_train_val = self.generate_attack_samples(data=shadow_data, scores=shadow_scores)
         
         # get test data from target data
         console.debug('preparing attack dataset: test')
-        x_test, y_test = self.generate_attack_samples(data_target, logits_target)
+        x_test, y_test = self.generate_attack_samples(data=target_data, scores=target_scores)
         
         # combine train+val and test data
         x = torch.cat([x_train_val, x_test], dim=0)
@@ -128,4 +126,4 @@ class AttackBase(MLP, ABC):
         return data_attack
 
     @abstractmethod
-    def generate_attack_samples(self, data: Data, logits: Tensor) -> tuple[Tensor, Tensor]: pass
+    def generate_attack_samples(self, data: Data, scores: Tensor) -> tuple[Tensor, Tensor]: pass

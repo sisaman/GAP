@@ -32,9 +32,7 @@ supported_attacks = {
     'nmi': NodeMembershipInference,
 }
 
-def run(device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
-        use_amp: Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
-        seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
+def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
         repeats: Annotated[int,   dict(help='number of times the experiment is repeated')] = 1,
         **kwargs
     ):
@@ -54,31 +52,18 @@ def run(device:  Annotated[str,   dict(help='device to use', choices=['cpu', 'cu
     Method = supported_methods[kwargs.pop('method')]
     method_args = strip_kwargs(Method, kwargs, prefix='target_')
     method_args = remove_prefix(method_args, prefix='target_')
-    method: MethodBase = Method(
-        num_classes=num_classes, 
-        device=device,
-        use_amp=use_amp,
-        **method_args
-    )
+    method: MethodBase = Method(num_classes=num_classes, **method_args)
 
     ### initialize attack ###
     Attack = supported_attacks[kwargs['attack']]
     attack_args = strip_kwargs(Attack, kwargs)
-    attack: AttackBase = Attack(
-        method=method, 
-        device=device,
-        use_amp=use_amp,
-        **attack_args
-    )
+    attack: AttackBase = Attack(method=method, **attack_args)
 
     run_metrics = {}
 
     ### run experiment ###
     for iteration in range(repeats):
         data = Data(**data_initial.to_dict())
-        with console.status(f'moving data to {device}'):
-            data.to(device)
-
         start_time = time()
         metrics = attack.execute(data)
         end_time = time()
@@ -153,10 +138,6 @@ def main():
     kwargs = vars(parser.parse_args())
     print_args(kwargs, num_cols=4)
 
-    if kwargs['device'] == 'cuda' and not torch.cuda.is_available():
-        console.warning('CUDA is not available, proceeding with CPU') 
-        kwargs['device'] = 'cpu'
-
     try:
         start = time()
         run(**kwargs)
@@ -168,7 +149,7 @@ def main():
     except RuntimeError:
         raise
     finally:
-        if kwargs['device'] == 'cuda':
+        if torch.cuda.is_available():
             gpu_mem = torch.cuda.max_memory_allocated() / 1024 ** 3
             console.info(f'Max GPU memory used = {gpu_mem:.2f} GB\n')
 
