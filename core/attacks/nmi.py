@@ -20,7 +20,6 @@ class NodeMembershipInference (AttackBase):
         num_half = min(num_train, num_test)
 
         labels = F.one_hot(data.y, num_classes).float()
-        scores = scores.sort(dim=1, descending=True).values
         samples = torch.cat([scores, labels], dim=1)
 
         perm = torch.randperm(num_train, device=self.device)[:num_half]
