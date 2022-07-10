@@ -52,10 +52,6 @@ def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
     ### run experiment ###
     for iteration in range(repeats):
         data = Data(**data_initial.to_dict())
-        device = kwargs['device']
-        with console.status(f'moving data to {device}'):
-            data.to(device)
-
         start_time = time()
         method.reset_parameters()
         metrics = method.fit(data)
@@ -113,10 +109,6 @@ def main():
     kwargs = vars(parser.parse_args())
     print_args(kwargs, num_cols=4)
 
-    if kwargs['device'] == 'cuda' and not torch.cuda.is_available():
-        console.warning('CUDA is not available, proceeding with CPU') 
-        kwargs['device'] = 'cpu'
-
     try:
         start = time()
         run(**kwargs)
@@ -128,7 +120,7 @@ def main():
     except RuntimeError:
         raise
     finally:
-        if kwargs['device'] == 'cuda':
+        if torch.cuda.is_available():
             gpu_mem = torch.cuda.max_memory_allocated() / 1024 ** 3
             console.info(f'Max GPU memory used = {gpu_mem:.2f} GB\n')
 

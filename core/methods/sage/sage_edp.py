@@ -20,6 +20,7 @@ class EdgePrivSAGE (SAGE):
         self.mechanism = AsymmetricRandResponse(eps=epsilon)
 
     def perturb_data(self, data: Data) -> Data:
+        data.adj_t = data.adj_t.to(self.device)
         with console.status('perturbing graph structure'):
             data.adj_t = self.mechanism(data.adj_t, chunk_size=500)
         return data

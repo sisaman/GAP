@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Annotated, Iterable, Optional
+import torch
 from torch import Tensor
 from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
@@ -25,19 +26,25 @@ class MethodBase(ABC):
 
 class NodeClassificationBase(MethodBase):
     def __init__(self, 
-                 num_classes:     int, 
-                 epochs:          Annotated[int,   dict(help='number of epochs for training')] = 100,
-                 optimizer:       Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
-                 learning_rate:   Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
-                 weight_decay:    Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
-                 **kwargs:        Annotated[dict,  dict(help='extra options passed to the trainer class', bases=[Trainer])]
+                 num_classes:   int, 
+                 epochs:        Annotated[int,   dict(help='number of epochs for training')] = 100,
+                 optimizer:     Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
+                 learning_rate: Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
+                 weight_decay:  Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
+                 device:        Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
+                 **kwargs:      Annotated[dict,  dict(help='extra options passed to the trainer class', bases=[Trainer])]
                  ):
 
         self.num_classes = num_classes
+        self.epochs = epochs
         self.optimizer_name = optimizer
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
-        self.epochs = epochs
+        self.device = device
+
+        if self.device == 'cuda' and not torch.cuda.is_available():
+            console.warning('CUDA is not available, proceeding with CPU') 
+            self.device = 'cpu'
 
         self.trainer = Trainer(
             monitor='val/acc', 
@@ -57,7 +64,7 @@ class NodeClassificationBase(MethodBase):
         self.data = None
 
     def fit(self, data: Data, prefix: str = '') -> Metrics:
-        self.data = data
+        self.data = data.to(self.device, non_blocking=True)
         train_metrics = self._train(self.data, prefix=prefix)
         test_metrics = self.test(self.data, prefix=prefix)
         return {**train_metrics, **test_metrics}
@@ -66,19 +73,26 @@ class NodeClassificationBase(MethodBase):
         if data is None:
             data = self.data
         
+        data = data.to(self.device, non_blocking=True)
+
         test_metics = self.trainer.test(
             dataloader=self.data_loader(data, 'test'),
             prefix=prefix,
         )
+
         return test_metics
 
     def predict(self, data: Optional[Data] = None) -> Tensor:
         if data is None:
             data = self.data
+
+        data = data.to(self.device, non_blocking=True)
         return self.classifier.predict(data)
 
     def _train(self, data: Data, prefix: str = '') -> Metrics:
         console.info('training classifier')
+        self.classifier.to(self.device)
+
         metrics = self.trainer.fit(
             model=self.classifier,
             epochs=self.epochs,
@@ -89,6 +103,7 @@ class NodeClassificationBase(MethodBase):
             checkpoint=True,
             prefix=prefix,
         )
+
         return metrics
 
     def _configure_optimizer(self) -> Optimizer:

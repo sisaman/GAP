@@ -73,6 +73,7 @@ class NodePrivSAGE (SAGE):
         self._classifier = self.noisy_sgd.prepare_module(self._classifier)
 
     def sample_neighbors(self, data: Data) -> Data:
+        data = data.to(self.device, non_blocking=True)
         with console.status('bounding the number of neighbors per node'):
             data = BoundDegree(self.max_degree)(data)
         return data

@@ -89,7 +89,7 @@ class NodePrivGAP (GAP):
 
     def _compute_aggregations(self, data: Data) -> Data:
         with console.status('bounding the number of neighbors per node'):
-                data = BoundOutDegree(self.max_degree)(data)
+            data = BoundOutDegree(self.max_degree)(data)
         return super()._compute_aggregations(data)
 
     def _aggregate(self, x: torch.Tensor, adj_t: SparseTensor) -> torch.Tensor:

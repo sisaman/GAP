@@ -18,7 +18,6 @@ class Trainer:
                  monitor:       str = 'val/acc',
                  monitor_mode:  Literal['min', 'max'] = 'max',
                  val_interval:  Annotated[int,   dict(help='interval of validation')] = 1,
-                 device:        Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
                  use_amp:       Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
                  ):
 
@@ -29,7 +28,6 @@ class Trainer:
         self.use_amp = use_amp
         self.monitor = monitor
         self.monitor_mode = monitor_mode
-        self.device = device
         
         # trainer internal state
         self.model: ClassifierBase = None
@@ -43,8 +41,9 @@ class Trainer:
 
     def update_metrics(self, metric_name: str, metric_value: object, weight: int = 1) -> None:
         # if this is a new metric, add it to self.metrics
+        device = metric_value.device if torch.is_tensor(metric_value) else 'cpu'
         if metric_name not in self.metrics:
-            self.metrics[metric_name] = MeanMetric(compute_on_step=False).to(self.device)
+            self.metrics[metric_name] = MeanMetric(compute_on_step=False).to(device)
 
         # update the metric
         self.metrics[metric_name].update(metric_value, weight=weight)
@@ -81,8 +80,7 @@ class Trainer:
             prefix: str = ''
             ) -> Metrics:
 
-        self.model = model.to(self.device)
-        self.model.train()
+        self.model = model
         self.optimizer = optimizer
         monitor_key = f'{prefix}{self.monitor}'
 
