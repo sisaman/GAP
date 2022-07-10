@@ -97,7 +97,7 @@ def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list =
                     create_arguments(
                         callable=base_callable, 
                         parser=parser, 
-                        exclude=metadata.get('exclude', []),
+                        exclude=metadata.get('exclude', []) + exclude,
                         prefix=prefix+pr
                     )
             else:
