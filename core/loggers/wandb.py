@@ -21,11 +21,18 @@ class WandbLogger(LoggerBase):
         if not hasattr(self, '_experiment'):
             os.environ["WANDB_SILENT"] = "true"
             settings = wandb.Settings(start_method="fork")
+            log_dir = os.path.join(self.output_dir, 'wandb')
+            os.makedirs(log_dir, exist_ok=True)
 
             self._experiment = wandb.init(
                 project=self.project,
-                reinit=True, resume='allow', config=self.config, save_code=True,
-                settings=settings)
+                dir=log_dir,
+                reinit=True, 
+                resume='allow', 
+                config=self.config, 
+                save_code=True,
+                settings=settings
+            )
 
         return self._experiment
 

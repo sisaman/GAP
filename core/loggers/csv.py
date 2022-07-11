@@ -24,7 +24,7 @@ class CSVLogger(LoggerBase):
 
     @if_enabled
     def finish(self):
-        os.makedirs(self.output_dir, exist_ok=True)
+        log_dir = os.path.join(self.output_dir, 'csv', self.project)
+        os.makedirs(log_dir, exist_ok=True)
         df = pd.DataFrame(self.experiment, index=[0])
-        df.to_csv(os.path.join(self.output_dir,
-                  f'{self.experiment_id}.csv'), index=False)
+        df.to_csv(os.path.join(log_dir, f'{self.experiment_id}.csv'), index=False)
