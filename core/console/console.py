@@ -10,16 +10,16 @@ from rich.styled import Styled
 from rich.style import Style
 from core.console.status import LogStatus
 
-CRITICAL = logging.CRITICAL
-FATAL = logging.FATAL
-ERROR = logging.ERROR
-WARNING = logging.WARNING
-WARN = logging.WARN
-INFO = logging.INFO
-DEBUG = logging.DEBUG
-NOTSET = logging.NOTSET
-
 class Console(RichConsole):
+    CRITICAL = logging.CRITICAL
+    FATAL = logging.FATAL
+    ERROR = logging.ERROR
+    WARNING = logging.WARNING
+    WARN = logging.WARN
+    INFO = logging.INFO
+    DEBUG = logging.DEBUG
+    NOTSET = logging.NOTSET
+
     def __init__(self, *args, log_level: int = INFO, **kwrags):
         super().__init__(*args, **kwrags)
         self.log_level = log_level
@@ -105,13 +105,13 @@ class Console(RichConsole):
                 buffer_extend(line)
 
     def debug(self, *args, **kwargs):
-        self.log(*args, level=DEBUG, **kwargs)
+        self.log(*args, level=self.DEBUG, **kwargs)
 
     def info(self, *args, **kwargs):
-        self.log(*args, level=INFO, **kwargs)
+        self.log(*args, level=self.INFO, **kwargs)
 
     def warning(self, *args, **kwargs):
-        self.log(*args, level=WARNING, **kwargs)
+        self.log(*args, level=self.WARNING, **kwargs)
 
     def error(self, *args, **kwargs):
-        self.log(*args, level=ERROR, **kwargs)
+        self.log(*args, level=self.ERROR, **kwargs)

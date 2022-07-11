@@ -1,13 +1,12 @@
 import logging
 from rich.traceback import install
 from rich.logging import RichHandler
-from core.console.console import *
+from core.console.console import Console
 
-log_level = DEBUG
 
 # define main and error consoles
-console = Console(tab_size=4, log_level=log_level)
-error_console = Console(stderr=True, tab_size=4, log_level=log_level)
+console = Console(tab_size=4)
+error_console = Console(stderr=True, tab_size=4)
 
 # setup console for tracebacks
 install(console=error_console, width=error_console.width)
@@ -19,7 +18,7 @@ log_handler = RichHandler(
     log_time_format="[%X]"
 )
 logger = logging.getLogger('gap')
-logger.setLevel(log_level)
+logger.setLevel(logging.INFO)
 logger.addHandler(log_handler)
 
 # setup warnings
