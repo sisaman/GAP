@@ -3,20 +3,20 @@ from typing import Annotated
 import torch
 from torch import Tensor
 from torch_geometric.data import Data
-from torch_geometric.transforms import RandomNodeSplit
 from core.args.utils import remove_prefix
 from core.console import console
 from core.classifiers.base import Metrics
 from core.methods.base import NodeClassificationBase
 from core.methods.mlp import MLP
+from core.data.transforms import RandomDataSplit
 
 
 class AttackBase(MLP, ABC):
     def __init__(self, 
-                 method:          NodeClassificationBase,
-                 num_train_nodes: Annotated[int,  dict(help='number of training nodes in both target and shadow datasets')] = 10000,
-                 num_val_nodes:   Annotated[int,  dict(help='number of validation nodes in both target and shadow datasets')] = 100,
-                 **kwargs:        Annotated[dict, dict(help='attack method kwargs', bases=[MLP], prefixes=['attack_'], exclude=['device', 'use_amp'])],
+                 method:    NodeClassificationBase,
+                 num_nodes_per_class: 
+                            Annotated[int,  dict(help='number of nodes per class in both target and shadow datasets')] = 10000,
+                 **kwargs:  Annotated[dict, dict(help='attack method kwargs', bases=[MLP], prefixes=['attack_'], exclude=['device', 'use_amp'])],
                 ):
 
         super().__init__(
@@ -25,8 +25,7 @@ class AttackBase(MLP, ABC):
         )
 
         self.method = method
-        self.num_train_nodes = num_train_nodes
-        self.num_val_nodes = num_val_nodes
+        self.num_nodes_per_class = num_nodes_per_class
 
     def reset_parameters(self):
         super().reset_parameters()
@@ -62,13 +61,14 @@ class AttackBase(MLP, ABC):
         # train attack model and get attack accuracy
         console.info('step 3: training attack model')
         attack_metrics = self.fit(attack_data, prefix='attack/')
+        advantage = max(0, 2 * attack_metrics['attack/test/acc'] - 100)
 
         # aggregate metrics
         metrics = {
             **target_metrics,
             **shadow_metrics,
             **attack_metrics,
-            'attack/adv': 2 * attack_metrics['attack/test/acc'] - 100
+            'attack/adv': advantage
         }
         
         return metrics
@@ -77,16 +77,16 @@ class AttackBase(MLP, ABC):
         target_data = Data(**data.to_dict())
         shadow_data = Data(**data.to_dict())
         
-        target_data = RandomNodeSplit(
-            split='test_rest',
-            num_train_per_class=self.num_train_nodes // self.method.num_classes,
-            num_val=self.num_val_nodes
+        target_data = RandomDataSplit(
+            num_nodes_per_class=self.num_nodes_per_class,
+            train_ratio=0.4,
+            test_ratio=0.4
         )(target_data)
 
-        shadow_data = RandomNodeSplit(
-            split='test_rest',
-            num_train_per_class=self.num_train_nodes // self.method.num_classes,
-            num_val=self.num_val_nodes
+        shadow_data = RandomDataSplit(
+            num_nodes_per_class=self.num_nodes_per_class,
+            train_ratio=0.4,
+            test_ratio=0.4
         )(shadow_data)
 
         console.debug(f'target dataset: {target_data.train_mask.sum()} train nodes, {target_data.val_mask.sum()} val nodes, {target_data.test_mask.sum()} test nodes')
@@ -122,8 +122,25 @@ class AttackBase(MLP, ABC):
         test_mask[num_train_val:] = True
         
         # create data object
-        data_attack = Data(x=x, y=y, train_mask=train_mask, val_mask=val_mask, test_mask=test_mask)
-        return data_attack
+        attack_data = Data(x=x, y=y, train_mask=train_mask, val_mask=val_mask, test_mask=test_mask)
+        return attack_data
+
+    def _train(self, data: Data, prefix: str = '') -> Metrics:
+        console.info('training classifier')
+        self.classifier.to(self.device)
+
+        metrics = self.trainer.fit(
+            model=self.classifier,
+            epochs=self.epochs,
+            optimizer=self.configure_optimizer(),
+            train_dataloader=self.data_loader(data, 'train'), 
+            val_dataloader=self.data_loader(data, 'val'),
+            test_dataloader=self.data_loader(data, 'test'),
+            checkpoint=True,
+            prefix=prefix,
+        )
+
+        return metrics
 
     @abstractmethod
     def generate_attack_samples(self, data: Data, scores: Tensor) -> tuple[Tensor, Tensor]: pass
