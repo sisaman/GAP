@@ -26,7 +26,7 @@ class RunFactory:
                 if 'epsilon' in self.runs_df.columns:
                     self.runs_df['epsilon'] = self.runs_df['epsilon'].astype(float)
     
-    def register(self, method: str, **params) -> list[str]:
+    def register(self, *args, **params) -> list[str]:
         for key, value in params.items():
             if not (isinstance(value, list) or isinstance(value, tuple)):
                 params[key] = (value,)
@@ -38,7 +38,7 @@ class RunFactory:
             if not self.check_existing or len(self.find_runs(config)) == 0:
                 self.runs_df = pd.concat([self.runs_df, pd.DataFrame(config, index=[0])], ignore_index=True)
                 options = ' '.join([f' --{param} {value} ' for param, value in config.items()])
-                command = f'python train.py {method} {options} --logger wandb --project {self.project}'
+                command = f'python train.py {" ".join(args)} {options} --logger wandb --project {self.project}'
                 command = ' '.join(command.split())
                 cmd_list.append(command)
 
