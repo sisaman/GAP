@@ -9,24 +9,9 @@ with console.status('importing modules'):
     from core.datasets import DatasetLoader
     from core.args.utils import print_args, create_arguments, strip_kwargs
     from core.loggers import Logger
-    from core.methods.base import NodeClassificationBase
-    from core.methods.gap import GAP, EdgePrivGAP, NodePrivGAP
-    from core.methods.sage import SAGE, EdgePrivSAGE, NodePrivSAGE
-    from core.methods.mlp import MLP, PrivMLP
+    from core.methods import supported_methods, NodeClassificationBase
     from core.utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
-
-
-supported_methods = {
-    'gap-inf':  GAP,
-    'gap-edp':  EdgePrivGAP,
-    'gap-ndp':  NodePrivGAP,
-    'sage-inf': SAGE,
-    'sage-edp': EdgePrivSAGE,
-    'sage-ndp': NodePrivSAGE,
-    'mlp':      MLP,
-    'mlp-dp':   PrivMLP
-}
 
 
 def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
