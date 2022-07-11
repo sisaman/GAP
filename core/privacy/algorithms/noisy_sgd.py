@@ -49,7 +49,7 @@ class NoisySGD(NoisyMechanism):
             if hasattr(module, 'autograd_grad_sample_hooks'):
                 for hook in module.autograd_grad_sample_hooks:
                     hook.remove()
-                del self.autograd_grad_sample_hooks
+                del module.autograd_grad_sample_hooks
             GradSampleModule(module).register_backward_hook(forbid_accumulation_hook)
         return module
 
