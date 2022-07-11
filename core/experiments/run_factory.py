@@ -6,7 +6,8 @@ from itertools import product
 
 
 class RunFactory:
-    def __init__(self, entity, project, check_existing=True):
+    def __init__(self, main_file, entity, project, check_existing=True):
+        self.main_file = main_file
         self.project = project
         self.check_existing = check_existing
         self.cmd_list = []
@@ -38,7 +39,7 @@ class RunFactory:
             if not self.check_existing or len(self.find_runs(config)) == 0:
                 self.runs_df = pd.concat([self.runs_df, pd.DataFrame(config, index=[0])], ignore_index=True)
                 options = ' '.join([f' --{param} {value} ' for param, value in config.items()])
-                command = f'python train.py {" ".join(args)} {options} --logger wandb --project {self.project}'
+                command = f'python {self.main_file} {" ".join(args)} {options} --logger wandb --project {self.project}'
                 command = ' '.join(command.split())
                 cmd_list.append(command)
 
@@ -48,12 +49,21 @@ class RunFactory:
     def get_all_runs(self) -> list[str]:
         return self.cmd_list
 
-    def save(self, path: str):
+    def save(self, path: str, sort=False, shuffle=False):
+        assert not (sort and shuffle), 'cannot sort and shuffle at the same time'
+
+        if sort:
+            cmd_list = sorted(self.cmd_list)
+        elif shuffle:
+            cmd_list = np.random.choice(self.cmd_list, len(self.cmd_list), replace=False)
+        else:
+            cmd_list = self.cmd_list
+
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, 'w') as file:
-            for item in self.cmd_list:
+            for item in cmd_list:
                 print(item, file=file)
-        print(f'Saved {len(self.cmd_list)} runs to {path}')
+        print(f'Saved {len(cmd_list)} runs to {path}')
 
     def find_runs(self, config: dict) -> pd.DataFrame:
         if set(config.keys()) - set(self.runs_df.columns):
