@@ -1,6 +1,6 @@
+import core.globals
 from typing import Annotated
 from core.console import console
-from core.globals import DEBUG_MODE
 from core.loggers.base import LoggerBase
 from core.loggers.csv import CSVLogger
 from core.loggers.wandb import WandbLogger
@@ -29,7 +29,7 @@ class Logger:
         **kwargs: Annotated[dict, dict(help='additional kwargs for the underlying logger', bases=[LoggerBase])],
         ) -> LoggerBase:
         
-        if DEBUG_MODE:
+        if core.globals.DEBUG_MODE:
             logger = 'wandb'
             kwargs['enabled'] = True
             kwargs['project'] += '-DEBUG'
