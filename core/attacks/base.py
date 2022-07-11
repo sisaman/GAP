@@ -15,7 +15,7 @@ class AttackBase(MLP, ABC):
     def __init__(self, 
                  method:    NodeClassificationBase,
                  num_nodes_per_class: 
-                            Annotated[int,  dict(help='number of nodes per class in both target and shadow datasets')] = 10000,
+                            Annotated[int,  dict(help='number of nodes per class in both target and shadow datasets')] = 1000,
                  **kwargs:  Annotated[dict, dict(help='attack method kwargs', bases=[MLP], prefixes=['attack_'], exclude=['device', 'use_amp'])],
                 ):
 
