@@ -10,7 +10,7 @@ class FilterClassByCount(BaseTransform):
         self.remove_unlabeled = remove_unlabeled
 
     def __call__(self, data: Data) -> Data:
-        assert hasattr(data, 'y') and hasattr(data, 'train_mask')
+        assert hasattr(data, 'y')
 
         y: torch.Tensor = F.one_hot(data.y)
         counts = y.sum(dim=0)
@@ -22,8 +22,9 @@ class FilterClassByCount(BaseTransform):
             data = data.subgraph(mask)
         else:
             data.y[~mask] = -1                # set filtered nodes as unlabeled
-            data.train_mask = data.train_mask & mask
-            data.val_mask = data.val_mask & mask
-            data.test_mask = data.test_mask & mask
+            if hasattr(data, 'train_mask'):
+                data.train_mask = data.train_mask & mask
+                data.val_mask = data.val_mask & mask
+                data.test_mask = data.test_mask & mask
 
         return data
