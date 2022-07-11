@@ -1,21 +1,19 @@
 from typing import Annotated
+from core.console import console
+from core.globals import DEBUG_MODE
 from core.loggers.base import LoggerBase
 from core.loggers.csv import CSVLogger
 from core.loggers.wandb import WandbLogger
 
 
 class Logger:
-
-    _instance: LoggerBase = None
-    _options = {
-        'logger': 'csv',
-        'project': 'GAP-DEBUG',
-        'output_dir': './output',
-        'debug': False,
-        'enabled': True,
-        'config': {}
+    supported_loggers = {
+        'csv': CSVLogger,
+        'wandb': WandbLogger,
     }
 
+    _instance: LoggerBase = None
+    
     @classmethod
     def get_instance(cls) -> LoggerBase:
         return cls._instance
@@ -27,21 +25,16 @@ class Logger:
 
     @classmethod
     def setup(cls,
-        logger:        Annotated[str,  dict(help='select logger type', choices=['wandb', 'csv'])] = 'csv',
-        project:       Annotated[str,  dict(help="project name for logger")] = 'GAP-DEBUG',
-        output_dir:    Annotated[str,  dict(help="directory to store the results", option='-o')] = './output',
-        debug:         Annotated[bool, dict(help='enable debugger logging')] = False,
-        enabled:       bool = True,
-        config:        dict = {}
+        logger:   Annotated[str,  dict(help='select logger type', choices=supported_loggers)] = 'csv',
+        **kwargs: Annotated[dict, dict(help='additional kwargs for the underlying logger', bases=[LoggerBase])],
         ) -> LoggerBase:
-
-        cls._options['logger'] = logger
-        cls._options['project'] = project
-        cls._options['output_dir'] = output_dir
-        cls._options['debug'] = debug
-        cls._options['enabled'] = enabled
-        cls._options['config'] = config
-
-        LoggerCls = WandbLogger if debug or logger == 'wandb' else CSVLogger
-        cls._instance = LoggerCls(project=project, output_dir=output_dir, enabled=enabled or debug, config=config)
+        
+        if DEBUG_MODE:
+            logger = 'wandb'
+            kwargs['enabled'] = True
+            kwargs['project'] += '-DEBUG'
+            console.debug(f'debug mode: wandb logger is enabled for project {kwargs["project"]}')
+        
+        LoggerCls = cls.supported_loggers[logger]
+        cls._instance = LoggerCls(**kwargs)
         return cls._instance

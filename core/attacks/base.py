@@ -125,22 +125,5 @@ class AttackBase(MLP, ABC):
         attack_data = Data(x=x, y=y, train_mask=train_mask, val_mask=val_mask, test_mask=test_mask)
         return attack_data
 
-    def _train(self, data: Data, prefix: str = '') -> Metrics:
-        console.info('training classifier')
-        self.classifier.to(self.device)
-
-        metrics = self.trainer.fit(
-            model=self.classifier,
-            epochs=self.epochs,
-            optimizer=self.configure_optimizer(),
-            train_dataloader=self.data_loader(data, 'train'), 
-            val_dataloader=self.data_loader(data, 'val'),
-            test_dataloader=self.data_loader(data, 'test'),
-            checkpoint=True,
-            prefix=prefix,
-        )
-
-        return metrics
-
     @abstractmethod
     def generate_attack_samples(self, data: Data, scores: Tensor) -> tuple[Tensor, Tensor]: pass

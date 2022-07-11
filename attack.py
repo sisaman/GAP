@@ -2,6 +2,7 @@ from core.console import console
 with console.status('importing modules'):
     import torch
     import numpy as np
+    import core.globals
     from time import time
     from typing import Annotated
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
@@ -34,10 +35,17 @@ supported_attacks = {
 
 def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
         repeats: Annotated[int,   dict(help='number of times the experiment is repeated')] = 1,
+        debug:   Annotated[bool, dict(help='enable global debug mode')] = False,
         **kwargs
     ):
 
     seed_everything(seed)
+
+    if debug:
+        console.info('debug mode enabled')
+        core.globals.DEBUG_MODE = True
+        console.log_level = console.DEBUG
+        kwargs['project'] += '-ATTACK'
 
     with console.status('loading dataset'):
         loader_args = strip_kwargs(DatasetLoader, kwargs)
