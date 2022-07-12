@@ -28,8 +28,8 @@ class NodeMembershipInference (AttackBase):
         perm = torch.randperm(num_test, device=self.device)[:num_half]
         neg_samples = samples[data.test_mask][perm]
 
-        pos_entropy = torch.distributions.Categorical(probs=pos_samples).entropy().mean()
-        neg_entropy = torch.distributions.Categorical(probs=neg_samples).entropy().mean()
+        pos_entropy = torch.distributions.Categorical(probs=pos_samples[:, :num_classes]).entropy().mean()
+        neg_entropy = torch.distributions.Categorical(probs=neg_samples[:, :num_classes]).entropy().mean()
 
         console.debug(f'pos_entropy: {pos_entropy:.4f}, neg_entropy: {neg_entropy:.4f}')
 
