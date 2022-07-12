@@ -3,6 +3,8 @@ with console.status('importing modules'):
     import torch
     import numpy as np
     import core.globals
+    from rich import box
+    from rich.table import Table
     from time import time
     from typing import Annotated
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
@@ -31,8 +33,6 @@ def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
         loader_args = strip_kwargs(DatasetLoader, kwargs)
         data_initial = DatasetLoader(**loader_args).load(verbose=True)
 
-    test_acc = []
-    run_metrics = {}
     num_classes = data_initial.y.max().item() + 1
     config = dict(**kwargs, seed=seed, repeats=repeats)
     logger_args = strip_kwargs(Logger.setup, kwargs)
@@ -43,24 +43,31 @@ def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
     method_args = strip_kwargs(Method, kwargs)
     method: NodeClassificationBase = Method(num_classes=num_classes, **method_args)
 
+    run_metrics = {}
+
     ### run experiment ###
     for iteration in range(repeats):
         data = Data(**data_initial.to_dict())
         start_time = time()
-        method.reset_parameters()
         metrics = method.fit(data)
         end_time = time()
         metrics['fit_time'] = end_time - start_time
-        test_acc.append(metrics['test/acc'])
 
         ### process results ###
         for metric, value in metrics.items():
             run_metrics[metric] = run_metrics.get(metric, []) + [value]
-        
+
+         ### print results ###
+        table = Table(title=f'run {iteration + 1}', box=box.HORIZONTALS)
+        table.add_column('metric')
+        table.add_column('last', style="cyan")
+        table.add_column('mean', style="cyan")
+        table.add_row('test/acc', f'{run_metrics["test/acc"][-1]:.2f}', f'{np.mean(run_metrics["test/acc"]):.2f}')
+        console.info(table)
         console.print()
-        console.info(f'run: {iteration + 1}/{repeats}')
-        console.info(f'test/acc: {test_acc[-1]:.2f}\t average: {np.mean(test_acc):.2f}')
-        console.print()
+
+        ### reset method's parameters for the next run ###
+        method.reset_parameters()
 
     logger.enable()
     summary = {}
