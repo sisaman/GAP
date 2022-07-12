@@ -2,7 +2,7 @@ from argparse import ArgumentParser, Namespace
 import os
 from pathlib import Path
 import subprocess
-from time import time
+import time
 from rich.progress import track
 from core.console import console
 
