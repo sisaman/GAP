@@ -3,6 +3,7 @@ from typing import Annotated
 import torch
 from torch import Tensor
 from torch_geometric.data import Data
+from torchmetrics.functional import auroc, average_precision
 from core.args.utils import remove_prefix
 from core.console import console
 from core.classifiers.base import Metrics
@@ -61,14 +62,19 @@ class AttackBase(MLP, ABC):
         # train attack model and get attack accuracy
         console.info('step 3: training attack model')
         attack_metrics = self.fit(attack_data, prefix='attack/')
-        advantage = max(0, 2 * attack_metrics['attack/test/acc'] - 100)
+        
+        # compute extra attack metrics
+        preds = self.predict()[attack_data.test_mask, 1]
+        target = attack_data.y[attack_data.test_mask]
+        attack_metrics['attack/test/auc'] = auroc(preds=preds, target=target).item() * 100
+        attack_metrics['attack/test/avg_precision'] = average_precision(preds=preds, target=target).item() * 100
+        attack_metrics['attack/test/advantage'] = max(0, 2 * attack_metrics['attack/test/acc'] - 100)
 
         # aggregate metrics
         metrics = {
             **target_metrics,
             **shadow_metrics,
             **attack_metrics,
-            'attack/adv': advantage
         }
         
         return metrics
