@@ -5,6 +5,8 @@ with console.status('importing modules'):
     import core.globals
     from time import time
     from typing import Annotated
+    from rich import box
+    from rich.table import Table
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
     from core.datasets import DatasetLoader
     from core.args.utils import print_args, strip_kwargs, create_arguments, remove_prefix
@@ -63,16 +65,27 @@ def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
         for metric, value in metrics.items():
             run_metrics[metric] = run_metrics.get(metric, []) + [value]
         
-        console.print()
-        console.info(f'run: {iteration + 1}/{repeats}')
-        console.info(f'target/train/acc: {run_metrics["target/train/acc"][-1]:.2f}\t average: {np.mean(run_metrics["target/train/acc"]):.2f}')
-        console.info(f'target/test/acc: {run_metrics["target/test/acc"][-1]:.2f}\t average: {np.mean(run_metrics["target/test/acc"]):.2f}')
-        console.info(f'shadow/train/acc: {run_metrics["shadow/train/acc"][-1]:.2f}\t average: {np.mean(run_metrics["shadow/train/acc"]):.2f}')
-        console.info(f'shadow/test/acc: {run_metrics["shadow/test/acc"][-1]:.2f}\t average: {np.mean(run_metrics["shadow/test/acc"]):.2f}')
-        console.info(f'attack/test/acc: {run_metrics["attack/test/acc"][-1]:.2f}\t average: {np.mean(run_metrics["attack/test/acc"]):.2f}')
-        console.info(f'attack/adv: {run_metrics["attack/adv"][-1]:.4f}\t average: {np.mean(run_metrics["attack/adv"]):.4f}')
+
+        ### print results ###
+        table = Table(title=f'run {iteration + 1}', box=box.HORIZONTALS)
+        table.add_column('metric')
+        table.add_column('last', style="cyan")
+        table.add_column('mean', style="cyan")
+
+        table.add_row('target/train/acc', f'{run_metrics["target/train/acc"][-1]:.2f}', f'{np.mean(run_metrics["target/train/acc"]):.2f}')
+        table.add_row('target/test/acc', f'{run_metrics["target/test/acc"][-1]:.2f}', f'{np.mean(run_metrics["target/test/acc"]):.2f}')
+
+        table.add_row('shadow/train/acc', f'{run_metrics["shadow/train/acc"][-1]:.2f}', f'{np.mean(run_metrics["shadow/train/acc"]):.2f}')
+        table.add_row('shadow/test/acc', f'{run_metrics["shadow/test/acc"][-1]:.2f}', f'{np.mean(run_metrics["shadow/test/acc"]):.2f}')
+
+        for metric_name, metric_values in run_metrics.items():
+            if metric_name.startswith('attack/test/'):
+                table.add_row(metric_name, f'{metric_values[-1]:.2f}', f'{np.mean(metric_values):.2f}')
+
+        console.info(table)
         console.print()
 
+        # reset method's parameters for the next run
         attack.reset_parameters()
 
     logger.enable()
