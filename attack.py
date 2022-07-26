@@ -11,8 +11,8 @@ with console.status('importing modules'):
     from core.datasets import DatasetLoader
     from core.args.utils import print_args, strip_kwargs, create_arguments, remove_prefix
     from core.loggers import Logger
-    from core.methods import supported_methods, MethodBase
-    from core.attacks import supported_attacks, AttackBase
+    from core.methods import supported_methods, NodeClassificationBase
+    from core.attacks import supported_attacks, ModelBasedAttack
     from core.utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
 
@@ -44,12 +44,12 @@ def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
     Method = supported_methods[kwargs.pop('method')]
     method_args = strip_kwargs(Method, kwargs, prefix='target_')
     method_args = remove_prefix(method_args, prefix='target_')
-    method: MethodBase = Method(num_classes=num_classes, **method_args)
+    method: NodeClassificationBase = Method(num_classes=num_classes, **method_args)
 
     ### initialize attack ###
     Attack = supported_attacks[kwargs['attack']]
     attack_args = strip_kwargs(Attack, kwargs)
-    attack: AttackBase = Attack(method=method, **attack_args)
+    attack: ModelBasedAttack = Attack(**attack_args)
 
     run_metrics = {}
 
@@ -57,9 +57,9 @@ def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
     for iteration in range(repeats):
         data = Data(**data_initial.to_dict())
         start_time = time()
-        metrics = attack.execute(data)
+        metrics = attack.execute(method, data)
         end_time = time()
-        metrics['fit_time'] = end_time - start_time
+        metrics['duration'] = end_time - start_time
 
         ### process results ###
         for metric, value in metrics.items():
@@ -72,20 +72,15 @@ def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
         table.add_column('last', style="cyan")
         table.add_column('mean', style="cyan")
 
-        table.add_row('target/train/acc', f'{run_metrics["target/train/acc"][-1]:.2f}', f'{np.mean(run_metrics["target/train/acc"]):.2f}')
-        table.add_row('target/test/acc', f'{run_metrics["target/test/acc"][-1]:.2f}', f'{np.mean(run_metrics["target/test/acc"]):.2f}')
-
-        table.add_row('shadow/train/acc', f'{run_metrics["shadow/train/acc"][-1]:.2f}', f'{np.mean(run_metrics["shadow/train/acc"]):.2f}')
-        table.add_row('shadow/test/acc', f'{run_metrics["shadow/test/acc"][-1]:.2f}', f'{np.mean(run_metrics["shadow/test/acc"]):.2f}')
-
         for metric_name, metric_values in run_metrics.items():
-            if metric_name.startswith('attack/test/'):
+            # if metric_name.startswith('attack/test/'):
                 table.add_row(metric_name, f'{metric_values[-1]:.2f}', f'{np.mean(metric_values):.2f}')
 
         console.info(table)
         console.print()
 
         # reset method's parameters for the next run
+        method.reset_parameters()
         attack.reset_parameters()
 
     logger.enable()
