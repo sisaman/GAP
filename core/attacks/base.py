@@ -9,14 +9,11 @@ from core.console import console
 from core.classifiers.base import Metrics
 from core.methods.base import NodeClassificationBase
 from core.methods.mlp import MLP
-from core.data.transforms import RandomDataSplit
 
 
 class AttackBase(MLP, ABC):
     def __init__(self, 
                  method:    NodeClassificationBase,
-                 num_nodes_per_class: 
-                            Annotated[int,  dict(help='number of nodes per class in both target and shadow datasets')] = 1000,
                  **kwargs:  Annotated[dict, dict(help='attack method kwargs', bases=[MLP], prefixes=['attack_'], exclude=['device', 'use_amp'])],
                 ):
 
@@ -26,7 +23,6 @@ class AttackBase(MLP, ABC):
         )
 
         self.method = method
-        self.num_nodes_per_class = num_nodes_per_class
 
     def reset_parameters(self):
         super().reset_parameters()
@@ -38,14 +34,14 @@ class AttackBase(MLP, ABC):
 
         # train target model and obtain confidence scores
         console.info('step 1: training target model')
-        target_metrics = self.method.fit(target_data, prefix='target/')
+        target_metrics = self.method.fit(Data(**target_data.to_dict()), prefix='target/')
         target_scores = self.method.predict()
         target_data, target_scores = target_data.to('cpu'), target_scores.to('cpu')
 
         # train shadow model and obtain confidence scores
         console.info('step 2: training shadow model')
         self.method.reset_parameters()
-        shadow_metrics = self.method.fit(shadow_data, prefix='shadow/')
+        shadow_metrics = self.method.fit(Data(**shadow_data.to_dict()), prefix='shadow/')
         shadow_scores = self.method.predict()
         shadow_data, shadow_scores = shadow_data.to('cpu'), shadow_scores.to('cpu')
 
@@ -79,27 +75,6 @@ class AttackBase(MLP, ABC):
         
         return metrics
 
-    def target_shadow_split(self, data: Data) -> tuple[Data, Data]:
-        target_data = Data(**data.to_dict())
-        shadow_data = Data(**data.to_dict())
-        
-        target_data = RandomDataSplit(
-            num_nodes_per_class=self.num_nodes_per_class,
-            train_ratio=0.4,
-            test_ratio=0.4
-        )(target_data)
-
-        shadow_data = RandomDataSplit(
-            num_nodes_per_class=self.num_nodes_per_class,
-            train_ratio=0.4,
-            test_ratio=0.4
-        )(shadow_data)
-
-        console.debug(f'target dataset: {target_data.train_mask.sum()} train nodes, {target_data.val_mask.sum()} val nodes, {target_data.test_mask.sum()} test nodes')
-        console.debug(f'shadow dataset: {shadow_data.train_mask.sum()} train nodes, {shadow_data.val_mask.sum()} val nodes, {shadow_data.test_mask.sum()} test nodes')
-
-        return target_data, shadow_data
-
     def prepare_attack_dataset(self, target_data: Data, target_scores: Tensor, shadow_data: Data, shadow_scores: Tensor) -> Data:
         # get train+val data from shadow data
         console.debug('preparing attack dataset: train')
@@ -130,6 +105,9 @@ class AttackBase(MLP, ABC):
         # create data object
         attack_data = Data(x=x, y=y, train_mask=train_mask, val_mask=val_mask, test_mask=test_mask)
         return attack_data
+
+    @abstractmethod
+    def target_shadow_split(self, data: Data) -> tuple[Data, Data]: pass
 
     @abstractmethod
     def generate_attack_samples(self, data: Data, scores: Tensor) -> tuple[Tensor, Tensor]: pass
