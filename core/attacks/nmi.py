@@ -107,7 +107,7 @@ class NodeMembershipInference (ModelBasedAttack):
         num_test = data.test_mask.sum()
         num_half = min(num_train, num_test)
 
-        labels = F.one_hot(scores.argmax(dim=1), num_classes).float()
+        labels = F.one_hot(data.y, num_classes).float()
         samples = torch.cat([scores, labels], dim=1)
 
         perm = torch.randperm(num_train, device=self.device)[:num_half]
