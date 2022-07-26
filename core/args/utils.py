@@ -84,8 +84,8 @@ def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list =
 
             # extract parameter type and metadata from annotation
             annotation = get_args(annot_obj)
-            param_type = annotation[0]
             metadata: dict = annotation[1]
+            param_type = metadata.get('type', annotation[0])
 
             # get the base callable arguments
             bases = metadata.get('bases', False)
