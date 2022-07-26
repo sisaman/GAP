@@ -7,7 +7,7 @@ from core.attacks.base import ModelBasedAttack
 from core.classifiers.base import Metrics
 from core.console import console
 from core.data.transforms import RandomDataSplit
-from core.methods.base import NodeClassificationBase
+from core.methods.base import NodeClassification
 
 
 class NodeMembershipInference (ModelBasedAttack):
@@ -23,7 +23,7 @@ class NodeMembershipInference (ModelBasedAttack):
         self.num_nodes_per_class = num_nodes_per_class
         self.retain_target_data = retain_target_data
 
-    def execute(self, method: NodeClassificationBase, data: Data) -> Metrics:
+    def execute(self, method: NodeClassification, data: Data) -> Metrics:
         attack_metrics = super().execute(method, data)
         return {
             **self.target_metrics,
@@ -31,7 +31,7 @@ class NodeMembershipInference (ModelBasedAttack):
             **attack_metrics,
         }
 
-    def prepare_attack_dataset(self, method: NodeClassificationBase, data: Data) -> Data:
+    def prepare_attack_dataset(self, method: NodeClassification, data: Data) -> Data:
         # split data into target and shadow dataset
         target_data, shadow_data = self.target_shadow_split(data)
 

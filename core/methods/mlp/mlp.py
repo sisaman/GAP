@@ -2,12 +2,12 @@ import torch
 from typing import Annotated, Literal, Union
 from torch.utils.data import TensorDataset, DataLoader
 from torch_geometric.data import Data
-from core.methods.base import NodeClassificationBase
+from core.methods.base import NodeClassification
 from core.classifiers import MLPClassifier
 from core.classifiers.base import Stage
 
 
-class MLP (NodeClassificationBase):
+class MLP (NodeClassification):
     """Non-private MLP method"""
 
     supported_activations = {
@@ -26,7 +26,7 @@ class MLP (NodeClassificationBase):
                  batch_size:      Annotated[Union[Literal['full'], int],   
                                                    dict(help='batch size, or "full" for full-batch training')] = 'full',
                  full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
-                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[NodeClassificationBase])]
+                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[NodeClassification])]
                  ):
 
         assert num_layers > 1, 'number of layers must be greater than 1'

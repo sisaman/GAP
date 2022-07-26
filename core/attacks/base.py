@@ -5,7 +5,7 @@ from torchmetrics.functional import auroc
 from core.args.utils import remove_prefix
 from core.console import console
 from core.classifiers.base import Metrics
-from core.methods.base import NodeClassificationBase
+from core.methods.base import NodeClassification
 from core.methods.mlp import MLP
 
 
@@ -16,7 +16,7 @@ class ModelBasedAttack(MLP, ABC):
             **remove_prefix(kwargs, prefix='attack_'),
         )
 
-    def execute(self, method: NodeClassificationBase, data: Data) -> Metrics:
+    def execute(self, method: NodeClassification, data: Data) -> Metrics:
         # construct attack dataset
         attack_data = self.prepare_attack_dataset(method, data)
         console.debug(f'attack dataset: {attack_data.train_mask.sum()} train nodes, {attack_data.val_mask.sum()} val nodes, {attack_data.test_mask.sum()} test nodes')
@@ -33,4 +33,4 @@ class ModelBasedAttack(MLP, ABC):
         return attack_metrics
 
     @abstractmethod
-    def prepare_attack_dataset(self, method: NodeClassificationBase, data: Data) -> Data: pass
+    def prepare_attack_dataset(self, method: NodeClassification, data: Data) -> Data: pass

@@ -2,12 +2,12 @@ import torch
 from typing import Annotated, Literal, Union
 from torch_geometric.data import Data
 from torch_geometric.loader import NeighborLoader
-from core.methods.base import NodeClassificationBase
+from core.methods.base import NodeClassification
 from core.classifiers import GraphSAGEClassifier
 from core.classifiers.base import Stage
 
 
-class SAGE (NodeClassificationBase):
+class SAGE (NodeClassification):
     """Non-private GraphSAGE method"""
     
     supported_activations = {
@@ -28,7 +28,7 @@ class SAGE (NodeClassificationBase):
                  batch_size:      Annotated[Union[Literal['full'], int],   
                                                    dict(help='batch size, or "full" for full-batch training')] = 'full',
                  full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
-                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[NodeClassificationBase])]
+                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[NodeClassification])]
                  ):
 
         assert mp_layers >= 1, 'number of message-passing layers must be at least 1'

@@ -25,7 +25,7 @@ class MethodBase(ABC):
         """Predict the labels for the given data, or the training data if data is None."""
 
 
-class NodeClassificationBase(MethodBase):
+class NodeClassification(MethodBase):
     def __init__(self, 
                  num_classes:    int, 
                  epochs:         Annotated[int,   dict(help='number of epochs for training')] = 100,
@@ -61,12 +61,14 @@ class NodeClassificationBase(MethodBase):
         self.data = None
 
     def fit(self, data: Data, prefix: str = '') -> Metrics:
+        """Fit the model to the given data."""
         self.data = data.to(self.device, non_blocking=True)
         train_metrics = self._train(self.data, prefix=prefix)
         test_metrics = self.test(self.data, prefix=prefix)
         return {**train_metrics, **test_metrics}
 
     def test(self, data: Optional[Data] = None, prefix: str = '') -> Metrics:
+        """Predict the labels for the given data, or the training data if data is None."""
         if data is None:
             data = self.data
         
@@ -80,6 +82,7 @@ class NodeClassificationBase(MethodBase):
         return test_metics
 
     def predict(self, data: Optional[Data] = None) -> Tensor:
+        """Predict the labels for the given data, or the training data if data is None."""
         if data is None:
             data = self.data
 

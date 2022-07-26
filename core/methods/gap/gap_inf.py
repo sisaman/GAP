@@ -6,12 +6,12 @@ from torch.utils.data import TensorDataset, DataLoader
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
 from core.console import console
-from core.methods.base import NodeClassificationBase
+from core.methods.base import NodeClassification
 from core.classifiers import Encoder, MultiMLPClassifier
 from core.classifiers.base import Metrics, Stage
 
 
-class GAP (NodeClassificationBase):
+class GAP (NodeClassification):
     """Non-private GAP method"""
 
     supported_activations = {
@@ -35,7 +35,7 @@ class GAP (NodeClassificationBase):
                                                    dict(help='batch size, or "full" for full-batch training')] = 'full',
                  full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
                  encoder_epochs:  Annotated[int,   dict(help='number of epochs for encoder pre-training (ignored if encoder_layers=0)')] = 100,
-                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[NodeClassificationBase])]
+                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[NodeClassification])]
                  ):
 
         super().__init__(num_classes, **kwargs)
