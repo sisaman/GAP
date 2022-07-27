@@ -3,6 +3,7 @@ import numpy as np
 from scipy.stats import hypergeom
 from opacus.grad_sample import GradSampleModule
 from opacus.optimizers import DPOptimizer
+from opacus.privacy_engine import forbid_accumulation_hook
 from torch.nn import Module
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
@@ -59,7 +60,11 @@ class GNNBasedNoisySGD(NoisyMechanism):
 
     def prepare_module(self, module: T) -> T:
         if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
-            GradSampleModule(module)
+            if hasattr(module, 'autograd_grad_sample_hooks'):
+                for hook in module.autograd_grad_sample_hooks:
+                    hook.remove()
+                del module.autograd_grad_sample_hooks
+            GradSampleModule(module).register_backward_hook(forbid_accumulation_hook)
         return module
 
     def prepare_dataloader(self, dataloader: DataLoader) -> DataLoader:
