@@ -2,6 +2,7 @@ from typing import Annotated
 import torch
 import torch.nn.functional as F
 from torch import Tensor
+from torch.distributions import Categorical
 from torch_geometric.data import Data
 from core.attacks.base import ModelBasedAttack
 from core.classifiers.base import Metrics
@@ -79,8 +80,8 @@ class NodeMembershipInference (ModelBasedAttack):
         perm = torch.randperm(num_test, device=self.device)[:num_half]
         neg_samples = samples[data.test_mask][perm]
 
-        pos_entropy = torch.distributions.Categorical(probs=pos_samples[:, :num_classes]).entropy().mean()
-        neg_entropy = torch.distributions.Categorical(probs=neg_samples[:, :num_classes]).entropy().mean()
+        pos_entropy = Categorical(probs=pos_samples[:, :num_classes]).entropy().mean()
+        neg_entropy = Categorical(probs=neg_samples[:, :num_classes]).entropy().mean()
 
         console.debug(f'pos_entropy: {pos_entropy:.4f}, neg_entropy: {neg_entropy:.4f}')
 
