@@ -47,11 +47,11 @@ def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
 
     ### run experiment ###
     for iteration in range(repeats):
-        data = Data(**data_initial.to_dict())
         start_time = time()
+        data = Data(**data_initial.to_dict())
         metrics = method.fit(data)
         end_time = time()
-        metrics['fit_time'] = end_time - start_time
+        metrics['duration'] = end_time - start_time
 
         ### process results ###
         for metric, value in metrics.items():
