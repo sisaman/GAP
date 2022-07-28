@@ -42,8 +42,8 @@ def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
 
     ### initiallize method ###
     Method = supported_methods[kwargs.pop('method')]
-    method_args = strip_kwargs(Method, kwargs, prefix='target_')
-    method_args = remove_prefix(method_args, prefix='target_')
+    method_args = strip_kwargs(Method, kwargs, prefix='shadow_')
+    method_args = remove_prefix(method_args, prefix='shadow_')
     method: NodeClassification = Method(num_classes=num_classes, **method_args)
 
     ### initialize attack ###
@@ -121,7 +121,7 @@ def main():
 
             # target method args
             group_method = attack_parser.add_argument_group('method arguments')
-            create_arguments(method_class, group_method, prefix='target_')
+            create_arguments(method_class, group_method, prefix='shadow_')
 
             # attack method args
             group_attack = attack_parser.add_argument_group('attack arguments')
