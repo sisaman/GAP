@@ -9,7 +9,12 @@ from core.methods.base import NodeClassification
 from core.methods.mlp import MLP
 
 
-class ModelBasedAttack(MLP, ABC):
+class AttackBase(ABC):
+    @abstractmethod
+    def execute(self, method: NodeClassification, data: Data) -> Metrics: pass
+
+
+class ModelBasedAttack(MLP, AttackBase):
     def __init__(self, **kwargs:  Annotated[dict, dict(help='attack method kwargs', bases=[MLP], prefixes=['attack_'], exclude=['device', 'use_amp'])]):
         super().__init__(
             num_classes=2,  # either member or non-member
