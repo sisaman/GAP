@@ -1,14 +1,15 @@
+import math
 from typing import Callable, Iterable, Literal, get_args
 import torch
 from torch import Tensor
 import torch.nn.functional as F
-from torch.nn import ModuleList, BatchNorm1d
+from torch.nn import ModuleList, LazyBatchNorm1d, Parameter
 from core.classifiers.mlp import MLPClassifier
 from core.models import MLP
 
 
 class MultiMLPClassifier(MLPClassifier):
-    CombType = Literal['cat', 'sum', 'max', 'mean']
+    CombType = Literal['cat', 'sum', 'max', 'mean', 'att']
     supported_combinations = get_args(CombType)
 
     def __init__(self, 
@@ -43,11 +44,15 @@ class MultiMLPClassifier(MLPClassifier):
             )] * num_inputs
         )
 
+        self.bn = LazyBatchNorm1d() if batch_norm else False
         self.combination = combination
-        self.bn = BatchNorm1d(hidden_dim * num_inputs) if batch_norm else False
+        if combination == 'att':
+            self.hidden_dim = hidden_dim
+            self.num_heads = 4
+            self.Q = Parameter(torch.randn(self.num_heads, hidden_dim))
 
     def forward(self, x_stack: Tensor) -> Tensor:
-        x_stack = x_stack.permute(2, 0, 1) # (hop, batch, input_dim)
+        x_stack = x_stack.permute(2, 0, 1) # (hop, node, input_dim)
         h_list = [mlp(x) for x, mlp in zip(x_stack, self.base_mlps)]
         h = self.combine(h_list)
         h = F.normalize(h, p=2, dim=-1)
@@ -66,10 +71,17 @@ class MultiMLPClassifier(MLPClassifier):
             return torch.stack(h_list, dim=0).mean(dim=0)
         elif self.combination == 'max':
             return torch.stack(h_list, dim=0).max(dim=0).values
+        elif self.combination == 'att':
+            H = torch.stack(h_list, dim=0)
+            W = F.leaky_relu(torch.einsum('knd,hd->knh', H, self.Q), 0.2).softmax(dim=0)
+            out = torch.einsum('knd,knh->ndh', H, W).view(-1, self.hidden_dim * self.num_heads)
+            return out
         else:
             raise ValueError(f'Unknown combination type {self.combination}')
 
     def reset_parameters(self):
         if self.bn: self.bn.reset_parameters()
         for mlp in self.base_mlps: mlp.reset_parameters()
+        if self.combination == 'att':
+            torch.nn.init.kaiming_uniform_(self.Q, a=math.sqrt(5))
         super().reset_parameters()
