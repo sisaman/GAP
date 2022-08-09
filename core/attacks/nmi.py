@@ -15,30 +15,40 @@ class NodeMembershipInference (ModelBasedAttack):
     """node membership inference attack"""
 
     def __init__(self, 
+                 test_on_target:        Annotated[bool, dict(help='whether to test the attack model on the data from target model')] = False,
                  num_nodes_per_class:   Annotated[int,  dict(help='number of nodes per class in both target and shadow datasets')] = 1000,
                  **kwargs:              Annotated[dict,  dict(help='extra options passed to base class', bases=[ModelBasedAttack])]
                  ):
 
         super().__init__(**kwargs)
+        self.test_on_target = test_on_target
         self.num_nodes_per_class = num_nodes_per_class
 
     def execute(self, method: NodeClassification, data: Data) -> Metrics:
         attack_metrics = super().execute(method, data)
-        return {
-            **self.shadow_metrics,
-            **attack_metrics,
-        }
+        attack_metrics = self.shadow_metrics | attack_metrics
+        if self.test_on_target:
+            attack_metrics = self.target_metrics | attack_metrics
+        return attack_metrics
 
     def prepare_attack_dataset(self, method: NodeClassification, data: Data) -> Data:
+        if self.test_on_target:
+            # train target model and obtain confidence scores
+            console.info('training target model')
+            method.reset_parameters()
+            target_data = Data(**data.to_dict())
+            self.target_metrics = method.fit(Data(**target_data.to_dict()), prefix='target/')
+            target_scores = method.predict()
+            target_data, target_scores = target_data.to('cpu'), target_scores.to('cpu')
+
+        # train shadow model and obtain confidence scores
+        console.info('training shadow model')
+        method.reset_parameters()
         shadow_data = RandomDataSplit(
             num_nodes_per_class=self.num_nodes_per_class,
             train_ratio=0.4,
             test_ratio=0.4
         )(data)
-
-        # train shadow model and obtain confidence scores
-        console.info('training shadow model')
-        method.reset_parameters()
         self.shadow_metrics = method.fit(Data(**shadow_data.to_dict()), prefix='shadow/')
         shadow_scores = method.predict()
         shadow_data, shadow_scores = shadow_data.to('cpu'), shadow_scores.to('cpu')
@@ -46,12 +56,19 @@ class NodeMembershipInference (ModelBasedAttack):
         # get attack data from shadow data and scores
         console.debug('preparing attack dataset')
         x, y = self.generate_attack_samples(data=shadow_data, scores=shadow_scores)
+
+        if self.test_on_target:
+            x_test, y_test = self.generate_attack_samples(data=target_data, scores=target_scores)
+            x = torch.cat([x, x_test], dim=0)
+            y = torch.cat([y, y_test], dim=0)
+            num_test = x_test.size(0)
+            num_train = int((x.size(0) - num_test) * 0.8)
+        else:
+            num_train = int(x.size(0) * 0.6)
+            num_test = int(x.size(0) * 0.3)
         
         # train test split
         num_total = x.size(0)
-        num_train = int(num_total * 0.6)
-        num_test = int(num_total * 0.3)
-        
         train_mask = y.new_zeros(num_total, dtype=torch.bool)
         train_mask[:num_train] = True
 
