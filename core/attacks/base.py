@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Annotated
+import torch
 from torch_geometric.data import Data
-from torchmetrics.functional import auroc
+from torchmetrics.functional import auroc, roc
 from core.args.utils import remove_prefix
 from core.console import console
 from core.classifiers.base import Metrics
@@ -14,11 +15,11 @@ class AttackBase(ABC):
     def execute(self, method: NodeClassification, data: Data) -> Metrics: pass
 
 
-class ModelBasedAttack(MLP, AttackBase):
+class ModelBasedAttack(AttackBase):
     def __init__(self, **kwargs:  Annotated[dict, dict(help='attack method kwargs', bases=[MLP], prefixes=['attack_'], exclude=['device', 'use_amp'])]):
-        super().__init__(
-            num_classes=2,  # either member or non-member
-            **remove_prefix(kwargs, prefix='attack_'),
+        self.attack_model = MLP(
+            num_classes=2, # either member or non-member
+            **remove_prefix(kwargs, 'attack_')
         )
 
     def execute(self, method: NodeClassification, data: Data) -> Metrics:
@@ -28,12 +29,15 @@ class ModelBasedAttack(MLP, AttackBase):
 
         # train attack model and get attack accuracy
         console.info('step 3: training attack model')
-        attack_metrics = self.fit(attack_data, prefix='attack/')
+        self.attack_model.reset_parameters()
+        attack_metrics = self.attack_model.fit(attack_data, prefix='attack/')
         
         # compute extra attack metrics
-        preds = self.predict()[attack_data.test_mask, 1]
+        preds = self.attack_model.predict()[attack_data.test_mask, 1]
         target = attack_data.y[attack_data.test_mask]
         attack_metrics['attack/test/auc'] = auroc(preds=preds, target=target).item() * 100
+        fpr, tpr, _ = roc(preds=preds, target=target)
+        attack_metrics['attack/test/tpr@0.01fpr'] = tpr[torch.where(fpr<=.01)[0][-1]].item() * 100
 
         return attack_metrics
 

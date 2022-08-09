@@ -79,10 +79,6 @@ def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
         console.info(table)
         console.print()
 
-        # reset method's parameters for the next run
-        method.reset_parameters()
-        attack.reset_parameters()
-
     logger.enable()
     summary = {}
     

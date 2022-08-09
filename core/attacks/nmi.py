@@ -43,7 +43,7 @@ class NodeMembershipInference (ModelBasedAttack):
         shadow_scores = method.predict()
         shadow_data, shadow_scores = shadow_data.to('cpu'), shadow_scores.to('cpu')
         
-        # get train+val data from shadow data
+        # get attack data from shadow data and scores
         console.debug('preparing attack dataset')
         x, y = self.generate_attack_samples(data=shadow_data, scores=shadow_scores)
         
@@ -66,6 +66,7 @@ class NodeMembershipInference (ModelBasedAttack):
         return attack_data
         
     def generate_attack_samples(self, data: Data, scores: Tensor) -> tuple[Tensor, Tensor]:
+        device = scores.device
         num_classes = scores.size(-1)
         num_train = data.train_mask.sum()
         num_test = data.test_mask.sum()
@@ -74,10 +75,10 @@ class NodeMembershipInference (ModelBasedAttack):
         labels = F.one_hot(data.y, num_classes).float()
         samples = torch.cat([scores, labels], dim=1)
 
-        perm = torch.randperm(num_train, device=self.device)[:num_half]
+        perm = torch.randperm(num_train, device=device)[:num_half]
         pos_samples = samples[data.train_mask][perm]
 
-        perm = torch.randperm(num_test, device=self.device)[:num_half]
+        perm = torch.randperm(num_test, device=device)[:num_half]
         neg_samples = samples[data.test_mask][perm]
 
         pos_entropy = Categorical(probs=pos_samples[:, :num_classes]).entropy().mean()
@@ -87,12 +88,12 @@ class NodeMembershipInference (ModelBasedAttack):
 
         x = torch.cat([neg_samples, pos_samples], dim=0)
         y = torch.cat([
-            torch.zeros(num_half, dtype=torch.long, device=self.device),
-            torch.ones(num_half, dtype=torch.long, device=self.device),
+            torch.zeros(num_half, dtype=torch.long, device=device),
+            torch.ones(num_half, dtype=torch.long, device=device),
         ])
 
         # shuffle data
-        perm = torch.randperm(2 * num_half, device=self.device)
+        perm = torch.randperm(2 * num_half, device=device)
         x, y = x[perm], y[perm]
 
         return x, y
