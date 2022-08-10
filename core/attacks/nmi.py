@@ -83,7 +83,6 @@ class NodeMembershipInference (ModelBasedAttack):
         return attack_data
         
     def generate_attack_samples(self, data: Data, scores: Tensor) -> tuple[Tensor, Tensor]:
-        device = scores.device
         num_classes = scores.size(-1)
         num_train = data.train_mask.sum()
         num_test = data.test_mask.sum()
@@ -91,6 +90,7 @@ class NodeMembershipInference (ModelBasedAttack):
 
         labels = F.one_hot(data.y, num_classes).float()
         samples = torch.cat([scores, labels], dim=1)
+        device = samples.device
 
         perm = torch.randperm(num_train, device=device)[:num_half]
         pos_samples = samples[data.train_mask][perm]
