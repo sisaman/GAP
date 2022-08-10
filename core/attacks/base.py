@@ -16,7 +16,7 @@ class AttackBase(ABC):
 
 
 class ModelBasedAttack(AttackBase):
-    def __init__(self, **kwargs:  Annotated[dict, dict(help='attack method kwargs', bases=[MLP], prefixes=['attack_'], exclude=['device'])]):
+    def __init__(self, **kwargs:  Annotated[dict, dict(help='attack method kwargs', bases=[MLP], prefixes=['attack_'])]):
         self.attack_model = MLP(
             num_classes=2, # either member or non-member
             **remove_prefix(kwargs, 'attack_')
