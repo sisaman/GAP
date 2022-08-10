@@ -27,7 +27,14 @@ class NodePrivSAGE (SAGE):
                  **kwargs:      Annotated[dict,  dict(help='extra options passed to base class', bases=[SAGE], exclude=['batch_norm', 'mp_layers', 'val_interval'])]
                  ):
 
-        super().__init__(num_classes, mp_layers=1, batch_size=batch_size, batch_norm=False, **kwargs)
+        super().__init__(
+            num_classes=num_classes, 
+            batch_size=batch_size, 
+            batch_norm=False, 
+            mp_layers=1, 
+            val_interval=0,
+            **kwargs
+        )
         self.epsilon = epsilon
         self.delta = delta
         self.max_degree = max_degree
@@ -35,7 +42,6 @@ class NodePrivSAGE (SAGE):
         
         self.num_train_nodes = None         # will be used to auto set delta
         self.classifier.normalize = True    # required to bound sensitivity
-        self.trainer.val_interval = 0       # disable validation
 
     def calibrate(self):
         self.noisy_sgd = GNNBasedNoisySGD(
