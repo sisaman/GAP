@@ -3,7 +3,6 @@ import uuid
 import torch
 from torch.types import Number
 from torch.optim import Optimizer
-from torch.cuda.amp import GradScaler
 from typing import Annotated, Iterable, Literal, Optional
 from core.classifiers.base import ClassifierBase
 from core.loggers import Logger
@@ -18,25 +17,21 @@ class Trainer:
                  monitor:       str = 'val/acc',
                  monitor_mode:  Literal['min', 'max'] = 'max',
                  val_interval:  Annotated[int,   dict(help='interval of validation')] = 1,
-                 use_amp:       Annotated[bool,  dict(help='use automatic mixed precision training')] = False,
                  ):
 
         assert monitor_mode in ['min', 'max']
 
         self.patience = patience
         self.val_interval = val_interval
-        self.use_amp = use_amp
         self.monitor = monitor
         self.monitor_mode = monitor_mode
         
         # trainer internal state
         self.model: ClassifierBase = None
-        self.scaler = GradScaler(enabled=self.use_amp)
         self.metrics: dict[str, MeanMetric] = {}
 
     def reset(self):
         self.model: ClassifierBase = None
-        self.scaler = GradScaler(enabled=self.use_amp)
         self.metrics = {}
 
     def update_metrics(self, metric_name: str, metric_value: object, weight: int = 1) -> None:
@@ -171,15 +166,13 @@ class Trainer:
         if stage == 'train':
             self.optimizer.zero_grad(set_to_none=True)
 
-        with torch.cuda.amp.autocast(enabled=self.use_amp):
-            prev = torch.is_grad_enabled()
-            torch.set_grad_enabled(stage == 'train')
-            loss, metrics = self.model.step(batch, stage=stage)
-            torch.set_grad_enabled(prev)
+        grad_state = torch.is_grad_enabled()
+        torch.set_grad_enabled(stage == 'train')
+        loss, metrics = self.model.step(batch, stage=stage)
+        torch.set_grad_enabled(grad_state)
         
         if stage == 'train' and loss is not None:
-            self.scaler.scale(loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+            loss.backward()
+            self.optimizer.step()
 
         return {f'{prefix}{stage}/{key}': value for key, value in metrics.items()}
