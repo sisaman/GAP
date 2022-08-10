@@ -2,12 +2,12 @@ from core.console import console
 with console.status('importing modules'):
     import torch
     import numpy as np
-    import core.globals
     from rich import box
     from rich.table import Table
     from time import time
     from typing import Annotated
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+    from core.globals import registry
     from core.datasets import DatasetLoader
     from core.args.utils import print_args, create_arguments, strip_kwargs
     from core.loggers import Logger
@@ -26,7 +26,7 @@ def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
 
     if debug:
         console.info('debug mode enabled')
-        core.globals.DEBUG_MODE = True
+        registry['debug'] = True
         console.log_level = console.DEBUG
 
     with console.status('loading dataset'):

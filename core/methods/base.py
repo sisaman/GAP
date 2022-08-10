@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import Annotated, Iterable, Optional
 import torch
-import core.globals
 from torch import Tensor
 from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
+from core.globals import registry
 from core.classifiers.base import ClassifierBase, Metrics, Stage
 from core.console import console
 from core.trainer import Trainer
@@ -99,7 +99,7 @@ class NodeClassification(MethodBase):
             optimizer=self.configure_optimizer(),
             train_dataloader=self.data_loader(data, 'train'), 
             val_dataloader=self.data_loader(data, 'val'),
-            test_dataloader=self.data_loader(data, 'test') if core.globals.DEBUG_MODE else None,
+            test_dataloader=self.data_loader(data, 'test') if registry['debug'] else None,
             checkpoint=True,
             prefix=prefix,
         )

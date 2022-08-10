@@ -1,2 +1,4 @@
-DEBUG_MODE = False
-logger = None
+registry = {
+    'debug': False,
+    'device': 'cpu'
+}
