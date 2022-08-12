@@ -12,7 +12,8 @@ with console.status('importing modules'):
     from core.args.utils import print_args, strip_kwargs, create_arguments, remove_prefix
     from core.loggers import Logger
     from core.methods import supported_methods, NodeClassification
-    from core.attacks import supported_attacks, ModelBasedAttack
+    from core.attacks import supported_attacks
+    from core.attacks.base import AttackBase
     from core.utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
 
@@ -49,7 +50,7 @@ def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
     ### initialize attack ###
     Attack = supported_attacks[kwargs['attack']]
     attack_args = strip_kwargs(Attack, kwargs)
-    attack: ModelBasedAttack = Attack(**attack_args)
+    attack: AttackBase = Attack(**attack_args)
 
     run_metrics = {}
 
