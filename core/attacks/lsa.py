@@ -63,7 +63,7 @@ class LinkStealingAttack (ModelBasedAttack):
         x = self.encode(data, attack_edge_index)
         y = torch.cat([
             torch.ones(num_half, dtype=torch.long, device=device),
-            torch.zeros(num_half, dtype=torch.long, device=device),          # FIXME: zeros and ones should be flipped
+            torch.zeros(num_half, dtype=torch.long, device=device),
         ])
 
         # shuffle data
@@ -73,7 +73,7 @@ class LinkStealingAttack (ModelBasedAttack):
 
         # train test split
         num_train = int(num_total * 0.5)
-        num_test = int(num_total * 0.4)                                     # FIXME: change train val test ratio to 0.6, 0.2, 0.2
+        num_test = int(num_total * 0.4)
         
         train_mask = y.new_zeros(num_total, dtype=torch.bool)
         train_mask[:num_train] = True
