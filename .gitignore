@@ -128,5 +128,5 @@ build.ninja
 /test
 /checkpoints
 TODO
-/test_*
+/__test*
 /figs
