@@ -95,7 +95,7 @@ class TrainerProgress(Progress):
             self.max_rows = max(self.max_rows, table.row_count)
             pad_top = 0 if epoch_task.finished else self.max_rows - table.row_count
             group = Group(table, Padding(Text(metrics), pad=(pad_top,0,0,2)))
-            return Padding(group, pad=(0,0,1,18))
+            return Padding(group, pad=(0,0,1,21))
 
         else:
             return table
