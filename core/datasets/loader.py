@@ -8,9 +8,10 @@ from core.console import console
 from rich.table import Table
 from torch_geometric.data import Data
 from torch_geometric.datasets import Reddit
-from torch_geometric.transforms import Compose, RemoveIsolatedNodes, ToSparseTensor, RandomNodeSplit
+from torch_geometric.transforms import Compose, ToSparseTensor, RandomNodeSplit
 from core.data.transforms import FilterClassByCount
 from core.data.transforms import RemoveSelfLoops
+from core.data.transforms import RemoveIsolatedNodes
 from core.datasets import Facebook
 from core.datasets import Amazon
 
