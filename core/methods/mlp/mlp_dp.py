@@ -1,12 +1,12 @@
 import numpy as np
 from typing import Annotated, Literal, Union
 from torch.optim import Optimizer
-from torch.utils.data import DataLoader
 from torch_geometric.data import Data
 from core.console import console
 from core.methods.mlp.mlp import MLP
 from core.privacy.algorithms.noisy_sgd import NoisySGD
 from core.classifiers.base import Metrics, Stage
+from core.data.loader import NodeDataLoader
 
 
 class PrivMLP (MLP):
@@ -61,10 +61,10 @@ class PrivMLP (MLP):
 
         return super().fit(data, prefix=prefix)
 
-    def data_loader(self, data: Data, stage: Stage) -> DataLoader:
+    def data_loader(self, data: Data, stage: Stage) -> NodeDataLoader:
         dataloader = super().data_loader(data, stage)
         if stage == 'train':
-            dataloader = self.noisy_sgd.prepare_dataloader(dataloader)
+            dataloader.poisson_sampling = True
         return dataloader
 
     def configure_optimizer(self) -> Optimizer:

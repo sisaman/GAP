@@ -1,14 +1,13 @@
 import torch
-from typing import Annotated, Literal, Optional, Union
+from typing import Annotated, Optional
 import torch.nn.functional as F
 from torch.optim import Adam, SGD, Optimizer
-from torch.utils.data import TensorDataset, DataLoader
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
 from core.console import console
 from core.methods.base import NodeClassification
 from core.classifiers import Encoder, MultiMLPClassifier
-from core.classifiers.base import Metrics, Stage
+from core.classifiers.base import Metrics
 
 
 class GAP (NodeClassification):
@@ -31,9 +30,6 @@ class GAP (NodeClassification):
                  activation:      Annotated[str,   dict(help='type of activation function', choices=supported_activations)] = 'selu',
                  dropout:         Annotated[float, dict(help='dropout rate')] = 0.0,
                  batch_norm:      Annotated[bool,  dict(help='if true, then model uses batch normalization')] = True,
-                 batch_size:      Annotated[Union[Literal['full'], int],   
-                                                   dict(help='batch size, or "full" for full-batch training')] = 'full',
-                 full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
                  encoder_epochs:  Annotated[int,   dict(help='number of epochs for encoder pre-training (ignored if encoder_layers=0)')] = 100,
                  **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[NodeClassification])]
                  ):
@@ -47,8 +43,6 @@ class GAP (NodeClassification):
         self.hops = hops
         self.encoder_layers = encoder_layers
         self.encoder_epochs = encoder_epochs
-        self.batch_size = batch_size
-        self.full_batch_eval = full_batch_eval
         activation_fn = self.supported_activations[activation]
 
         self._encoder = Encoder(
@@ -151,19 +145,6 @@ class GAP (NodeClassification):
 
             data.x = torch.stack(x_list, dim=-1)
         return data
-
-    def data_loader(self, data, stage: Stage) -> DataLoader:
-        mask = data[f'{stage}_mask']
-        x = data.x[mask]
-        y = data.y[mask]
-        if self.batch_size == 'full' or (stage != 'train' and self.full_batch_eval):
-            return [(x, y)]
-        else:
-            return DataLoader(
-                dataset=TensorDataset(x, y),
-                batch_size=self.batch_size, 
-                shuffle=True
-            )
 
     def configure_encoder_optimizer(self) -> Optimizer:
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]

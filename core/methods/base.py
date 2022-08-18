@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Annotated, Iterable, Optional
+from typing import Annotated, Literal, Optional, Union
 import torch
 from torch import Tensor
 from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
+from core.data.loader import NodeDataLoader
 from core.globals import registry
 from core.classifiers.base import ClassifierBase, Metrics, Stage
 from core.console import console
@@ -27,13 +28,16 @@ class MethodBase(ABC):
 
 class NodeClassification(MethodBase):
     def __init__(self, 
-                 num_classes:    int, 
-                 epochs:         Annotated[int,   dict(help='number of epochs for training')] = 100,
-                 optimizer:      Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
-                 learning_rate:  Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
-                 weight_decay:   Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
-                 device:         Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
-                 **trainer_args: Annotated[dict,  dict(help='extra options passed to the trainer class', bases=[Trainer])]
+                 num_classes:     int, 
+                 epochs:          Annotated[int,   dict(help='number of epochs for training')] = 100,
+                 optimizer:       Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
+                 learning_rate:   Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
+                 weight_decay:    Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
+                 batch_size:      Annotated[Union[Literal['full'], int],   
+                                                   dict(help='batch size, or "full" for full-batch training')] = 'full',
+                 full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
+                 device:          Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
+                 **trainer_args:  Annotated[dict,  dict(help='extra options passed to the trainer class', bases=[Trainer])]
                  ):
 
         self.num_classes = num_classes
@@ -41,6 +45,8 @@ class NodeClassification(MethodBase):
         self.optimizer_name = optimizer
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
+        self.batch_size = batch_size
+        self.full_batch_eval = full_batch_eval
         self.device = device
 
         if self.device == 'cuda' and not torch.cuda.is_available():
@@ -118,6 +124,17 @@ class NodeClassification(MethodBase):
         Optim = {'sgd': SGD, 'adam': Adam}[self.optimizer_name]
         return Optim(self.classifier.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
 
-    @abstractmethod
-    def data_loader(self, data: Data, stage: Stage) -> Iterable:
+    def data_loader(self, data: Data, stage: Stage) -> NodeDataLoader:
         """Return a dataloader for the given stage."""
+        
+        batch_size = 'full' if (stage != 'train' and self.full_batch_eval) else self.batch_size
+        dataloader = NodeDataLoader(
+            data=data, 
+            stage=stage,
+            batch_size=batch_size, 
+            shuffle=(stage == 'train'), 
+            drop_last=True,
+            poisson_sampling=False,
+        )
+
+        return dataloader

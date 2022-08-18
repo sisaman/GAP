@@ -26,8 +26,9 @@ class MLPClassifier(MLP, ClassifierBase):
             batch_norm=batch_norm,
         )
 
-    def step(self, batch: tuple[Tensor, Tensor], stage: Stage) -> tuple[Optional[Tensor], Metrics]:
-        x, y = batch
+    def step(self, data: Data, stage: Stage) -> tuple[Optional[Tensor], Metrics]:
+        mask = data[f'{stage}_mask']
+        x, y = data.x[mask], data.y[mask]
         preds = F.log_softmax(self(x), dim=-1)
         acc = preds.argmax(dim=1).eq(y).float().mean() * 100
         metrics = {'acc': acc}

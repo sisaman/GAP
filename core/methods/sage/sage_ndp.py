@@ -3,8 +3,8 @@ from typing import Annotated, Optional, Union, Literal
 import torch
 from torch.optim import Optimizer
 from torch_geometric.data import Data
-from torch_geometric.loader import NeighborLoader
 from core.console import console
+from core.data.loader import NodeDataLoader
 from core.data.transforms import BoundDegree
 from core.methods.sage.sage_inf import SAGE
 from core.classifiers.base import Metrics, Stage
@@ -104,10 +104,10 @@ class NodePrivSAGE (SAGE):
             data = self.sample_neighbors(data)
         return super().predict(data)
 
-    def data_loader(self, data: Data, stage: Stage) -> NeighborLoader:
+    def data_loader(self, data: Data, stage: Stage) -> NodeDataLoader:
         dataloader = super().data_loader(data, stage)
         if stage == 'train':
-            dataloader = self.noisy_sgd.prepare_dataloader(dataloader)
+            dataloader.poisson_sampling = True
         return dataloader
 
     def configure_optimizer(self) -> Optimizer:

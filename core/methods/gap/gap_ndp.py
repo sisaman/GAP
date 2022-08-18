@@ -5,7 +5,7 @@ from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
 from opacus.optimizers import DPOptimizer
 from core.console import console
-from core.data.loader.poisson import PoissonDataLoader
+from core.data.loader import NodeDataLoader
 from core.methods.gap import GAP
 from core.privacy.mechanisms import ComposedNoisyMechanism
 from core.privacy.algorithms import PMA, NoisySGD
@@ -79,7 +79,7 @@ class NodePrivGAP (GAP):
         self._classifier = self.classifier_noisy_sgd.prepare_module(self._classifier)
 
     def fit(self, data: Data, prefix: str = '') -> Metrics:
-        num_train_nodes = len(self.data_loader(data, 'train').dataset)
+        num_train_nodes = data.train_mask.sum().item()
 
         if num_train_nodes != self.num_train_nodes:
             self.num_train_nodes = num_train_nodes
@@ -97,10 +97,10 @@ class NodePrivGAP (GAP):
         x = self.pma_mechanism(x, sensitivity=np.sqrt(self.max_degree))
         return x
 
-    def data_loader(self, data: Data, stage: Stage) -> PoissonDataLoader:
+    def data_loader(self, data: Data, stage: Stage) -> NodeDataLoader:
         dataloader = super().data_loader(data, stage)
         if stage == 'train':
-            dataloader = PoissonDataLoader(dataset=dataloader.dataset, batch_size=self.batch_size)
+            dataloader.poisson_sampling = True
         return dataloader
 
     def configure_optimizer(self) -> DPOptimizer:

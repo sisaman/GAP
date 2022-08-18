@@ -5,8 +5,7 @@ from opacus.optimizers import DPOptimizer
 from autodp.transformer_zoo import Composition, AmplificationBySampling
 from torch.nn import Module
 from torch.optim import Optimizer
-from torch.utils.data import DataLoader
-from core.data.loader.poisson import PoissonDataLoader
+from core.data.loader import NodeDataLoader
 from core.privacy.mechanisms.commons import GaussianMechanism, InfMechanism, ZeroMechanism
 from core.privacy.mechanisms.noisy import NoisyMechanism
 
@@ -38,7 +37,7 @@ class NoisySGD(NoisyMechanism):
         
         self.set_all_representation(mech)
 
-    def __call__(self, module: T, optimizer: Optimizer, dataloader: DataLoader) -> tuple[T, Optimizer, DataLoader]:
+    def __call__(self, module: T, optimizer: Optimizer, dataloader: NodeDataLoader) -> tuple[T, Optimizer, NodeDataLoader]:
         module = self.prepare_module(module)
         dataloader = self.prepare_dataloader(dataloader)
         optimizer = self.prepare_optimizer(optimizer)
@@ -53,12 +52,9 @@ class NoisySGD(NoisyMechanism):
             GradSampleModule(module).register_backward_hook(forbid_accumulation_hook)
         return module
 
-    def prepare_dataloader(self, dataloader: DataLoader) -> DataLoader:
+    def prepare_dataloader(self, dataloader: NodeDataLoader) -> NodeDataLoader:
         if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
-            dataloader = PoissonDataLoader(
-                dataset=dataloader.dataset, 
-                batch_size=self.params['batch_size']
-            )
+            dataloader.poisson_sampling = True
         return dataloader
 
     def prepare_optimizer(self, optimizer: Optimizer) -> DPOptimizer:

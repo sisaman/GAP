@@ -1,1 +1,1 @@
-from core.data.loader.poisson import PoissonDataLoader
+from core.data.loader.node import NodeDataLoader
