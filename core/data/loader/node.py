@@ -2,7 +2,7 @@ from typing import Literal, Union
 import torch
 from collections.abc import Iterator
 from torch_geometric.data import Data
-from core.classifiers.base import Stage
+from core.modules.base import Stage
 
 
 class NodeDataLoader:

@@ -3,7 +3,7 @@ from rich.console import Group
 from rich.padding import Padding
 from rich.text import Text
 from rich.table import Column, Table
-from core.classifiers.base import Metrics
+from core.modules.base import Metrics
 from core.console import console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn, Task
 

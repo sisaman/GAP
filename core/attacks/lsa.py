@@ -7,7 +7,7 @@ from torch.nn.functional import cosine_similarity
 from torch_geometric.data import Data
 from torch_geometric.utils import negative_sampling
 from core.attacks.base import ModelBasedAttack
-from core.classifiers.base import Metrics
+from core.modules.base import Metrics
 from core.methods.base import NodeClassification
 
 

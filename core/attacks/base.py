@@ -5,7 +5,7 @@ from torch_geometric.data import Data
 from torchmetrics.functional import auroc, roc
 from core.args.utils import remove_prefix
 from core.console import console
-from core.classifiers.base import Metrics
+from core.modules.base import Metrics
 from core.methods.base import NodeClassification
 from core.methods.mlp import MLP
 

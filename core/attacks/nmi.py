@@ -5,7 +5,7 @@ from torch import Tensor
 from torch.distributions import Categorical
 from torch_geometric.data import Data
 from core.attacks.base import ModelBasedAttack
-from core.classifiers.base import Metrics
+from core.modules.base import Metrics
 from core.console import console
 from core.data.transforms import RandomDataSplit
 from core.methods.base import NodeClassification

@@ -10,7 +10,7 @@ from core.methods.gap import GAP
 from core.privacy.mechanisms import ComposedNoisyMechanism
 from core.privacy.algorithms import PMA, NoisySGD
 from core.data.transforms import BoundOutDegree
-from core.classifiers.base import Metrics, Stage
+from core.modules.base import Metrics, Stage
 
 
 class NodePrivGAP (GAP):

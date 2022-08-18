@@ -6,7 +6,7 @@ from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
 from core.data.loader import NodeDataLoader
 from core.globals import registry
-from core.classifiers.base import ClassifierBase, Metrics, Stage
+from core.modules.base import TrainableModule, Metrics, Stage
 from core.console import console
 from core.trainer import Trainer
 
@@ -58,7 +58,7 @@ class NodeClassification(MethodBase):
 
     @property
     @abstractmethod
-    def classifier(self) -> ClassifierBase:
+    def classifier(self) -> TrainableModule:
         """Return the underlying classifier."""
 
     def reset_parameters(self):

@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch_geometric.data import Data
 from core.attacks.base import AttackBase
-from core.classifiers.base import Metrics
+from core.modules.base import Metrics
 from core.console import console
 from core.methods.base import NodeClassification
 from sklearn.metrics import roc_curve, roc_auc_score

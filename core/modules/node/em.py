@@ -2,14 +2,14 @@ from typing import Callable
 import torch
 from torch import Tensor
 import torch.nn.functional as F
-from torch.nn import BatchNorm1d
-from core.classifiers import MLPClassifier
+from torch.nn import BatchNorm1d, Dropout
 from core.models import MLP
 from torch_geometric.data import Data
+from core.modules.node.mlp import MLPNodeClassifier
 
 
-class Encoder(MLPClassifier):
-    def __init__(self, 
+class EncoderModule(MLPNodeClassifier):
+    def __init__(self, *,
                  num_classes: int,
                  hidden_dim: int = 16,  
                  encoder_layers: int = 2, 
@@ -36,18 +36,21 @@ class Encoder(MLPClassifier):
             activation_fn=activation_fn,
             dropout=dropout,
             batch_norm=batch_norm,
+            plain_last=normalize,
         )
 
+        self.dropout_fn = Dropout(p=dropout, inplace=True)
+        self.activation_fn = activation_fn
         self.normalize = normalize
-        self.bn = BatchNorm1d(hidden_dim) if batch_norm else False
+        self.bn = BatchNorm1d(hidden_dim) if batch_norm and normalize else False
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.encoder_mlp(x)
         if self.normalize:
             x = F.normalize(x, p=2, dim=-1)
-        x = self.bn(x) if self.bn else x
-        x = self.dropout_fn(x)
-        x = self.activation_fn(x)
+            x = self.bn(x) if self.bn else x
+            x = self.dropout_fn(x)
+            x = self.activation_fn(x)
         x = super().forward(x)
         return x
 

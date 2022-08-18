@@ -6,7 +6,7 @@ from torch_sparse import SparseTensor, matmul
 from core.console import console
 from core.methods.gap import GAP
 from core.privacy.algorithms import PMA
-from core.classifiers.base import Metrics
+from core.modules.base import Metrics
 
 
 class EdgePrivGAP (GAP):

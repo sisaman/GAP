@@ -1,7 +1,7 @@
 import torch
 from typing import Annotated
 from core.methods.base import NodeClassification
-from core.classifiers import GraphSAGEClassifier
+from core.modules.node.sage import SAGENodeClassifier
 
 
 class SAGE (NodeClassification):
@@ -33,7 +33,7 @@ class SAGE (NodeClassification):
         self.head_layers = head_layers
         activation_fn = self.supported_activations[activation]
 
-        self._classifier = GraphSAGEClassifier(
+        self._classifier = SAGENodeClassifier(
             hidden_dim=hidden_dim, 
             num_classes=num_classes, 
             base_layers=base_layers,
@@ -46,5 +46,5 @@ class SAGE (NodeClassification):
         )
 
     @property
-    def classifier(self) -> GraphSAGEClassifier:
+    def classifier(self) -> SAGENodeClassifier:
         return self._classifier

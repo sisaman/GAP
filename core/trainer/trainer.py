@@ -4,11 +4,10 @@ import torch
 from torch.types import Number
 from torch.optim import Optimizer
 from typing import Annotated, Iterable, Literal, Optional
-from core.classifiers.base import ClassifierBase
 from core.loggers import Logger
 from torchmetrics import MeanMetric
 from core.trainer.progress import TrainerProgress
-from core.classifiers.base import Metrics, Stage
+from core.modules.base import Metrics, Stage, TrainableModule
 
 
 class Trainer:
@@ -27,11 +26,11 @@ class Trainer:
         self.monitor_mode = monitor_mode
         
         # trainer internal state
-        self.model: ClassifierBase = None
+        self.model: TrainableModule = None
         self.metrics: dict[str, MeanMetric] = {}
 
     def reset(self):
-        self.model: ClassifierBase = None
+        self.model = None
         self.metrics = {}
 
     def update_metrics(self, metric_name: str, metric_value: object, weight: int = 1) -> None:
@@ -65,7 +64,7 @@ class Trainer:
             raise ValueError(f'Unknown metric mode: {self.monitor_mode}')
 
     def fit(self, 
-            model: ClassifierBase, 
+            model: TrainableModule, 
             epochs: int,
             optimizer: Optimizer, 
             train_dataloader: Iterable, 

@@ -2,13 +2,13 @@ from typing import Callable, Optional
 import torch
 from torch import Tensor
 import torch.nn.functional as F
-from core.classifiers.base import ClassifierBase, Metrics, Stage
 from core.models import MLP
 from torch_geometric.data import Data
+from core.modules.base import TrainableModule, Stage, Metrics
 
 
-class MLPClassifier(MLP, ClassifierBase):
-    def __init__(self, 
+class MLPNodeClassifier(TrainableModule):
+    def __init__(self, *,
                  num_classes: int,
                  hidden_dim: int = 16,  
                  num_layers: int = 2, 
@@ -17,14 +17,20 @@ class MLPClassifier(MLP, ClassifierBase):
                  batch_norm: bool = False,
                  ):
 
-        super().__init__(
+        super().__init__()
+
+        self.model = MLP(
             output_dim=num_classes,
             hidden_dim=hidden_dim,
             num_layers=num_layers,
             dropout=dropout,
             activation_fn=activation_fn,
             batch_norm=batch_norm,
+            plain_last=True,
         )
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.model(x)
 
     def step(self, data: Data, stage: Stage) -> tuple[Optional[Tensor], Metrics]:
         mask = data[f'{stage}_mask']
@@ -45,3 +51,6 @@ class MLPClassifier(MLP, ClassifierBase):
         self.eval()
         h = self(data.x)
         return torch.softmax(h, dim=-1)
+
+    def reset_parameters(self):
+        return self.model.reset_parameters()

@@ -7,7 +7,7 @@ from torch_geometric.nn import GAE
 from torch_geometric.transforms import RandomLinkSplit
 from class_resolver.contrib.torch import activation_resolver
 from core.attacks.base import AttackBase
-from core.classifiers.base import Metrics
+from core.modules.base import Metrics
 from core.console import console
 from core.methods.base import NodeClassification
 from core.models.mlp import MLP

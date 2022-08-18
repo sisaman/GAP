@@ -1,7 +1,7 @@
 import torch
 from typing import Annotated
 from core.methods.base import NodeClassification
-from core.classifiers import MLPClassifier
+from core.modules.node.mlp import MLPNodeClassifier
 
 
 class MLP (NodeClassification):
@@ -29,7 +29,7 @@ class MLP (NodeClassification):
         self.num_layers = num_layers
         activation_fn = self.supported_activations[activation]
 
-        self._classifier = MLPClassifier(
+        self._classifier = MLPNodeClassifier(
             num_classes=num_classes,
             hidden_dim=hidden_dim,
             num_layers=num_layers,
@@ -39,5 +39,5 @@ class MLP (NodeClassification):
         )
 
     @property
-    def classifier(self) -> MLPClassifier:
+    def classifier(self) -> MLPNodeClassifier:
         return self._classifier

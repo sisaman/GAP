@@ -5,7 +5,7 @@ from torch_geometric.data import Data
 from core.console import console
 from core.methods.mlp.mlp import MLP
 from core.privacy.algorithms.noisy_sgd import NoisySGD
-from core.classifiers.base import Metrics, Stage
+from core.modules.base import Metrics, Stage
 from core.data.loader import NodeDataLoader
 
 

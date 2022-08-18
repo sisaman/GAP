@@ -4,7 +4,7 @@ from torch_geometric.data import Data
 from core.console import console
 from core.methods.sage.sage_inf import SAGE
 from core.privacy.algorithms import AsymmetricRandResponse
-from core.classifiers.base import Metrics
+from core.modules.base import Metrics
 
 
 class EdgePrivSAGE (SAGE):
