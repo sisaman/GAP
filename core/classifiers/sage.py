@@ -6,7 +6,7 @@ from torch.nn import BatchNorm1d
 from torch_sparse import SparseTensor
 from core.classifiers.base import ClassifierBase, Metrics, Stage
 from core.models import MLP
-from core.models import GraphSAGE
+from torch_geometric.nn import GraphSAGE
 from torch_geometric.data import Data
 
 
@@ -53,8 +53,8 @@ class GraphSAGEClassifier(ClassifierBase):
             dropout=dropout,
             act=activation_fn,
             norm=BatchNorm1d(hidden_dim) if batch_norm else None,
-            jk='last',
-            aggr='add',
+            jk=None,
+            aggr='sum',
             root_weight=True,
             normalize=True,
         )
