@@ -8,7 +8,7 @@ from torch_geometric.data import Data
 from torch_geometric.utils import negative_sampling
 from core.attacks.base import ModelBasedAttack
 from core.modules.base import Metrics
-from core.methods.base import NodeClassification
+from core.methods.node.base import NodeClassification
 
 
 class LinkStealingAttack (ModelBasedAttack):

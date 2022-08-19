@@ -3,7 +3,7 @@ from typing import Annotated, Literal, Union
 from torch.optim import Optimizer
 from torch_geometric.data import Data
 from core.console import console
-from core.methods.mlp.mlp import MLP
+from core.methods.node import MLP
 from core.privacy.algorithms.noisy_sgd import NoisySGD
 from core.modules.base import Metrics, Stage
 from core.data.loader import NodeDataLoader

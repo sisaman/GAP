@@ -8,7 +8,7 @@ from core.attacks.base import ModelBasedAttack
 from core.modules.base import Metrics
 from core.console import console
 from core.data.transforms import RandomDataSplit
-from core.methods.base import NodeClassification
+from core.methods.node.base import NodeClassification
 
 
 class NodeMembershipInference (ModelBasedAttack):

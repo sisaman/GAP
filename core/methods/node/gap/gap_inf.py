@@ -5,7 +5,7 @@ from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
 from core.console import console
-from core.methods.base import NodeClassification
+from core.methods.node.base import NodeClassification
 from core.models.multi_mlp import MultiMLP
 from core.modules.base import Metrics
 from core.modules.node.cm import ClassificationModule

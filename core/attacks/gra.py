@@ -9,7 +9,7 @@ from class_resolver.contrib.torch import activation_resolver
 from core.attacks.base import AttackBase
 from core.modules.base import Metrics
 from core.console import console
-from core.methods.base import NodeClassification
+from core.methods.node.base import NodeClassification
 from core.models.mlp import MLP
 from core.trainer.progress import TrainerProgress
 
@@ -76,7 +76,7 @@ class GraphReconstructionAttack (AttackBase):
         data = Data(x=torch.cat(feature_list, dim=1), adj_t=data.adj_t).to(device)
         train_data, val_data, test_data = RandomLinkSplit(
             num_val=int(self.num_attack_samples * .2),
-            num_test=data.num_edges//2-self.num_attack_samples,                     # FIXME: number of train, val, test edges is not correct
+            num_test=data.num_edges//2-self.num_attack_samples,
             is_undirected=True,
             split_labels=True,
             key='edge',

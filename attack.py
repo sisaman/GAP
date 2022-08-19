@@ -11,7 +11,7 @@ with console.status('importing modules'):
     from core.datasets import DatasetLoader
     from core.args.utils import print_args, strip_kwargs, create_arguments, remove_prefix
     from core.loggers import Logger
-    from core.methods import supported_methods, NodeClassification
+    from core.methods.node import supported_methods, NodeClassification
     from core.attacks import supported_attacks
     from core.attacks.base import AttackBase
     from core.utils import seed_everything, confidence_interval

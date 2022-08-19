@@ -6,7 +6,7 @@ from torch_sparse import SparseTensor, matmul
 from opacus.optimizers import DPOptimizer
 from core.console import console
 from core.data.loader import NodeDataLoader
-from core.methods.gap import GAP
+from core.methods.node import GAP
 from core.privacy.mechanisms import ComposedNoisyMechanism
 from core.privacy.algorithms import PMA, NoisySGD
 from core.data.transforms import BoundOutDegree

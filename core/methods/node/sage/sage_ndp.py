@@ -6,7 +6,7 @@ from torch_geometric.data import Data
 from core.console import console
 from core.data.loader import NodeDataLoader
 from core.data.transforms import BoundDegree
-from core.methods.sage.sage_inf import SAGE
+from core.methods.node import SAGE
 from core.modules.base import Metrics, Stage
 from core.privacy.algorithms import GNNBasedNoisySGD
 from core.privacy.mechanisms import GaussianMechanism

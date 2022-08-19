@@ -6,8 +6,8 @@ from torchmetrics.functional import auroc, roc
 from core.args.utils import remove_prefix
 from core.console import console
 from core.modules.base import Metrics
-from core.methods.base import NodeClassification
-from core.methods.mlp import MLP
+from core.methods.node.base import NodeClassification
+from core.methods.node import MLP
 
 
 class AttackBase(ABC):

@@ -1,6 +1,6 @@
 import torch
 from typing import Annotated
-from core.methods.base import NodeClassification
+from core.methods.node import NodeClassification
 from core.modules.node.mlp import MLPNodeClassifier
 
 

@@ -11,7 +11,7 @@ with console.status('importing modules'):
     from core.datasets import DatasetLoader
     from core.args.utils import print_args, create_arguments, strip_kwargs
     from core.loggers import Logger
-    from core.methods import supported_methods, NodeClassification
+    from core.methods.node import supported_methods, NodeClassification
     from core.utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
 
