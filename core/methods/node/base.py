@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Annotated, Literal, Optional, Union
 import torch
 from torch import Tensor
@@ -6,24 +6,10 @@ from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
 from core.data.loader import NodeDataLoader
 from core.globals import registry
+from core.methods.base import MethodBase
 from core.modules.base import TrainableModule, Metrics, Stage
 from core.console import console
 from core.trainer import Trainer
-
-
-class MethodBase(ABC):
-
-    @abstractmethod
-    def fit(self, data: Data, prefix: str = '') -> Metrics:
-        """Fit the model to the given data."""
-
-    @abstractmethod
-    def test(self, data: Optional[Data] = None, prefix: str = '') -> Metrics:
-        """Test the model on the given data, or the training data if data is None."""
-
-    @abstractmethod
-    def predict(self, data: Optional[Data] = None) -> Tensor:
-        """Predict the labels for the given data, or the training data if data is None."""
 
 
 class NodeClassification(MethodBase):

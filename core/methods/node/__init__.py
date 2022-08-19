@@ -1,4 +1,4 @@
-from core.methods.node.base import MethodBase, NodeClassification
+from core.methods.node.base import NodeClassification
 from core.methods.node.gap.gap_inf import GAP
 from core.methods.node.gap.gap_edp import EdgePrivGAP
 from core.methods.node.gap.gap_ndp import NodePrivGAP
