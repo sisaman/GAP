@@ -30,6 +30,9 @@ class GraphReconstructionAttack (AttackBase):
 
         self.attack_method = MLPLinkPredictionMethod(**remove_prefix(attack_args, 'attack_'))
 
+    def reset(self):
+        self.attack_method.reset_parameters()
+
     def execute(self, method: NodeClassification, data: Data) -> Metrics:
         device = method.device
         data = data.to(device)
@@ -66,6 +69,7 @@ class GraphReconstructionAttack (AttackBase):
         console.info(f'val data: {val_data.pos_edge_index.size(1)} positive edges, {val_data.neg_edge_index.size(1)} negative edges')
         console.info(f'test data: {test_data.pos_edge_index.size(1)} positive edges, {test_data.neg_edge_index.size(1)} negative edges')
 
+        self.attack_method.reset_parameters()
         train_metrics = self.attack_method.fit(train_data=train_data, val_data=val_data, prefix='attack/')
         test_metrics = self.attack_method.test(data=test_data, prefix='attack/')
         return {**train_metrics, **test_metrics}

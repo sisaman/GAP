@@ -13,6 +13,8 @@ from core.methods.node import MLP
 class AttackBase(ABC):
     @abstractmethod
     def execute(self, method: NodeClassification, data: Data) -> Metrics: pass
+    @abstractmethod
+    def reset(self): pass
 
 
 class ModelBasedAttack(AttackBase):
@@ -40,6 +42,9 @@ class ModelBasedAttack(AttackBase):
         attack_metrics['attack/test/tpr@0.01fpr'] = tpr[torch.where(fpr<=.01)[0][-1]].item() * 100
 
         return attack_metrics
+
+    def reset(self):
+        self.attack_model.reset_parameters()
 
     @abstractmethod
     def prepare_attack_dataset(self, method: NodeClassification, data: Data) -> Data: pass
