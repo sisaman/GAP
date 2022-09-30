@@ -35,7 +35,7 @@ class BoundDegree(BaseTransform):
         
         try:
             edge_sampler = torch.ops.my_ops.sample_edge
-        except AttributeError:
+        except (AttributeError, RuntimeError):
             torch.utils.cpp_extension.load(
                 name="sampler",
                 sources=['csrc/sampler.cpp'],
