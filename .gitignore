@@ -125,7 +125,6 @@ build.ninja
 /jobs
 /output
 .vscode
-/test
 /checkpoints
 TODO
 /__test*

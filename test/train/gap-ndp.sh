@@ -1,0 +1,18 @@
+python train.py gap-ndp \
+--dataset facebook \
+--epsilon 8 \
+--encoder_layers 2 \
+--base_layers 1 \
+--head_layers 1 \
+--combine cat \
+--hops 2 \
+--max_degree 100 \
+--hidden_dim 16 \
+--activation selu \
+--optimizer adam \
+--learning_rate 0.01 \
+--repeats 10 \
+--max_grad_norm 1 \
+--epochs 10 \
+--batch_size 256 \
+--encoder_epochs 10 $@
