@@ -3,7 +3,7 @@ from typing import Annotated, Optional, Union, Literal
 import torch
 from torch.optim import Optimizer
 from torch_geometric.data import Data
-from core.console import console
+from core import console
 from core.data.loader import NodeDataLoader
 from core.data.transforms import BoundDegree
 from core.methods.node import SAGE

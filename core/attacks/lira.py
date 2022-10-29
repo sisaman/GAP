@@ -4,7 +4,7 @@ import torch
 from torch_geometric.data import Data
 from core.attacks.base import AttackBase
 from core.modules.base import Metrics
-from core.console import console
+from core import console
 from core.methods.node.base import NodeClassification
 from sklearn.metrics import roc_curve, roc_auc_score
 

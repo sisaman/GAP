@@ -4,7 +4,7 @@ from typing import Annotated, Literal, Union
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
 from opacus.optimizers import DPOptimizer
-from core.console import console
+from core import console
 from core.data.loader import NodeDataLoader
 from core.methods.node import GAP
 from core.privacy.mechanisms import ComposedNoisyMechanism

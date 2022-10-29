@@ -1,5 +1,5 @@
 from typing import Annotated, Callable, Literal, Union, get_args, get_origin
-from core.console import console
+from core import console
 import math
 import inspect
 from rich.table import Table

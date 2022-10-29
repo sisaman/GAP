@@ -1,4 +1,4 @@
-from core.console import console
+from core import console
 with console.status('importing modules'):
     import torch
     import numpy as np
@@ -7,7 +7,7 @@ with console.status('importing modules'):
     from rich import box
     from rich.table import Table
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-    from core.globals import registry
+    from core import globals
     from core.datasets import DatasetLoader
     from core.args.utils import print_args, strip_kwargs, create_arguments, remove_prefix
     from core.loggers import Logger
@@ -28,7 +28,7 @@ def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
 
     if debug:
         console.info('debug mode enabled')
-        registry['debug'] = True
+        globals['debug'] = True
         console.log_level = console.DEBUG
         kwargs['project'] += '-ATTACK'
 

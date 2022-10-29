@@ -4,7 +4,7 @@ from rich.padding import Padding
 from rich.text import Text
 from rich.table import Column, Table
 from core.modules.base import Metrics
-from core.console import console
+from core import console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn, Task
 
 

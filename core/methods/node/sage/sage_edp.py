@@ -1,7 +1,7 @@
 from typing import Annotated, Optional
 import torch
 from torch_geometric.data import Data
-from core.console import console
+from core import console
 from core.methods.node import SAGE
 from core.privacy.algorithms import AsymmetricRandResponse
 from core.modules.base import Metrics

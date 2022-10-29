@@ -6,7 +6,7 @@ from torch.distributions import Categorical
 from torch_geometric.data import Data
 from core.attacks.base import ModelBasedAttack
 from core.modules.base import Metrics
-from core.console import console
+from core import console
 from core.data.transforms import RandomDataSplit
 from core.methods.node.base import NodeClassification
 

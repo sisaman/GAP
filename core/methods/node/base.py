@@ -5,10 +5,10 @@ from torch import Tensor
 from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
 from core.data.loader import NodeDataLoader
-from core.globals import registry
+from core import globals
 from core.methods.base import MethodBase
 from core.modules.base import TrainableModule, Metrics, Stage
-from core.console import console
+from core import console
 from core.trainer import Trainer
 
 
@@ -91,7 +91,7 @@ class NodeClassification(MethodBase):
             optimizer=self.configure_optimizer(),
             train_dataloader=self.data_loader(data, 'train'), 
             val_dataloader=self.data_loader(data, 'val'),
-            test_dataloader=self.data_loader(data, 'test') if registry['debug'] else None,
+            test_dataloader=self.data_loader(data, 'test') if globals['debug'] else None,
             checkpoint=True,
             prefix=prefix,
         )

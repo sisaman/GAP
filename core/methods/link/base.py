@@ -2,8 +2,8 @@ from abc import abstractmethod
 from typing import Annotated, Optional
 
 import torch
-from core.globals import registry
-from core.console import console
+from core import globals
+from core import console
 from core.methods.base import MethodBase
 from core.modules.base import Metrics, TrainableModule
 from core.trainer import Trainer
@@ -85,7 +85,7 @@ class LinkPrediction(MethodBase):
             optimizer=self.configure_optimizer(),
             train_dataloader=[train_data], 
             val_dataloader=[val_data] if val_data is not None else None,
-            test_dataloader=[test_data] if test_data is not None and registry['debug'] else None,
+            test_dataloader=[test_data] if test_data is not None and globals['debug'] else None,
             checkpoint=True,
             prefix=prefix,
         )

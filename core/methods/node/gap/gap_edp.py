@@ -3,7 +3,7 @@ import torch
 from typing import Annotated, Literal, Union
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
-from core.console import console
+from core import console
 from core.methods.node import GAP
 from core.privacy.algorithms import PMA
 from core.modules.base import Metrics

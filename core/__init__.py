@@ -3,6 +3,9 @@ from rich.traceback import install
 from rich.logging import RichHandler
 from core.console.console import Console
 
+globals = {
+    'debug': False,
+}
 
 # define main and error consoles
 console = Console(tab_size=4)

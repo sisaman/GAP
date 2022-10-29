@@ -2,7 +2,7 @@ from typing_extensions import Self
 from scipy.optimize import minimize_scalar, OptimizeResult
 from autodp.mechanism_zoo import Mechanism
 import numpy as np
-from core.console import console
+from core import console
 
 
 class NoisyMechanism(Mechanism):

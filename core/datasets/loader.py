@@ -4,7 +4,7 @@ from typing import Annotated
 from rich.highlighter import ReprHighlighter
 from rich import box
 import torch
-from core.console import console
+from core import console
 from rich.table import Table
 from torch_geometric.data import Data
 from torch_geometric.datasets import Reddit
