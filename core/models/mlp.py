@@ -3,16 +3,12 @@ import torch
 from torch import Tensor
 from torch.nn import Dropout, ModuleList, BatchNorm1d, Module
 from torch_geometric.nn import Linear
-from opacus.grad_sample import register_grad_sampler
+from opacus.grad_sample import register_grad_sampler, compute_linear_grad_sample
 
 
 @register_grad_sampler(Linear)
 def compute_lazy_linear_grad_sample(layer, activations, backprops):
-    gs = torch.einsum("n...i,n...j->nij", backprops, activations)
-    ret = {layer.weight: gs}
-    if layer.bias is not None:
-        ret[layer.bias] = torch.einsum("n...k->nk", backprops)
-    return ret
+    return compute_linear_grad_sample(layer, activations, backprops)
 
 
 class MLP(Module):
