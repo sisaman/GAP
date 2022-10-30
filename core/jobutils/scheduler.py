@@ -7,7 +7,7 @@ from dask_jobqueue import JobQueueCluster
 from dask.distributed import as_completed
 from rich.progress import Progress
 from subprocess import CalledProcessError
-from class_resolver import ClassResolver, Hint
+from class_resolver import ClassResolver
 from core import console, Console
 
 dask.config.set({"jobqueue.sge.walltime": None})
@@ -55,7 +55,10 @@ class JobScheduler:
             with Client(cluster) as client:
                 futures = client.map(self.execute, range(1, total + 1))
                 progress = SchedulerProgress(total=total, console=console)
+                
                 failed_jobs = {}
+                failures_dir = os.path.join(self.job_dir, 'failures')
+                os.makedirs(failures_dir, exist_ok=True)
 
                 try:
                     with progress:
@@ -66,17 +69,12 @@ class JobScheduler:
                             except CalledProcessError as e:
                                 job_cmd = ' '.join(e.cmd)
                                 failed_jobs[job_cmd] = e.output.decode()
+                                with open(os.path.join(failures_dir, f'{len(failed_jobs)}.log'), 'w') as f:
+                                    print(job_cmd, end='\n\n', file=f)
+                                    print(failed_jobs[job_cmd], file=f)
                                 progress.update(failed=True)
                 except KeyboardInterrupt:
                     console.warning('Graceful Shutdown')
-
-                if failed_jobs:
-                    failures_dir = os.path.join(self.job_dir, 'failures')
-                    os.makedirs(failures_dir, exist_ok=True)
-                    for i, (cmd, output) in enumerate(failed_jobs.items()):
-                        with open(os.path.join(failures_dir, f'{i}.log'), 'w') as f:
-                            print(cmd, end='\n\n', file=f)
-                            print(output, file=f)
 
                 return failed_jobs
 
