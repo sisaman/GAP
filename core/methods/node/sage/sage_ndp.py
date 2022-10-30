@@ -107,6 +107,7 @@ class NodePrivSAGE (SAGE):
     def data_loader(self, data: Data, stage: Stage) -> NodeDataLoader:
         dataloader = super().data_loader(data, stage)
         if stage == 'train':
+            dataloader.hops = 1
             dataloader.poisson_sampling = True
         return dataloader
 
