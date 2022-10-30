@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torch.distributions import Categorical
 from torch_geometric.data import Data
+from core.args.utils import ArgInfo
 from core.attacks.base import ModelBasedAttack
 from core.modules.base import Metrics
 from core import console
@@ -15,9 +16,9 @@ class NodeMembershipInference (ModelBasedAttack):
     """node membership inference attack"""
 
     def __init__(self, 
-                 test_on_target:        Annotated[bool, dict(help='whether to test the attack model on the data from target model')] = False,
-                 num_nodes_per_class:   Annotated[int,  dict(help='number of nodes per class in both target and shadow datasets')] = 1000,
-                 **kwargs:              Annotated[dict,  dict(help='extra options passed to base class', bases=[ModelBasedAttack])]
+                 test_on_target:        Annotated[bool, ArgInfo(help='whether to test the attack model on the data from target model')] = False,
+                 num_nodes_per_class:   Annotated[int,  ArgInfo(help='number of nodes per class in both target and shadow datasets')] = 1000,
+                 **kwargs:              Annotated[dict, ArgInfo(help='extra options passed to base class', bases=[ModelBasedAttack])]
                  ):
 
         super().__init__(**kwargs)

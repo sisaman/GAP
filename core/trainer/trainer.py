@@ -4,6 +4,7 @@ import torch
 from torch.types import Number
 from torch.optim import Optimizer
 from typing import Annotated, Iterable, Literal, Optional
+from core.args.utils import ArgInfo
 from core.loggers import Logger
 from torchmetrics import MeanMetric
 from core.trainer.progress import TrainerProgress
@@ -15,7 +16,7 @@ class Trainer:
                  patience:      int = 0,
                  monitor:       str = 'val/acc',
                  monitor_mode:  Literal['min', 'max'] = 'max',
-                 val_interval:  Annotated[int,   dict(help='interval of validation')] = 1,
+                 val_interval:  Annotated[int, ArgInfo(help='interval of validation')] = 1,
                  ):
 
         assert monitor_mode in ['min', 'max']

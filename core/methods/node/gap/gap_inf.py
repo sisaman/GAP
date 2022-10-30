@@ -5,6 +5,7 @@ from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
 from core import console
+from core.args.utils import ArgInfo
 from core.methods.node.base import NodeClassification
 from core.models.multi_mlp import MultiMLP
 from core.modules.base import Metrics
@@ -23,17 +24,17 @@ class GAP (NodeClassification):
 
     def __init__(self,
                  num_classes,
-                 hops:            Annotated[int,   dict(help='number of hops', option='-k')] = 2,
-                 hidden_dim:      Annotated[int,   dict(help='dimension of the hidden layers')] = 16,
-                 encoder_layers:  Annotated[int,   dict(help='number of encoder MLP layers')] = 2,
-                 base_layers:     Annotated[int,   dict(help='number of base MLP layers')] = 1,
-                 head_layers:     Annotated[int,   dict(help='number of head MLP layers')] = 1,
-                 combine:         Annotated[str,   dict(help='combination type of transformed hops', choices=MultiMLP.supported_combinations)] = 'cat',
-                 activation:      Annotated[str,   dict(help='type of activation function', choices=supported_activations)] = 'selu',
-                 dropout:         Annotated[float, dict(help='dropout rate')] = 0.0,
-                 batch_norm:      Annotated[bool,  dict(help='if true, then model uses batch normalization')] = True,
-                 encoder_epochs:  Annotated[int,   dict(help='number of epochs for encoder pre-training (ignored if encoder_layers=0)')] = 100,
-                 **kwargs:        Annotated[dict,  dict(help='extra options passed to base class', bases=[NodeClassification])]
+                 hops:            Annotated[int,   ArgInfo(help='number of hops', option='-k')] = 2,
+                 hidden_dim:      Annotated[int,   ArgInfo(help='dimension of the hidden layers')] = 16,
+                 encoder_layers:  Annotated[int,   ArgInfo(help='number of encoder MLP layers')] = 2,
+                 base_layers:     Annotated[int,   ArgInfo(help='number of base MLP layers')] = 1,
+                 head_layers:     Annotated[int,   ArgInfo(help='number of head MLP layers')] = 1,
+                 combine:         Annotated[str,   ArgInfo(help='combination type of transformed hops', choices=MultiMLP.supported_combinations)] = 'cat',
+                 activation:      Annotated[str,   ArgInfo(help='type of activation function', choices=supported_activations)] = 'selu',
+                 dropout:         Annotated[float, ArgInfo(help='dropout rate')] = 0.0,
+                 batch_norm:      Annotated[bool,  ArgInfo(help='if true, then model uses batch normalization')] = True,
+                 encoder_epochs:  Annotated[int,   ArgInfo(help='number of epochs for encoder pre-training (ignored if encoder_layers=0)')] = 100,
+                 **kwargs:        Annotated[dict,  ArgInfo(help='extra options passed to base class', bases=[NodeClassification])]
                  ):
 
         super().__init__(num_classes, **kwargs)

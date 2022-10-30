@@ -3,7 +3,7 @@ from typing import Annotated
 import torch
 from torch_geometric.data import Data
 from torchmetrics.functional import auroc, roc
-from core.args.utils import remove_prefix
+from core.args.utils import ArgInfo, remove_prefix
 from core import console
 from core.modules.base import Metrics
 from core.methods.node.base import NodeClassification
@@ -18,7 +18,7 @@ class AttackBase(ABC):
 
 
 class ModelBasedAttack(AttackBase):
-    def __init__(self, **kwargs:  Annotated[dict, dict(help='attack method kwargs', bases=[MLP], prefixes=['attack_'])]):
+    def __init__(self, **kwargs:  Annotated[dict, ArgInfo(help='attack method kwargs', bases=[MLP], prefixes=['attack_'])]):
         self.attack_model = MLP(
             num_classes=2, # either member or non-member
             **remove_prefix(kwargs, 'attack_')

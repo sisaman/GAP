@@ -2,6 +2,7 @@ from typing import Annotated
 import numpy as np
 import torch
 from torch_geometric.data import Data
+from core.args.utils import ArgInfo
 from core.attacks.base import AttackBase
 from core.modules.base import Metrics
 from core import console
@@ -10,7 +11,7 @@ from sklearn.metrics import roc_curve, roc_auc_score
 
 
 class LikelihoodRatioAttack(AttackBase):
-    def __init__(self, num_shadow: Annotated[int, dict(help='number of shadow models')] = 16):
+    def __init__(self, num_shadow: Annotated[int, ArgInfo(help='number of shadow models')] = 16):
         self.num_shadow = num_shadow
 
     def execute(self, method: NodeClassification, data: Data) -> Metrics:

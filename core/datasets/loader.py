@@ -9,6 +9,7 @@ from rich.table import Table
 from torch_geometric.data import Data
 from torch_geometric.datasets import Reddit
 from torch_geometric.transforms import Compose, ToSparseTensor, RandomNodeSplit
+from core.args.utils import ArgInfo
 from core.data.transforms import FilterClassByCount
 from core.data.transforms import RemoveSelfLoops
 from core.data.transforms import RemoveIsolatedNodes
@@ -39,8 +40,8 @@ class DatasetLoader:
     }
 
     def __init__(self,
-                 dataset:    Annotated[str, dict(help='name of the dataset', choices=supported_datasets)] = 'facebook',
-                 data_dir:   Annotated[str, dict(help='directory to store the dataset')] = './datasets',
+                 dataset:    Annotated[str, ArgInfo(help='name of the dataset', choices=supported_datasets)] = 'facebook',
+                 data_dir:   Annotated[str, ArgInfo(help='directory to store the dataset')] = './datasets',
                  ):
 
         self.name = dataset

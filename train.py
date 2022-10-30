@@ -9,16 +9,16 @@ with console.status('importing modules'):
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
     from core import globals
     from core.datasets import DatasetLoader
-    from core.args.utils import print_args, create_arguments, strip_kwargs
+    from core.args.utils import print_args, create_arguments, strip_kwargs, ArgInfo
     from core.loggers import Logger
     from core.methods.node import supported_methods, NodeClassification
     from core.utils import seed_everything, confidence_interval
     from torch_geometric.data import Data
 
 
-def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
-        repeats: Annotated[int,   dict(help='number of times the experiment is repeated')] = 1,
-        debug:   Annotated[bool, dict(help='enable global debug mode')] = False,
+def run(seed:    Annotated[int,   ArgInfo(help='initial random seed')] = 12345,
+        repeats: Annotated[int,   ArgInfo(help='number of times the experiment is repeated')] = 1,
+        debug:   Annotated[bool,  ArgInfo(help='enable global debug mode')] = False,
         **kwargs
     ):
 

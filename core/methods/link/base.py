@@ -4,6 +4,7 @@ from typing import Annotated, Optional
 import torch
 from core import globals
 from core import console
+from core.args.utils import ArgInfo
 from core.methods.base import MethodBase
 from core.modules.base import Metrics, TrainableModule
 from core.trainer import Trainer
@@ -14,12 +15,12 @@ from torch_geometric.data import Data
 
 class LinkPrediction(MethodBase):
     def __init__(self, 
-                 epochs:          Annotated[int,   dict(help='number of epochs for training')] = 100,
-                 optimizer:       Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
-                 learning_rate:   Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
-                 weight_decay:    Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
-                 device:          Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
-                 **trainer_args:  Annotated[dict,  dict(help='extra options passed to the trainer class', bases=[Trainer])]
+                 epochs:          Annotated[int,   ArgInfo(help='number of epochs for training')] = 100,
+                 optimizer:       Annotated[str,   ArgInfo(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
+                 learning_rate:   Annotated[float, ArgInfo(help='learning rate', option='--lr')] = 0.01,
+                 weight_decay:    Annotated[float, ArgInfo(help='weight decay (L2 penalty)')] = 0.0,
+                 device:          Annotated[str,   ArgInfo(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
+                 **trainer_args:  Annotated[dict,  ArgInfo(help='extra options passed to the trainer class', bases=[Trainer])]
                  ):
 
         self.epochs = epochs

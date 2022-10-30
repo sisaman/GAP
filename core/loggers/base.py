@@ -3,6 +3,7 @@ from typing import Annotated, Callable
 from uuid import uuid1
 from abc import ABC, abstractmethod
 from torch.nn import Module
+from core.args.utils import ArgInfo
 from core.utils import RT
 
 
@@ -16,8 +17,8 @@ def if_enabled(func: Callable[..., RT]) -> Callable[..., RT]:
 
 class LoggerBase(ABC):
     def __init__(self, 
-                 project:       Annotated[str,  dict(help="project name for logger")] = 'GAP',
-                 output_dir:    Annotated[str,  dict(help="directory to store the results")] = './output',
+                 project:       Annotated[str,  ArgInfo(help="project name for logger")] = 'GAP',
+                 output_dir:    Annotated[str,  ArgInfo(help="directory to store the results")] = './output',
                  experiment_id: str=str(uuid1()), 
                  enabled:       bool=True, 
                  config:        dict={}

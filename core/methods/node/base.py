@@ -4,6 +4,7 @@ import torch
 from torch import Tensor
 from torch.optim import Adam, SGD, Optimizer
 from torch_geometric.data import Data
+from core.args.utils import ArgInfo
 from core.data.loader import NodeDataLoader
 from core import globals
 from core.methods.base import MethodBase
@@ -15,15 +16,15 @@ from core.trainer import Trainer
 class NodeClassification(MethodBase):
     def __init__(self, 
                  num_classes:     int, 
-                 epochs:          Annotated[int,   dict(help='number of epochs for training')] = 100,
-                 optimizer:       Annotated[str,   dict(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
-                 learning_rate:   Annotated[float, dict(help='learning rate', option='--lr')] = 0.01,
-                 weight_decay:    Annotated[float, dict(help='weight decay (L2 penalty)')] = 0.0,
+                 epochs:          Annotated[int,   ArgInfo(help='number of epochs for training')] = 100,
+                 optimizer:       Annotated[str,   ArgInfo(help='optimization algorithm', choices=['sgd', 'adam'])] = 'adam',
+                 learning_rate:   Annotated[float, ArgInfo(help='learning rate', option='--lr')] = 0.01,
+                 weight_decay:    Annotated[float, ArgInfo(help='weight decay (L2 penalty)')] = 0.0,
                  batch_size:      Annotated[Union[Literal['full'], int],   
-                                                   dict(help='batch size, or "full" for full-batch training')] = 'full',
-                 full_batch_eval: Annotated[bool,  dict(help='if true, then model uses full-batch evaluation')] = True,
-                 device:          Annotated[str,   dict(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
-                 **trainer_args:  Annotated[dict,  dict(help='extra options passed to the trainer class', bases=[Trainer])]
+                                                   ArgInfo(help='batch size, or "full" for full-batch training')] = 'full',
+                 full_batch_eval: Annotated[bool,  ArgInfo(help='if true, then model uses full-batch evaluation')] = True,
+                 device:          Annotated[str,   ArgInfo(help='device to use', choices=['cpu', 'cuda'])] = 'cuda',
+                 **trainer_args:  Annotated[dict,  ArgInfo(help='extra options passed to the trainer class', bases=[Trainer])]
                  ):
 
         self.num_classes = num_classes

@@ -11,6 +11,8 @@ from core.utils import RT
 
 
 ArgType = Union[Namespace, dict[str, object]]
+ArgInfo = dict[str, object]
+
 
 class ArgWithLiteral:
     def __init__(self, main_type, literals):

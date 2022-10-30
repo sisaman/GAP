@@ -5,6 +5,7 @@ from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
 from opacus.optimizers import DPOptimizer
 from core import console
+from core.args.utils import ArgInfo
 from core.data.loader import NodeDataLoader
 from core.methods.node import GAP
 from core.privacy.mechanisms import ComposedNoisyMechanism
@@ -18,13 +19,13 @@ class NodePrivGAP (GAP):
 
     def __init__(self,
                  num_classes,
-                 epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')],
+                 epsilon:       Annotated[float, ArgInfo(help='DP epsilon parameter', option='-e')],
                  delta:         Annotated[Union[Literal['auto'], float], 
-                                                 dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
-                 max_degree:    Annotated[int,   dict(help='max degree to sample per each node')] = 100,
-                 max_grad_norm: Annotated[float, dict(help='maximum norm of the per-sample gradients')] = 1.0,
-                 batch_size:    Annotated[int,   dict(help='batch size')] = 256,
-                 **kwargs:      Annotated[dict,  dict(help='extra options passed to base class', bases=[GAP], exclude=['batch_norm'])]
+                                                 ArgInfo(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
+                 max_degree:    Annotated[int,   ArgInfo(help='max degree to sample per each node')] = 100,
+                 max_grad_norm: Annotated[float, ArgInfo(help='maximum norm of the per-sample gradients')] = 1.0,
+                 batch_size:    Annotated[int,   ArgInfo(help='batch size')] = 256,
+                 **kwargs:      Annotated[dict,  ArgInfo(help='extra options passed to base class', bases=[GAP], exclude=['batch_norm'])]
                  ):
 
         super().__init__(num_classes, 

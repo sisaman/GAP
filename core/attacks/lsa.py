@@ -6,6 +6,7 @@ from torch.distributions import Categorical
 from torch.nn.functional import cosine_similarity
 from torch_geometric.data import Data
 from torch_geometric.utils import negative_sampling
+from core.args.utils import ArgInfo
 from core.attacks.base import ModelBasedAttack
 from core.modules.base import Metrics
 from core.methods.node.base import NodeClassification
@@ -13,11 +14,11 @@ from core.methods.node.base import NodeClassification
 
 class LinkStealingAttack (ModelBasedAttack):
     def __init__(self, 
-                 num_attack_samples:    Annotated[int, dict(help='number of attack samples')] = 10000,
-                 use_scores:            Annotated[bool, dict(help='use scores')] = False,
-                 use_features:          Annotated[bool, dict(help='use features')] = False,
-                 use_labels:            Annotated[bool, dict(help='use labels')] = False,
-                 **kwargs:              Annotated[dict,  dict(help='extra options passed to base class', bases=[ModelBasedAttack])]
+                 num_attack_samples:    Annotated[int,  ArgInfo(help='number of attack samples')] = 10000,
+                 use_scores:            Annotated[bool, ArgInfo(help='use scores')] = False,
+                 use_features:          Annotated[bool, ArgInfo(help='use features')] = False,
+                 use_labels:            Annotated[bool, ArgInfo(help='use labels')] = False,
+                 **kwargs:              Annotated[dict, ArgInfo(help='extra options passed to base class', bases=[ModelBasedAttack])]
                  ):
         super().__init__(**kwargs)
         assert use_scores or use_features or use_labels

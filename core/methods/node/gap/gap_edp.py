@@ -4,6 +4,7 @@ from typing import Annotated, Literal, Union
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
 from core import console
+from core.args.utils import ArgInfo
 from core.methods.node import GAP
 from core.privacy.algorithms import PMA
 from core.modules.base import Metrics
@@ -14,10 +15,10 @@ class EdgePrivGAP (GAP):
 
     def __init__(self,
                  num_classes,
-                 epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')],
+                 epsilon:       Annotated[float, ArgInfo(help='DP epsilon parameter', option='-e')],
                  delta:         Annotated[Union[Literal['auto'], float], 
-                                                 dict(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
-                 **kwargs:      Annotated[dict,  dict(help='extra options passed to base class', bases=[GAP])]
+                                                 ArgInfo(help='DP delta parameter (if "auto", sets a proper value based on data size)', option='-d')] = 'auto',
+                 **kwargs:      Annotated[dict,  ArgInfo(help='extra options passed to base class', bases=[GAP])]
                  ):
 
         super().__init__(num_classes, **kwargs)

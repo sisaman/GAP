@@ -2,6 +2,7 @@ from typing import Annotated, Optional
 import torch
 from torch_geometric.data import Data
 from core import console
+from core.args.utils import ArgInfo
 from core.methods.node import SAGE
 from core.privacy.algorithms import AsymmetricRandResponse
 from core.modules.base import Metrics
@@ -12,8 +13,8 @@ class EdgePrivSAGE (SAGE):
     
     def __init__(self,
                  num_classes,
-                 epsilon:       Annotated[float, dict(help='DP epsilon parameter', option='-e')],
-                 **kwargs:      Annotated[dict,  dict(help='extra options passed to base class', bases=[SAGE])]
+                 epsilon:       Annotated[float, ArgInfo(help='DP epsilon parameter', option='-e')],
+                 **kwargs:      Annotated[dict,  ArgInfo(help='extra options passed to base class', bases=[SAGE])]
                  ):
 
         super().__init__(num_classes, **kwargs)

@@ -9,7 +9,7 @@ with console.status('importing modules'):
     from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
     from core import globals
     from core.datasets import DatasetLoader
-    from core.args.utils import print_args, strip_kwargs, create_arguments, remove_prefix
+    from core.args.utils import print_args, strip_kwargs, create_arguments, remove_prefix, ArgInfo
     from core.loggers import Logger
     from core.methods.node import supported_methods, NodeClassification
     from core.attacks import supported_attacks
@@ -18,9 +18,9 @@ with console.status('importing modules'):
     from torch_geometric.data import Data
 
 
-def run(seed:    Annotated[int,   dict(help='initial random seed')] = 12345,
-        repeats: Annotated[int,   dict(help='number of times the experiment is repeated')] = 1,
-        debug:   Annotated[bool, dict(help='enable global debug mode')] = False,
+def run(seed:    Annotated[int,   ArgInfo(help='initial random seed')] = 12345,
+        repeats: Annotated[int,   ArgInfo(help='number of times the experiment is repeated')] = 1,
+        debug:   Annotated[bool, ArgInfo(help='enable global debug mode')] = False,
         **kwargs
     ):
 

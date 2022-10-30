@@ -1,6 +1,7 @@
 from typing import Annotated
 from core import console
 from core import globals
+from core.args.utils import ArgInfo
 from core.loggers.base import LoggerBase
 from core.loggers.csv import CSVLogger
 from core.loggers.wandb import WandbLogger
@@ -25,8 +26,8 @@ class Logger:
 
     @classmethod
     def setup(cls,
-        logger:   Annotated[str,  dict(help='select logger type', choices=supported_loggers)] = 'csv',
-        **kwargs: Annotated[dict, dict(help='additional kwargs for the underlying logger', bases=[LoggerBase])],
+        logger:   Annotated[str,  ArgInfo(help='select logger type', choices=supported_loggers)] = 'csv',
+        **kwargs: Annotated[dict, ArgInfo(help='additional kwargs for the underlying logger', bases=[LoggerBase])],
         ) -> LoggerBase:
         
         if globals['debug']:
