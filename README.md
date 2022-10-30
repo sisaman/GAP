@@ -14,26 +14,28 @@ This code is implemented in Python 3.9, and requires the following modules:
 - [Opacus](https://opacus.ai/)
 - [Autodp](https://github.com/yuxiangw/autodp)
 - [WandB](https://docs.wandb.com/)
+- [Dask-Jobqueue](https://jobqueue.dask.org/)
 - [OGB](https://ogb.stanford.edu/docs/home/)
 - [TorchMetrics](https://torchmetrics.readthedocs.io/en/latest/pages/quickstart.html)
 - [Rich](https://rich.readthedocs.io/en/stable/introduction.html)
 - [Ninja](https://ninja-build.org/)
 - [Tabulate](https://github.com/astanin/python-tabulate)
 - [Seaborn](https://seaborn.pydata.org/)
-- [Jupyter](https://jupyter.org/install)
 - [ipywidgets](https://ipywidgets.readthedocs.io/en/latest/user_install.html)
 
 Refer to [requiresments.txt](./requirements.txt) for the tested versions of the above packages.
 
-### Notes
+## Notes
 1. The code includes a custome C++ operator for faster edge sampling required for the node-level DP methods. PyTorch will automatically build the C++ code at runtime, but you need to have a C++ compiler installed (usually it is handled automatically if you use conda).
 
 2. We use [Weights & Biases](https://docs.wandb.ai/) (WandB) to track the training progress and log experiment results. To replicate the results of the paper as described in the following, you need to have a WandB account. Otherwise, if you just want to train and evaluate the model, a WandB account is not required.
 
-3. The code requires autodp version 0.2.1b or later. You can install the latest version directly from the [GitHub repository](https://github.com/yuxiangw/autodp) using:
-```
-pip install git+https://github.com/yuxiangw/autodp
-```
+4. We use [Dask](https://jobqueue.dask.org/) to parallelize running multiple experiments on high-performance computing clusters (e.g., SGE, SLURM, etc). If you don't have access to a cluster, you can also simply run the experiments sequentially on your machine (see [usage section](#usage) below).
+
+3. The code requires autodp version 0.2.1b or later. You can install the latest version directly from the [GitHub repository](https://github.com/yuxiangw/autodp) using: 
+    ```
+    pip install git+https://github.com/yuxiangw/autodp
+    ```
 
 
 ## Usage
@@ -41,12 +43,26 @@ pip install git+https://github.com/yuxiangw/autodp
 ### Replicating the paper's results
 To reproduce the paper's results, please follow the below steps:  
 
-1. Run [experiments.ipynb](./experiments.ipynb) notebook. It creates a file "jobs/experiments.sh" containing all individual commands for running the experiments in the paper. You must specify your WandB username and (optionally) project name in this notebook.
+1. Set your WandB username in [wandb.yaml](./wandb.yaml) (line 7). This is required to log the results to your WandB account.
 
-2. Run ``sh jobs/experiments.sh`` to train all the models required for the experiments one by one. The results will be logged to the WandB project you specified in step 1.  
-WARNING: This step will take a lot of time. For faster execution, consider running the commands in parallel or using a distributed job scheduler.
+2. Execute the following python script:
+    ```
+    python experiments.py --generate
+    ```
+    This creates the file "jobs/gap.sh" containing the commands to run all the experiments.
 
-3. Run [results.ipynb](./results.ipynb) notebook to visualize the results as shown in the paper. It will fetch the experiment results from the WandB server, so you must set the same WandB username and project as in step 1 in this notebook as well. Note that we used the [Linux Libertine](https://libertine-fonts.org/) font in the figures, so you either need to have this font installed or change the font in the notebook.
+3. If you want to run the experiments on your own machine, run:
+    ```
+    sh jobs/experiments.sh
+    ``` 
+    This trains all the models required for the experiments one by one. Otherwise, if you have access to a [supported HPC cluster](https://jobqueue.dask.org/en/latest/api.html), first configure your cluster setting (`~/.config/dask/jobqueue.yaml`) according to Dask-Jobqueue's [documentation](https://jobqueue.dask.org/en/latest/configuration.html). Then, run the following command:
+    ```
+    python experiments.py --run --scheduler <scheduler>
+    ```
+    where `<scheduler>` is the name of your scheduler (e.g., `sge`, `slurm`, etc). The above command will submit all the jobs to your cluster and run them in parallel. 
+    
+
+  4. Use [results.ipynb](./results.ipynb) notebook to visualize the results as shown in the paper. Note that we used the [Linux Libertine](https://libertine-fonts.org/) font in the figures, so you either need to have this font installed or change the font in the notebook.
 
 ### Training individual models
 
