@@ -1,4 +1,5 @@
 autodp==0.2.1b0
+class_resolver==0.3.10
 ipywidgets==7.6.5
 ogb==1.3.4
 opacus==1.2.0
