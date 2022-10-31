@@ -61,7 +61,7 @@ class NoisySGD(NoisyMechanism):
         if self.params['noise_scale'] > 0.0 and self.params['epochs'] > 0:
             optimizer = DPOptimizer(
                 optimizer=optimizer,
-                noise_multiplier=self.params['noise_scale'],
+                noise_multiplier=self.params['noise_scale'],    # noise_multiplier is the same as noise_scale in Opacus
                 max_grad_norm=self.params['max_grad_norm'],
                 expected_batch_size=self.params['batch_size'],
             )
