@@ -36,21 +36,21 @@ class EncoderModule(MLPNodeClassifier):
             activation_fn=activation_fn,
             dropout=dropout,
             batch_norm=batch_norm,
-            plain_last=normalize,
+            plain_last=True,
         )
 
         self.dropout_fn = Dropout(p=dropout, inplace=True)
         self.activation_fn = activation_fn
         self.normalize = normalize
-        self.bn = BatchNorm1d(hidden_dim) if batch_norm and normalize else False
+        self.bn = BatchNorm1d(hidden_dim) if batch_norm else False
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.encoder_mlp(x)
         if self.normalize:
             x = F.normalize(x, p=2, dim=-1)
-            x = self.bn(x) if self.bn else x
-            x = self.dropout_fn(x)
-            x = self.activation_fn(x)
+        x = self.bn(x) if self.bn else x
+        x = self.dropout_fn(x)
+        x = self.activation_fn(x)
         x = super().forward(x)
         return x
 
