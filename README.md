@@ -1,29 +1,14 @@
 # GAP: Differentially Private Graph Neural Networks with Aggregation Perturbation
 
 This repository is the official implementation of the paper:  
-[**GAP: Differentially Private Graph Neural Networks with Aggregation Perturbation**](https://arxiv.org/abs/2203.00949)
+[**GAP: Differentially Private Graph Neural Networks with Aggregation Perturbation**](https://arxiv.org/abs/2203.00949)   
+Accepted at USENIX Security 2023
 
-<!-- ## Results
-<img src="https://i.imgur.com/Xlv0E7E.png" alt="results" width="500"/> -->
 
 ## Requirements
 
-This code is implemented in Python 3.9, and requires the following modules:  
-- [PyTorch](https://pytorch.org/get-started/locally/)
-- [PyTorch Geometric](https://pytorch-geometric.readthedocs.io/en/latest/notes/installation.html)
-- [Opacus](https://opacus.ai/)
-- [Autodp](https://github.com/yuxiangw/autodp)
-- [WandB](https://docs.wandb.com/)
-- [Dask-Jobqueue](https://jobqueue.dask.org/)
-- [OGB](https://ogb.stanford.edu/docs/home/)
-- [TorchMetrics](https://torchmetrics.readthedocs.io/en/latest/pages/quickstart.html)
-- [Rich](https://rich.readthedocs.io/en/stable/introduction.html)
-- [Ninja](https://ninja-build.org/)
-- [Tabulate](https://github.com/astanin/python-tabulate)
-- [Seaborn](https://seaborn.pydata.org/)
-- [ipywidgets](https://ipywidgets.readthedocs.io/en/latest/user_install.html)
-
-Refer to [requiresments.txt](./requirements.txt) for the tested versions of the above packages.
+This code is implemented in Python 3.9 using PyTorch-Geometric 2.1.0 and PyTorch 1.12.1.
+Refer to [requiresments.txt](./requirements.txt) to see the full list of dependencies.
 
 ## Notes
 1. The code includes a custome C++ operator for faster edge sampling required for the node-level DP methods. PyTorch will automatically build the C++ code at runtime, but you need to have a C++ compiler installed (usually it is handled automatically if you use conda).
@@ -71,6 +56,23 @@ Run the following command to see the list of available options for training indi
 ```
 python train.py --help
 ``` 
+
+## Results
+
+<center>
+
+| Privacy Level | Method        | $\epsilon$ | Facebook             | Reddit              | Amazon              |
+|---------------|---------------|------------|----------------------|---------------------|---------------------|
+| None          | GAP-$\infty$  | $\infty$   | 80.0 $\pm$ 0.48      | **99.4 $\pm$ 0.02** | 91.2 $\pm$ 0.07     |
+| None          | SAGE-$\infty$ | $\infty$   | **83.2 $\pm$ 0.68**  | 99.1 $\pm$ 0.01     | **92.7 $\pm$ 0.09** |
+| Edge    | GAP-EDP       | 4          | **76.3 $\pm$ 0.21**  | **98.7 $\pm$ 0.03** | **83.8 $\pm$ 0.26** |
+| Edge    | SAGE-EDP      | 4          | 50.4 $\pm$ 0.69      | 84.6 $\pm$ 1.63     | 68.3 $\pm$ 0.99     |
+| Edge    | MLP           | 0          | 50.8 $\pm$ 0.17      | 82.4 $\pm$ 0.10     | 71.1 $\pm$ 0.18     |
+| Node    | GAP-NDP       | 8          | **63.2 $\pm$ 0.35**  | **94.0 $\pm$ 0.14** | **77.4 $\pm$ 0.07** |
+| Node    | SAGE-NDP      | 8          | 37.2 $\pm$ 0.96      | 60.5 $\pm$ 1.10     | 27.5 $\pm$ 0.83     |
+| Node    | MLP-DP        | 8          | 50.2 $\pm$ 0.25      | 81.5 $\pm$ 0.12     | 73.6 $\pm$ 0.05     |
+
+</center>
 
 
 ## Contact
