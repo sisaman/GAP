@@ -84,10 +84,14 @@ Should you ran into any problems or had any questions, please get in touch via [
 
 If you find this code useful, please cite the following paper:  
 ```bibtex
-@article{sajadmanesh2022gap,
-  title={GAP: Differentially Private Graph Neural Networks with Aggregation Perturbation},
+
+@inproceedings {sajadmanesh2023gap,
+  title = {GAP: Differentially Private Graph Neural Networks with Aggregation Perturbation},
   author={Sajadmanesh, Sina and Shamsabadi, Ali Shahin and Bellet, Aur{\'e}lien and Gatica-Perez, Daniel},
-  journal={arXiv preprint arXiv:2203.00949},
-  year={2022}
+  booktitle = {32nd USENIX Security Symposium (USENIX Security 23)},
+  year = {2023},
+  address = {Anaheim, CA},
+  publisher = {USENIX Association},
+  month = aug,
 }
 ```
