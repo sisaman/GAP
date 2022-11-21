@@ -34,7 +34,7 @@ To reproduce the paper's results, please follow the below steps:
     ```
     python experiments.py --generate
     ```
-    This creates the file "jobs/gap.sh" containing the commands to run all the experiments.
+    This creates the file "jobs/experiments.sh" containing the commands to run all the experiments.
 
 3. If you want to run the experiments on your own machine, run:
     ```

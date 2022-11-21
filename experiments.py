@@ -252,7 +252,7 @@ def main() -> None:
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument('--generate', action='store_true', help='Generate jobs')
     parser.add_argument('--run', action='store_true', help='Run jobs')
-    parser.add_argument('--path', type=str, default='jobs/gap.sh', help='Path to the job file')
+    parser.add_argument('--path', type=str, default='jobs/experiments.sh', help='Path to the job file')
     parser.add_argument('--scheduler', type=str, default='sge', help='Job scheduler to use', 
                         choices=JobScheduler.cluster_resolver.options)
     args = parser.parse_args()
