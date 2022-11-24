@@ -11,7 +11,7 @@ This code is implemented in Python 3.9 using PyTorch-Geometric 2.1.0 and PyTorch
 Refer to [requiresments.txt](./requirements.txt) to see the full list of dependencies.
 
 ## Notes
-1. The code includes a custome C++ operator for faster edge sampling required for the node-level DP methods. PyTorch will automatically build the C++ code at runtime, but you need to have a C++ compiler installed (usually it is handled automatically if you use conda).
+1. The code includes a custom C++ operator for faster edge sampling required for the node-level DP methods. PyTorch will automatically build the C++ code at runtime, but you need to have a C++ compiler installed (usually it is handled automatically if you use conda).
 
 2. We use [Weights & Biases](https://docs.wandb.ai/) (WandB) to track the training progress and log experiment results. To replicate the results of the paper as described in the following, you need to have a WandB account. Otherwise, if you just want to train and evaluate the model, a WandB account is not required.
 
