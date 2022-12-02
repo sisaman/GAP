@@ -57,6 +57,12 @@ Run the following command to see the list of available options for training indi
 python train.py --help
 ``` 
 
+### Demo
+
+<p align="center">
+  <img width="600" src="https://i.imgur.com/ctveM6V.gif">
+</p>
+
 ## Results
 
 <center>
