@@ -1,4 +1,5 @@
 import logging
+import warnings
 from rich.traceback import install
 from rich.logging import RichHandler
 from core.console.console import Console
@@ -28,3 +29,4 @@ logger.addHandler(log_handler)
 logging.getLogger("py.warnings").addHandler(log_handler)
 logging.getLogger("py.warnings").propagate = False
 logging.captureWarnings(True)
+warnings.simplefilter("ignore")
