@@ -6,6 +6,7 @@ from rich.table import Column, Table
 from core.modules.base import Metrics
 from core import console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn, Task
+from rich.highlighter import ReprHighlighter
 
 
 class TrainerProgress(Progress):
@@ -19,10 +20,10 @@ class TrainerProgress(Progress):
         progress_bar = [
             SpinnerColumn(),
             "{task.description}",
-            "{task.completed:>3}/{task.total}",
+            "[cyan]{task.completed:>3}[/cyan]/[cyan]{task.total}[/cyan]",
             "{task.fields[unit]}",
             BarColumn(),
-            "{task.percentage:>3.0f}%",
+            "[cyan]{task.percentage:>3.0f}[/cyan]%",
             TimeElapsedColumn(),
             # "{task.fields[metrics]}"
         ]
@@ -73,6 +74,7 @@ class TrainerProgress(Progress):
             for _column in self.columns
         )
 
+        highlighter = ReprHighlighter()
         table = Table.grid(*table_columns, padding=(0, 1), expand=self.expand)
 
         if tasks:
@@ -94,7 +96,7 @@ class TrainerProgress(Progress):
 
             self.max_rows = max(self.max_rows, table.row_count)
             pad_top = 0 if epoch_task.finished else self.max_rows - table.row_count
-            group = Group(table, Padding(Text(metrics), pad=(pad_top,0,0,2)))
+            group = Group(table, Padding(highlighter(metrics), pad=(pad_top,0,0,2)))
             return Padding(group, pad=(0,0,1,21))
 
         else:
