@@ -1,11 +1,8 @@
 import os
 from functools import partial
 from typing import Annotated
-from rich.highlighter import ReprHighlighter
-from rich import box
 import torch
 from core import console
-from rich.table import Table
 from torch_geometric.data import Data
 from torch_geometric.datasets import Reddit
 from torch_geometric.transforms import Compose, ToSparseTensor, RandomNodeSplit
@@ -15,6 +12,7 @@ from core.data.transforms import RemoveSelfLoops
 from core.data.transforms import RemoveIsolatedNodes
 from core.datasets import Facebook
 from core.datasets import Amazon
+from core.utils import dict2table
 
 
 class DatasetLoader:
@@ -64,19 +62,16 @@ class DatasetLoader:
         test_ratio: float = data.test_mask.sum().item() / data.num_nodes * 100
 
         stat = {
-            'name': self.name,
             'nodes': f'{data.num_nodes:,}',
             'edges': f'{data.num_edges:,}',
             'features': f'{data.num_features:,}',
             'classes': f'{int(data.y.max() + 1)}',
             'mean degree': f'{nodes_degree.mean():.2f}',
             'median degree': f'{nodes_degree.median()}',
-            'train/val/test (%)': f'{train_ratio:.2f} / {val_ratio:.2f} / {test_ratio:.2f}',
-            'baseline (%)': f'{baseline:.2f}'
+            'train/val/test (%)': f'{train_ratio:.1f}/{val_ratio:.1f}/{test_ratio:.1f}',
+            'baseline acc (%)': f'{baseline:.2f}'
         }
 
-        highlighter = ReprHighlighter()
-        table = Table(*stat.keys(), title="dataset stats", box=box.HORIZONTALS)
-        table.add_row(*map(highlighter, stat.values()))
+        table = dict2table(stat, num_cols=2, title=f'dataset: [yellow]{self.name}[/yellow]')
         console.info(table)
         console.print()

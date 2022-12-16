@@ -1,13 +1,8 @@
 from typing import Annotated, Callable, Literal, Union, get_args, get_origin
 from core import console
-import math
 import inspect
-from rich.table import Table
-from rich.highlighter import ReprHighlighter
-from rich import box
-from tabulate import tabulate
 from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError, Namespace
-from core.utils import RT
+from core.utils import dict2table
 
 
 ArgType = Union[Namespace, dict[str, object]]
@@ -156,32 +151,7 @@ def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list =
 
 def print_args(args: ArgType, num_cols: int = 4):
     args = args if isinstance(args, dict) else vars(args)
-    num_args = len(args)
-    num_rows = math.ceil(num_args / num_cols)
-    col = 0
-    data = {}
-    keys = []
-    vals = []
-
-    for i, (key, val) in enumerate(args.items()):
-        keys.append(f'{key}:')
-        
-        vals.append(val)
-        if (i + 1) % num_rows == 0:
-            data[col] = keys
-            data[col+1] = vals
-            keys = []
-            vals = []
-            col += 2
-
-    data[col] = keys
-    data[col+1] = vals
-
-    highlighter = ReprHighlighter()
-    message = tabulate(data, tablefmt='plain')
-    table = Table(title='program arguments', show_header=False, box=box.HORIZONTALS)
-    table.add_row(highlighter(message))
-
+    table = dict2table(args, num_cols=num_cols, title='program arguments')
     console.print()
     console.info(table)
     console.print()
