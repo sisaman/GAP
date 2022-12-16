@@ -108,7 +108,7 @@ def main():
 
     parser = ArgumentParser(parents=[init_parser], formatter_class=ArgumentDefaultsHelpFormatter)
     kwargs = vars(parser.parse_args())
-    print_args(kwargs, num_cols=4)
+    print_args(kwargs, num_cols=2)
 
     try:
         start = time()
