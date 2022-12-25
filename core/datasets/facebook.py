@@ -61,7 +61,7 @@ class Facebook(InMemoryDataset):
         if 0 in features[self.target].values:
             y = y - 1
 
-        x = features.drop(columns=self.target).replace({0: pd.NA})
+        x = features.drop(columns=self.target).replace({0: None})
         x = torch.tensor(pd.get_dummies(x).values, dtype=torch.float)
         edge_index = from_scipy_sparse_matrix(mat['A'])[0]
 
