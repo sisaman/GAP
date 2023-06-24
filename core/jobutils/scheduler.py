@@ -10,10 +10,8 @@ from subprocess import CalledProcessError
 from class_resolver import ClassResolver
 from core import console, Console
 
-dask.config.set({"jobqueue.sge.walltime": None})
-dask.config.set({"distributed.worker.memory.target": False})    # Avoid spilling to disk
-dask.config.set({"distributed.worker.memory.spill": False})     # Avoid spilling to disk
-dask.config.set({'distributed.scheduler.allowed-failures': 99}) # Allow workers to fail
+
+cluster_resolver = ClassResolver.from_subclasses(JobQueueCluster, suffix='Cluster')
 
 
 class JobScheduler:
@@ -24,13 +22,18 @@ class JobScheduler:
         scheduler (str, optional): The scheduler to use. Options are 'htcondor', 
             'lsf', 'moab', 'oar', 'pbs', 'sge', 'slurm'. Defaults to 'sge'.
     """
-    def __init__(self, job_file: str, scheduler: str = 'sge'):
-        assert scheduler in self.cluster_resolver.options, f'Invalid scheduler: {scheduler}'
+    def __init__(self, job_file: str, scheduler: str = 'sge', config: dict = None):
+        assert scheduler in cluster_resolver.options, f'Invalid scheduler: {scheduler}'
         self.scheduler = scheduler
         self.file = job_file
         path = os.path.realpath(self.file)
         self.name = Path(path).stem
         self.job_dir = os.path.join(os.path.dirname(path), self.name)
+
+        if config:
+            dask_config = dask.config.config
+            updated_config = dask.config.merge(dask_config, config)
+            dask.config.set(updated_config)
 
         with open(self.file) as jobs_file:
             self.job_list = jobs_file.read().splitlines()
@@ -42,66 +45,54 @@ class JobScheduler:
             list[str]: The list of failed job commands.
         """
 
-        cluster = self.cluster_resolver.make(
+        max_gpus = 160
+        total = len(self.job_list)
+        progress = SchedulerProgress(total=total, console=console)
+
+        num_failed_jobs = 0
+        failures_dir = os.path.join(self.job_dir, 'failures')
+        os.makedirs(failures_dir, exist_ok=True)
+
+        cluster: JobQueueCluster = cluster_resolver.make(
             self.scheduler,
             job_name=f'dask-{self.name}',
             log_directory=os.path.join(self.job_dir, 'logs'),
         )
+
+        console.info(f'dashboard at {cluster.dashboard_link}')
         
-        with cluster:
-            total = len(self.job_list)
-            cluster.adapt(minimum=min(100, total))
+        with cluster:   
+            cluster.adapt(minimum=min(160, total))  # 160 is the max number of gpus on the cluster
             
             with Client(cluster) as client:
-                futures = client.map(self.execute, range(1, total + 1))
-                progress = SchedulerProgress(total=total, console=console)
-                
-                failed_jobs = {}
-                failures_dir = os.path.join(self.job_dir, 'failures')
-                os.makedirs(failures_dir, exist_ok=True)
-
-                try:
-                    with progress:
-                        for future in as_completed(futures, with_results=False):
-                            try:
-                                future.result()
-                                progress.update(failed=False)
-                            except CalledProcessError as e:
-                                job_cmd = ' '.join(e.cmd)
-                                failed_jobs[job_cmd] = e.output.decode()
-                                with open(os.path.join(failures_dir, f'{len(failed_jobs)}.log'), 'w') as f:
-                                    print(job_cmd, end='\n\n', file=f)
-                                    print(failed_jobs[job_cmd], file=f)
-                                progress.update(failed=True)
-                except KeyboardInterrupt:
-                    console.warning('Graceful Shutdown')
-
-                return failed_jobs
-
-    def execute(self, line: int = None):
-        """Execute all or a single line of the job file.
-
-        Args:
-            line (int, optional): The line to execute (starting from 1). 
-                Defaults to None, which runs all the lines.
-        
-        Raises:
-            CalledProcessError: If the command returns a non-zero exit status.
-        """
-
-        if line is None:
-            for cmd in self.job_list:
-                subprocess.run(cmd.split())
-        else:
-            subprocess.run(
-                args=self.job_list[line - 1].split(), 
-                check=True, 
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.STDOUT
-            )
-
-    cluster_resolver = ClassResolver.from_subclasses(JobQueueCluster, suffix='Cluster')
-
+                with progress:
+                    futures = client.map(
+                        lambda cmd: subprocess.run(args=cmd.split(), check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT),
+                        self.job_list[:max_gpus],
+                        pure=False,
+                    )
+                    submitted = min(max_gpus, total)
+                    futures = as_completed(futures, with_results=False)
+                    for future in futures:
+                        try:
+                            future.result()
+                            progress.update(failed=False)
+                        except CalledProcessError as e:
+                            num_failed_jobs += 1
+                            job_cmd = ' '.join(e.cmd)
+                            failed_job_output = e.output.decode()
+                            with open(os.path.join(failures_dir, f'{num_failed_jobs}.log'), 'w') as f:
+                                print(job_cmd, end='\n\n', file=f)
+                                print(failed_job_output, file=f)
+                            progress.update(failed=True)
+                        if submitted < total:
+                            future = client.submit(
+                                lambda cmd: subprocess.run(args=cmd.split(), check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT),
+                                self.job_list[submitted],
+                                pure=False,
+                            )
+                            futures.add(future)
+                            submitted += 1
 
 
 class SchedulerProgress:

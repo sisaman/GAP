@@ -40,7 +40,7 @@ To reproduce the paper's results, please follow the below steps:
     ```
     sh jobs/experiments.sh
     ``` 
-    This trains all the models required for the experiments one by one. Otherwise, if you have access to a [supported HPC cluster](https://jobqueue.dask.org/en/latest/api.html), first configure your cluster setting (`~/.config/dask/jobqueue.yaml`) according to Dask-Jobqueue's [documentation](https://jobqueue.dask.org/en/latest/configuration.html). Then, run the following command:
+    This trains all the models required for the experiments one by one. Otherwise, if you have access to a [supported HPC cluster](https://jobqueue.dask.org/en/latest/api.html), first configure your cluster setting in [dask.yaml](./dask.yaml) according to Dask-Jobqueue's [documentation](https://jobqueue.dask.org/en/latest/configuration.html). Then, run the following command:
     ```
     python experiments.py --run --scheduler <scheduler>
     ```

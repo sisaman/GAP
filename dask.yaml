@@ -1,0 +1,35 @@
+distributed:
+  worker:
+    memory:
+      spill: false
+      target: false
+  scheduler:
+    # work-stealing: false
+    allowed-failures: 3
+
+jobqueue:
+  sge:
+    name: dask-worker
+
+    # Dask worker options
+    cores: 1                                        # Total number of cores per job
+    memory: 70GB                                    # Total amount of memory per job
+    processes: 1                                    # Number of Python processes per job
+    local-directory: /idiap/temp/sajadmanesh        # Location of fast local storage like /scratch or $TMPDIR
+    worker-extra-args: ['--lifetime', '180m', '--lifetime-stagger', '10m']
+    # interface: null                               # Network interface to use like eth0 or ib0
+    # death-timeout: 60                             # Number of seconds to wait if a worker can not find a scheduler
+    # shared-temp-directory: null                   # Shared directory currently used to dump temporary security objects for workers
+
+    # SGE resource manager options
+    project: wenet
+    job-script-prologue: ['export CUDA_VISIBLE_DEVICES=0', 'export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:10240']
+    job-extra-directives: ['-V']
+    resource-spec: q_short_gpu,gpumem=20
+    # shebang: "#!/usr/bin/env bash"
+    # queue: null
+    walltime: null
+    # log-directory: null
+    
+    # Scheduler options
+    # scheduler-options: {}
