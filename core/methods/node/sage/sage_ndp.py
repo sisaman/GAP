@@ -109,7 +109,7 @@ class NodePrivSAGE (SAGE):
         dataloader = super().data_loader(data, stage)
         if stage == 'train':
             dataloader.hops = 1
-            dataloader.poisson_sampling = True
+            dataloader.poisson_sampling = False
         return dataloader
 
     def configure_optimizer(self) -> Optimizer:
