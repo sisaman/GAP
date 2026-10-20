@@ -1,0 +1,62 @@
+[project]
+name = "gap"
+version = "0.1.3"
+description = "GAP: Differentially Private Graph Neural Networks with Aggregation Perturbation"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = "==3.9.*"
+dependencies = [
+    "autodp==0.2.3.1",
+    "class-resolver==0.3.10",
+    "dask[distributed]",
+    "dask-jobqueue==0.8.1",
+    # required by torch.utils.cpp_extension.load() to build csrc/sampler.cpp at runtime
+    "ninja==1.10.2",
+    "numpy<2",
+    "ogb==1.3.4",
+    "opacus==1.2.0",
+    "pandas",
+    "pyyaml",
+    "rich==12.6.0",
+    "scikit-learn",
+    "scipy==1.9.1",
+    "tabulate==0.8.10",
+    "torch==1.13.1",
+    "torch-geometric==2.1.0.post1",
+    # imported by torch-sparse without being declared in its metadata
+    "torch-scatter",
+    "torch-sparse==0.6.16",
+    "torchmetrics==0.9.3",
+    "typing-extensions",
+    "wandb==0.12.9",
+]
+
+[dependency-groups]
+# used by results.ipynb
+notebook = [
+    "matplotlib<3.9",  # seaborn 0.11 uses cm.register_cmap, removed in 3.9
+    "seaborn==0.11.2",
+    "tqdm",
+]
+
+[tool.uv]
+package = false
+default-groups = ["notebook"]
+constraint-dependencies = [
+    # wandb 0.12.9 protobufs are incompatible with protobuf>=4
+    "protobuf<4",
+    # class-resolver and wandb import pkg_resources, which setuptools>=81 no longer ships
+    "setuptools<81",
+]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+# prebuilt PyG extension wheels matching torch 1.13 + CUDA 11.7 (the PyPI torch default)
+[[tool.uv.index]]
+name = "pyg"
+url = "https://data.pyg.org/whl/torch-1.13.0+cu117.html"
+format = "flat"
+explicit = true
+
+[tool.uv.sources]
+torch-scatter = { index = "pyg" }
+torch-sparse = { index = "pyg" }

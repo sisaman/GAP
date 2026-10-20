@@ -7,20 +7,20 @@ Accepted at USENIX Security 2023
 
 ## Requirements
 
-This code is implemented in Python 3.9 using PyTorch-Geometric 2.1.0 and PyTorch 1.12.1.
-Refer to [requiresments.txt](./requirements.txt) to see the full list of dependencies.
+This code is implemented in Python 3.9 using PyTorch-Geometric 2.1.0 and PyTorch 1.13.1.
+Dependencies are managed with [uv](https://docs.astral.sh/uv/) and listed in [pyproject.toml](./pyproject.toml).
+To create the environment (Linux x86_64), run:
+```
+uv sync --python 3.9
+```
+Then run the commands below with `uv run`, e.g., `uv run python train.py --help`.
 
 ## Notes
-1. The code includes a custom C++ operator for faster edge sampling required for the node-level DP methods. PyTorch will automatically build the C++ code at runtime, but you need to have a C++ compiler installed (usually it is handled automatically if you use conda).
+1. The code includes a custom C++ operator for faster edge sampling required for the node-level DP methods. PyTorch will automatically build the C++ code at runtime, but you need to have a C++ compiler installed.
 
 2. We use [Weights & Biases](https://docs.wandb.ai/) (WandB) to track the training progress and log experiment results. To replicate the results of the paper as described in the following, you need to have a WandB account. Otherwise, if you just want to train and evaluate the model, a WandB account is not required.
 
-4. We use [Dask](https://jobqueue.dask.org/) to parallelize running multiple experiments on high-performance computing clusters (e.g., SGE, SLURM, etc). If you don't have access to a cluster, you can also simply run the experiments sequentially on your machine (see [usage section](#usage) below).
-
-3. The code requires autodp version 0.2.1b or later. You can install the latest version directly from the [GitHub repository](https://github.com/yuxiangw/autodp) using: 
-    ```
-    pip install git+https://github.com/yuxiangw/autodp
-    ```
+3. We use [Dask](https://jobqueue.dask.org/) to parallelize running multiple experiments on high-performance computing clusters (e.g., SGE, SLURM, etc). If you don't have access to a cluster, you can also simply run the experiments sequentially on your machine (see [usage section](#usage) below).
 
 
 ## Usage
