@@ -6,12 +6,12 @@ import pandas as pd
 import torch
 from scipy.io import loadmat
 from sklearn.preprocessing import LabelEncoder
-from torch_geometric.data import Data, InMemoryDataset, download_url
+from torch_geometric.data import Data, InMemoryDataset, download_url, extract_zip
 from torch_geometric.utils import from_scipy_sparse_matrix, subgraph
 
 
 class Facebook(InMemoryDataset):
-    url = 'https://github.com/sisaman/pyg-datasets/raw/main/datasets/facebook100/'
+    url = 'https://archive.org/download/oxford-2005-facebook-matrix/facebook100.zip'
     targets: ClassVar[list[str]] = ['status', 'gender', 'major', 'minor', 'housing', 'year']
     available_datasets: ClassVar[list[str]] = [
         "Villanova62", "UCLA26", "Tennessee95", "NYU9", "Carnegie49", "GWU54", "USF51", "Vanderbilt48", 
@@ -36,11 +36,12 @@ class Facebook(InMemoryDataset):
 
     @property
     def raw_dir(self) -> str:
-        return os.path.join(self.root, self.name, 'raw')
+        # shared across all universities, since the zip file contains all of them
+        return os.path.join(self.root, 'raw')
 
     @property
     def raw_file_names(self) -> str:
-        return self.name + '.mat'
+        return os.path.join('facebook100', self.name + '.mat')
 
     @property
     def processed_dir(self) -> str:
@@ -53,11 +54,13 @@ class Facebook(InMemoryDataset):
     def download(self):
         context = ssl._create_default_https_context
         ssl._create_default_https_context = ssl._create_unverified_context
-        download_url(f'{self.url}/{self.raw_file_names}', self.raw_dir)
+        path = download_url(self.url, self.raw_dir)
         ssl._create_default_https_context = context
+        extract_zip(path, self.raw_dir)
+        os.unlink(path)
 
     def process(self):
-        mat = loadmat(os.path.join(self.raw_dir, self.raw_file_names))
+        mat = loadmat(self.raw_paths[0])
         features = pd.DataFrame(mat['local_info'][:, :-1], columns=self.targets)
         y = torch.from_numpy(LabelEncoder().fit_transform(features[self.target]))
         if 0 in features[self.target].values:
