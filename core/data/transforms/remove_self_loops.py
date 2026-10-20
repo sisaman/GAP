@@ -1,6 +1,6 @@
-from torch_geometric.utils import remove_self_loops
-from torch_geometric.transforms import BaseTransform
 from torch_geometric.data import Data
+from torch_geometric.transforms import BaseTransform
+from torch_geometric.utils import remove_self_loops
 
 
 class RemoveSelfLoops(BaseTransform):

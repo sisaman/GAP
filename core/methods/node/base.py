@@ -1,15 +1,16 @@
 from abc import abstractmethod
 from typing import Annotated, Literal, Optional, Union
+
 import torch
 from torch import Tensor
-from torch.optim import Adam, SGD, Optimizer
+from torch.optim import SGD, Adam, Optimizer
 from torch_geometric.data import Data
+
+from core import console, globals
 from core.args.utils import ArgInfo
 from core.data.loader import NodeDataLoader
-from core import globals
 from core.methods.base import MethodBase
-from core.modules.base import TrainableModule, Metrics, Stage
-from core import console
+from core.modules.base import Metrics, Stage, TrainableModule
 from core.trainer import Trainer
 
 

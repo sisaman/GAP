@@ -1,9 +1,11 @@
+from typing import Annotated, ClassVar, Optional
+
 import torch
-from typing import Annotated, Optional
 import torch.nn.functional as F
-from torch.optim import Adam, SGD, Optimizer
+from torch.optim import SGD, Adam, Optimizer
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
+
 from core import console
 from core.args.utils import ArgInfo
 from core.methods.node.base import NodeClassification
@@ -16,7 +18,7 @@ from core.modules.node.em import EncoderModule
 class GAP (NodeClassification):
     """Non-private GAP method"""
 
-    supported_activations = {
+    supported_activations: ClassVar[dict] = {
         'relu': torch.relu_,
         'selu': torch.selu_,
         'tanh': torch.tanh,

@@ -1,14 +1,16 @@
+from typing import Annotated, ClassVar
+
 import torch
-from typing import Annotated
+
 from core.args.utils import ArgInfo
-from core.methods.node import NodeClassification
+from core.methods.node.base import NodeClassification
 from core.modules.node.mlp import MLPNodeClassifier
 
 
 class MLP (NodeClassification):
     """Non-private MLP method"""
 
-    supported_activations = {
+    supported_activations: ClassVar[dict] = {
         'relu': torch.relu_,
         'selu': torch.selu_,
         'tanh': torch.tanh,

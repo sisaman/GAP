@@ -1,13 +1,15 @@
 from abc import ABC, abstractmethod
 from typing import Annotated
+
 import torch
 from torch_geometric.data import Data
 from torchmetrics.functional import auroc, roc
-from core.args.utils import ArgInfo, remove_prefix
+
 from core import console
-from core.modules.base import Metrics
-from core.methods.node.base import NodeClassification
+from core.args.utils import ArgInfo, remove_prefix
 from core.methods.node import MLP
+from core.methods.node.base import NodeClassification
+from core.modules.base import Metrics
 
 
 class AttackBase(ABC):

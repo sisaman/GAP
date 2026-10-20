@@ -1,6 +1,7 @@
 import os
 
 from torch.nn import Module
+
 from core.loggers.base import LoggerBase, if_enabled
 
 try: 

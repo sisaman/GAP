@@ -1,13 +1,15 @@
 from typing import Annotated
+
 import numpy as np
 import torch
+from sklearn.metrics import roc_auc_score, roc_curve
 from torch_geometric.data import Data
+
+from core import console
 from core.args.utils import ArgInfo
 from core.attacks.base import AttackBase
-from core.modules.base import Metrics
-from core import console
 from core.methods.node.base import NodeClassification
-from sklearn.metrics import roc_curve, roc_auc_score
+from core.modules.base import Metrics
 
 
 class LikelihoodRatioAttack(AttackBase):

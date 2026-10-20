@@ -2,15 +2,15 @@ from abc import abstractmethod
 from typing import Annotated, Optional
 
 import torch
-from core import globals
-from core import console
+from torch import Tensor
+from torch.optim import SGD, Adam, Optimizer
+from torch_geometric.data import Data
+
+from core import console, globals
 from core.args.utils import ArgInfo
 from core.methods.base import MethodBase
 from core.modules.base import Metrics, TrainableModule
 from core.trainer import Trainer
-from torch import Tensor
-from torch.optim import SGD, Adam, Optimizer
-from torch_geometric.data import Data
 
 
 class LinkPrediction(MethodBase):

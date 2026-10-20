@@ -1,10 +1,12 @@
 from typing import Callable
+
 import torch
-from torch import Tensor
 import torch.nn.functional as F
-from torch_sparse import SparseTensor
-from core.models import MLP
+from torch import Tensor
 from torch_geometric.data import Data
+from torch_sparse import SparseTensor
+
+from core.models import MLP
 from core.models.sage import SAGE
 from core.modules.base import Metrics, Stage, TrainableModule
 

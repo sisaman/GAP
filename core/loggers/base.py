@@ -1,8 +1,10 @@
 import functools
-from typing import Annotated, Callable
-from uuid import uuid1
 from abc import ABC, abstractmethod
+from typing import Annotated, Callable, Optional
+from uuid import uuid1
+
 from torch.nn import Module
+
 from core.args.utils import ArgInfo
 from core.utils import RT
 
@@ -21,13 +23,13 @@ class LoggerBase(ABC):
                  output_dir:    Annotated[str,  ArgInfo(help="directory to store the results")] = './output',
                  experiment_id: str=str(uuid1()), 
                  enabled:       bool=True, 
-                 config:        dict={}
+                 config:        Optional[dict]=None
                  ):
         self.project = project
         self.experiment_id = experiment_id
         self.output_dir = output_dir
         self.enabled = enabled
-        self.config = config
+        self.config = {} if config is None else config
 
     @property
     @abstractmethod

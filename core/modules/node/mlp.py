@@ -1,10 +1,12 @@
 from typing import Callable, Optional
+
 import torch
-from torch import Tensor
 import torch.nn.functional as F
-from core.models import MLP
+from torch import Tensor
 from torch_geometric.data import Data
-from core.modules.base import TrainableModule, Stage, Metrics
+
+from core.models import MLP
+from core.modules.base import Metrics, Stage, TrainableModule
 
 
 class MLPNodeClassifier(TrainableModule):

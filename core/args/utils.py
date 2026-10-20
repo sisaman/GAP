@@ -1,9 +1,9 @@
-from typing import Annotated, Callable, Literal, Union, get_args, get_origin
-from core import console
 import inspect
 from argparse import SUPPRESS, ArgumentParser, ArgumentTypeError, Namespace
-from core.utils import dict2table
+from typing import Annotated, Callable, Literal, Optional, Union, get_args, get_origin
 
+from core import console
+from core.utils import dict2table
 
 ArgType = Union[Namespace, dict[str, object]]
 ArgInfo = dict[str, object]
@@ -47,7 +47,7 @@ def strip_kwargs(callable: Callable, kwargs: dict, prefix: str='') -> dict[str, 
             out_kwargs[arg] = value
 
     # check if the function has kwargs
-    for _, param in parameters.items():
+    for param in parameters.values():
         annotation = param.annotation
         if get_origin(annotation) is Annotated:
             metadata = get_args(annotation)[1]
@@ -61,7 +61,8 @@ def strip_kwargs(callable: Callable, kwargs: dict, prefix: str='') -> dict[str, 
     return out_kwargs
 
 
-def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list = [], prefix: str = ''):
+def create_arguments(callable: Callable, parser: ArgumentParser, exclude: Optional[list] = None, prefix: str = ''):
+    exclude = exclude or []
     arguments_added = [action.dest for action in parser._actions]
     parameters = inspect.signature(callable).parameters
 
@@ -126,10 +127,8 @@ def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list =
 
                 # if metadata contains "choices", the parser uses that as meta variable
                 # otherwise, if "metavar" is not provided, set the meta variable to  <parameter type>
-                if 'choices' not in metadata:
-                    try:
-                        metadata['metavar'] = metadata.get('metavar', f'<{param_type.__name__}>')
-                    except: pass
+                if 'choices' not in metadata and 'metavar' not in metadata and hasattr(param_type, '__name__'):
+                    metadata['metavar'] = f'<{param_type.__name__}>'
 
                 # create options based on parameter name
                 options = {f'--{arg_name}', f'--{arg_name.replace("_", "-")}'}
@@ -143,7 +142,7 @@ def create_arguments(callable: Callable, parser: ArgumentParser, exclude: list =
                     options.add(option)
 
                 # sort option names based on their length
-                options = sorted(sorted(list(options)), key=len)
+                options = sorted(sorted(options), key=len)
 
                 # add the parameter to the parser
                 parser.add_argument(*options, **metadata)

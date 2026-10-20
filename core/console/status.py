@@ -1,12 +1,13 @@
+import logging
+from time import time
+
+from rich._log_render import LogRender
 from rich.console import Console as RichConsole
+from rich.live import Live
 from rich.logging import RichHandler
 from rich.spinner import Spinner
-from rich.table import Table
 from rich.status import Status
-from rich.live import Live
-from rich._log_render import LogRender
-from time import time
-import logging
+from rich.table import Table
 
 
 class LogStatus(Status):

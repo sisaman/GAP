@@ -1,17 +1,19 @@
 import os
 import ssl
-import torch
+from typing import ClassVar
+
 import pandas as pd
+import torch
 from scipy.io import loadmat
 from sklearn.preprocessing import LabelEncoder
-from torch_geometric.utils import subgraph, from_scipy_sparse_matrix
 from torch_geometric.data import Data, InMemoryDataset, download_url
+from torch_geometric.utils import from_scipy_sparse_matrix, subgraph
 
 
 class Facebook(InMemoryDataset):
     url = 'https://github.com/sisaman/pyg-datasets/raw/main/datasets/facebook100/'
-    targets = ['status', 'gender', 'major', 'minor', 'housing', 'year']
-    available_datasets = [
+    targets: ClassVar[list[str]] = ['status', 'gender', 'major', 'minor', 'housing', 'year']
+    available_datasets: ClassVar[list[str]] = [
         "Villanova62", "UCLA26", "Tennessee95", "NYU9", "Carnegie49", "GWU54", "USF51", "Vanderbilt48", 
         "USC35", "Rutgers89", "UConn91", "MIT8", "USFCA72", "UChicago30", "UIllinois20", "UC61", "Cal65", 
         "Yale4", "Northeastern19", "Dartmouth6", "Vermont70", "Northwestern25", "William77", "Harvard1", 

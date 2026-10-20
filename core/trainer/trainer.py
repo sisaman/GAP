@@ -1,14 +1,17 @@
 import os
 import uuid
+from collections.abc import Iterable
+from typing import Annotated, Literal, Optional
+
 import torch
-from torch.types import Number
 from torch.optim import Optimizer
-from typing import Annotated, Iterable, Literal, Optional
+from torch.types import Number
+from torchmetrics import MeanMetric
+
 from core.args.utils import ArgInfo
 from core.loggers import Logger
-from torchmetrics import MeanMetric
-from core.trainer.progress import TrainerProgress
 from core.modules.base import Metrics, Stage, TrainableModule
+from core.trainer.progress import TrainerProgress
 
 
 class Trainer:

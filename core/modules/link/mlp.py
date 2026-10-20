@@ -1,11 +1,13 @@
 from typing import Callable, Optional
+
 import torch
 from torch import Tensor
-from core.models import MLP
 from torch_geometric.data import Data
 from torch_geometric.nn import GAE, InnerProductDecoder
 from torchmetrics.functional import auroc
-from core.modules.base import TrainableModule, Stage, Metrics
+
+from core.models import MLP
+from core.modules.base import Metrics, Stage, TrainableModule
 
 
 class MLPLinkPredictor(TrainableModule):

@@ -1,8 +1,11 @@
-from typing import Callable, Iterable, Literal, get_args
+from collections.abc import Iterable
+from typing import Callable, Literal, get_args
+
 import torch
-from torch import Tensor
 import torch.nn.functional as F
-from torch.nn import ModuleList, LazyBatchNorm1d, Linear, Module, Dropout
+from torch import Tensor
+from torch.nn import Dropout, LazyBatchNorm1d, Linear, Module, ModuleList
+
 from core.models import MLP
 
 

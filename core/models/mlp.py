@@ -1,9 +1,10 @@
 from typing import Callable
+
 import torch
+from opacus.grad_sample import compute_linear_grad_sample, register_grad_sampler
 from torch import Tensor
-from torch.nn import Dropout, ModuleList, BatchNorm1d, Module
+from torch.nn import BatchNorm1d, Dropout, Module, ModuleList
 from torch_geometric.nn import Linear
-from opacus.grad_sample import register_grad_sampler, compute_linear_grad_sample
 
 
 @register_grad_sampler(Linear)

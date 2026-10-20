@@ -1,15 +1,16 @@
 import os
-from pathlib import Path
 import subprocess
-import dask
-from dask.distributed import Client
-from dask_jobqueue import JobQueueCluster
-from dask.distributed import as_completed
-from rich.progress import Progress
+from pathlib import Path
 from subprocess import CalledProcessError
-from class_resolver import ClassResolver
-from core import console, Console
+from typing import Optional
 
+import dask
+from class_resolver import ClassResolver
+from dask.distributed import Client, as_completed
+from dask_jobqueue import JobQueueCluster
+from rich.progress import Progress
+
+from core import Console, console
 
 cluster_resolver = ClassResolver.from_subclasses(JobQueueCluster, suffix='Cluster')
 
@@ -22,7 +23,7 @@ class JobScheduler:
         scheduler (str, optional): The scheduler to use. Options are 'htcondor', 
             'lsf', 'moab', 'oar', 'pbs', 'sge', 'slurm'. Defaults to 'sge'.
     """
-    def __init__(self, job_file: str, scheduler: str = 'sge', config: dict = None):
+    def __init__(self, job_file: str, scheduler: str = 'sge', config: Optional[dict] = None):
         assert scheduler in cluster_resolver.options, f'Invalid scheduler: {scheduler}'
         self.scheduler = scheduler
         self.file = job_file
@@ -64,35 +65,34 @@ class JobScheduler:
         with cluster:   
             cluster.adapt(minimum=min(160, total))  # 160 is the max number of gpus on the cluster
             
-            with Client(cluster) as client:
-                with progress:
-                    futures = client.map(
-                        lambda cmd: subprocess.run(args=cmd.split(), check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT),
-                        self.job_list[:max_gpus],
-                        pure=False,
-                    )
-                    submitted = min(max_gpus, total)
-                    futures = as_completed(futures, with_results=False)
-                    for future in futures:
-                        try:
-                            future.result()
-                            progress.update(failed=False)
-                        except CalledProcessError as e:
-                            num_failed_jobs += 1
-                            job_cmd = ' '.join(e.cmd)
-                            failed_job_output = e.output.decode()
-                            with open(os.path.join(failures_dir, f'{num_failed_jobs}.log'), 'w') as f:
-                                print(job_cmd, end='\n\n', file=f)
-                                print(failed_job_output, file=f)
-                            progress.update(failed=True)
-                        if submitted < total:
-                            future = client.submit(
-                                lambda cmd: subprocess.run(args=cmd.split(), check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT),
-                                self.job_list[submitted],
-                                pure=False,
-                            )
-                            futures.add(future)
-                            submitted += 1
+            with Client(cluster) as client, progress:
+                futures = client.map(
+                    lambda cmd: subprocess.run(args=cmd.split(), check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT),
+                    self.job_list[:max_gpus],
+                    pure=False,
+                )
+                submitted = min(max_gpus, total)
+                futures = as_completed(futures, with_results=False)
+                for future in futures:
+                    try:
+                        future.result()
+                        progress.update(failed=False)
+                    except CalledProcessError as e:
+                        num_failed_jobs += 1
+                        job_cmd = ' '.join(e.cmd)
+                        failed_job_output = e.output.decode()
+                        with open(os.path.join(failures_dir, f'{num_failed_jobs}.log'), 'w') as f:
+                            print(job_cmd, end='\n\n', file=f)
+                            print(failed_job_output, file=f)
+                        progress.update(failed=True)
+                    if submitted < total:
+                        future = client.submit(
+                            lambda cmd: subprocess.run(args=cmd.split(), check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT),
+                            self.job_list[submitted],
+                            pure=False,
+                        )
+                        futures.add(future)
+                        submitted += 1
 
 
 class SchedulerProgress:

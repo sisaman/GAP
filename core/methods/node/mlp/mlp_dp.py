@@ -1,13 +1,15 @@
-import numpy as np
 from typing import Annotated, Literal, Union
+
+import numpy as np
 from torch.optim import Optimizer
 from torch_geometric.data import Data
+
 from core import console
 from core.args.utils import ArgInfo
-from core.methods.node import MLP
-from core.privacy.algorithms.noisy_sgd import NoisySGD
-from core.modules.base import Metrics, Stage
 from core.data.loader import NodeDataLoader
+from core.methods.node.mlp.mlp import MLP
+from core.modules.base import Metrics, Stage
+from core.privacy.algorithms.noisy_sgd import NoisySGD
 
 
 class PrivMLP (MLP):

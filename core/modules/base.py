@@ -1,10 +1,10 @@
+from abc import ABC, abstractmethod
 from typing import Literal, Optional
+
 from torch import Tensor
 from torch.nn import Module
 from torch.types import Number
 from torch_geometric.data import Data
-from abc import ABC, abstractmethod
-
 
 Stage = Literal['train', 'val', 'test']
 Metrics = dict[str, Number]

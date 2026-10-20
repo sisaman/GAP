@@ -2,24 +2,25 @@ from typing import Annotated
 
 import torch
 import torch.nn.functional as F
-from core.args.utils import remove_prefix
+from torch_geometric.data import Data
+from torch_geometric.transforms import RandomLinkSplit
+
+from core.args.utils import ArgInfo, remove_prefix
 from core.attacks.base import AttackBase
 from core.console import console
 from core.methods.link.mlp.mlp import MLPLinkPredictionMethod
 from core.methods.node.base import NodeClassification
 from core.modules.base import Metrics
-from torch_geometric.data import Data
-from torch_geometric.transforms import RandomLinkSplit
 
 
 class GraphReconstructionAttack (AttackBase):
     def __init__(self, 
-                 num_attack_samples:    Annotated[int, dict(help='number of attack samples')] = 10000,
-                 use_scores:            Annotated[bool, dict(help='use scores')] = True,
-                 use_features:          Annotated[bool, dict(help='use features')] = False,
-                 use_labels:            Annotated[bool, dict(help='use labels')] = False,
-                 supervised:            Annotated[bool, dict(help='supervised attack')] = False,
-                 **attack_args:         Annotated[dict, dict(help='attack method kwargs', bases=[MLPLinkPredictionMethod], prefixes=['attack_'])]
+                 num_attack_samples:    Annotated[int, ArgInfo(help='number of attack samples')] = 10000,
+                 use_scores:            Annotated[bool, ArgInfo(help='use scores')] = True,
+                 use_features:          Annotated[bool, ArgInfo(help='use features')] = False,
+                 use_labels:            Annotated[bool, ArgInfo(help='use labels')] = False,
+                 supervised:            Annotated[bool, ArgInfo(help='supervised attack')] = False,
+                 **attack_args:         Annotated[dict, ArgInfo(help='attack method kwargs', bases=[MLPLinkPredictionMethod], prefixes=['attack_'])]
                  ):
         assert use_scores or use_features or use_labels
         self.num_attack_samples = num_attack_samples

@@ -1,6 +1,8 @@
 import torch
+from autodp.mechanism_zoo import ExactGaussianMechanism, Mechanism
+from autodp.mechanism_zoo import LaplaceMechanism as AutoDPLaplaceMechanism
 from torch import Tensor
-from autodp.mechanism_zoo import Mechanism, ExactGaussianMechanism, LaplaceMechanism as AutoDPLaplaceMechanism
+
 from core.privacy.mechanisms.noisy import NoisyMechanism
 
 

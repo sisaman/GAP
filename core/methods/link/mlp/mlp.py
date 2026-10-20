@@ -1,5 +1,7 @@
+from typing import Annotated, ClassVar
+
 import torch
-from typing import Annotated
+
 from core.args.utils import ArgInfo
 from core.methods.link.base import LinkPrediction
 from core.modules.link.mlp import MLPLinkPredictor
@@ -8,7 +10,7 @@ from core.modules.link.mlp import MLPLinkPredictor
 class MLPLinkPredictionMethod (LinkPrediction):
     """Non-private MLP method for link prediction"""
 
-    supported_activations = {
+    supported_activations: ClassVar[dict] = {
         'relu': torch.relu_,
         'selu': torch.selu_,
         'tanh': torch.tanh,

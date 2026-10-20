@@ -60,3 +60,10 @@ explicit = true
 [tool.uv.sources]
 torch-scatter = { index = "pyg" }
 torch-sparse = { index = "pyg" }
+
+[tool.ruff.lint]
+ignore = [
+    # core.args.utils builds CLI arguments by inspecting annotations at runtime,
+    # which `from __future__ import annotations` would turn into plain strings
+    "FA100",
+]

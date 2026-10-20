@@ -1,5 +1,7 @@
-import yaml
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+
+import yaml
+
 from core import console
 from core.jobutils.registry import WandBJobRegistry
 from core.jobutils.scheduler import JobScheduler

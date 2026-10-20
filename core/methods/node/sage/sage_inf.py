@@ -1,14 +1,16 @@
+from typing import Annotated, ClassVar
+
 import torch
-from typing import Annotated
+
 from core.args.utils import ArgInfo
-from core.methods.node import NodeClassification
+from core.methods.node.base import NodeClassification
 from core.modules.node.sage import SAGENodeClassifier
 
 
 class SAGE (NodeClassification):
     """Non-private GraphSAGE method"""
     
-    supported_activations = {
+    supported_activations: ClassVar[dict] = {
         'relu': torch.relu_,
         'selu': torch.selu_,
         'tanh': torch.tanh,

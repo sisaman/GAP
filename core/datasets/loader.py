@@ -1,22 +1,25 @@
 import os
 from functools import partial
-from typing import Annotated
+from typing import Annotated, ClassVar
+
 import torch
-from core import console
 from torch_geometric.data import Data
 from torch_geometric.datasets import Reddit
-from torch_geometric.transforms import Compose, ToSparseTensor, RandomNodeSplit
+from torch_geometric.transforms import Compose, RandomNodeSplit, ToSparseTensor
+
+from core import console
 from core.args.utils import ArgInfo
-from core.data.transforms import FilterClassByCount
-from core.data.transforms import RemoveSelfLoops
-from core.data.transforms import RemoveIsolatedNodes
-from core.datasets import Facebook
-from core.datasets import Amazon
+from core.data.transforms import (
+    FilterClassByCount,
+    RemoveIsolatedNodes,
+    RemoveSelfLoops,
+)
+from core.datasets import Amazon, Facebook
 from core.utils import dict2table
 
 
 class DatasetLoader:
-    supported_datasets = {
+    supported_datasets: ClassVar[dict] = {
         'reddit': partial(Reddit, 
             transform=Compose([
                 RandomNodeSplit(num_val=0.1, num_test=0.15), 

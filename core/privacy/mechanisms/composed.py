@@ -1,15 +1,18 @@
+from typing import Optional
+
+from autodp.mechanism_zoo import ExactGaussianMechanism
+from autodp.transformer_zoo import ComposeGaussian, Composition
+
 from core.privacy.mechanisms.commons import GaussianMechanism
 from core.privacy.mechanisms.noisy import NoisyMechanism
-from autodp.transformer_zoo import ComposeGaussian, Composition
-from autodp.mechanism_zoo import ExactGaussianMechanism
 
 
 class ComposedNoisyMechanism(NoisyMechanism):
     def __init__(self, 
                  noise_scale: float, 
                  mechanism_list: list[NoisyMechanism], 
-                 coeff_list: list[float]=None,
-                 weight_list: list[float]=None,
+                 coeff_list: Optional[list[float]]=None,
+                 weight_list: Optional[list[float]]=None,
                  ):
         super().__init__(noise_scale)
         if coeff_list is None:

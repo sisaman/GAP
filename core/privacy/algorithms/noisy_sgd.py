@@ -1,12 +1,18 @@
 from typing import TypeVar
-from opacus.privacy_engine import forbid_accumulation_hook
+
+from autodp.transformer_zoo import AmplificationBySampling, Composition
 from opacus.grad_sample import GradSampleModule
 from opacus.optimizers import DPOptimizer
-from autodp.transformer_zoo import Composition, AmplificationBySampling
+from opacus.privacy_engine import forbid_accumulation_hook
 from torch.nn import Module
 from torch.optim import Optimizer
+
 from core.data.loader import NodeDataLoader
-from core.privacy.mechanisms.commons import GaussianMechanism, InfMechanism, ZeroMechanism
+from core.privacy.mechanisms.commons import (
+    GaussianMechanism,
+    InfMechanism,
+    ZeroMechanism,
+)
 from core.privacy.mechanisms.noisy import NoisyMechanism
 
 T = TypeVar('T', bound=Module)

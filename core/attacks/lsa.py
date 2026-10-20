@@ -1,4 +1,5 @@
 from typing import Annotated
+
 import torch
 import torch.nn.functional as F
 from torch import Tensor
@@ -6,10 +7,11 @@ from torch.distributions import Categorical
 from torch.nn.functional import cosine_similarity
 from torch_geometric.data import Data
 from torch_geometric.utils import negative_sampling
+
 from core.args.utils import ArgInfo
 from core.attacks.base import ModelBasedAttack
-from core.modules.base import Metrics
 from core.methods.node.base import NodeClassification
+from core.modules.base import Metrics
 
 
 class LinkStealingAttack (ModelBasedAttack):

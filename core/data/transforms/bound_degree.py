@@ -1,9 +1,9 @@
 import torch
 import torch.utils.cpp_extension
-from torch_geometric.transforms import BaseTransform
 from torch_geometric.data import Data
+from torch_geometric.loader.utils import filter_data, to_csc
+from torch_geometric.transforms import BaseTransform
 from torch_sparse import SparseTensor
-from torch_geometric.loader.utils import to_csc, filter_data
 
 
 class BoundOutDegree(BaseTransform):

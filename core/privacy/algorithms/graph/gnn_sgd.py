@@ -1,15 +1,16 @@
 from typing import TypeVar
+
 import numpy as np
-from scipy.stats import hypergeom
 from opacus.grad_sample import GradSampleModule
 from opacus.optimizers import DPOptimizer
 from opacus.privacy_engine import forbid_accumulation_hook
+from scipy.stats import hypergeom
 from torch.nn import Module
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
+
 from core.privacy.mechanisms.commons import InfMechanism, ZeroMechanism
 from core.privacy.mechanisms.noisy import NoisyMechanism
-
 
 T = TypeVar('T', bound=Module)
 

@@ -1,11 +1,13 @@
 from typing import Annotated, Optional
+
 import torch
 from torch_geometric.data import Data
+
 from core import console
 from core.args.utils import ArgInfo
-from core.methods.node import SAGE
-from core.privacy.algorithms import AsymmetricRandResponse
+from core.methods.node.sage.sage_inf import SAGE
 from core.modules.base import Metrics
+from core.privacy.algorithms import AsymmetricRandResponse
 
 
 class EdgePrivSAGE (SAGE):

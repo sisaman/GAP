@@ -1,9 +1,11 @@
-from typing import Literal, Optional, Union
-import torch
 from collections.abc import Iterator
+from typing import Literal, Optional, Union
+
+import torch
 from torch_geometric.data import Data
-from torch_geometric.utils import k_hop_subgraph
 from torch_geometric.transforms import ToSparseTensor
+from torch_geometric.utils import k_hop_subgraph
+
 from core.modules.base import Stage
 
 

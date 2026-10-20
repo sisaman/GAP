@@ -1,12 +1,13 @@
-from typing import Iterable
+from collections.abc import Iterable
+
 from rich.console import Group
-from rich.padding import Padding
-from rich.text import Text
-from rich.table import Column, Table
-from core.modules.base import Metrics
-from core import console
-from rich.progress import Progress, SpinnerColumn, BarColumn, TimeElapsedColumn, Task
 from rich.highlighter import ReprHighlighter
+from rich.padding import Padding
+from rich.progress import BarColumn, Progress, SpinnerColumn, Task, TimeElapsedColumn
+from rich.table import Column, Table
+
+from core import console
+from core.modules.base import Metrics
 
 
 class TrainerProgress(Progress):

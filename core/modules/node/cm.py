@@ -1,6 +1,8 @@
 from typing import Callable
+
 import torch
 from torch import Tensor
+
 from core.models.multi_mlp import MultiMLP
 from core.modules.node.mlp import MLPNodeClassifier
 

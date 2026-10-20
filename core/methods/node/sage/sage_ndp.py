@@ -1,17 +1,18 @@
+from typing import Annotated, Literal, Optional, Union
+
 import numpy as np
-from typing import Annotated, Optional, Union, Literal
 import torch
 from torch.optim import Optimizer
 from torch_geometric.data import Data
+
 from core import console
 from core.args.utils import ArgInfo
 from core.data.loader import NodeDataLoader
 from core.data.transforms import BoundDegree
-from core.methods.node import SAGE
+from core.methods.node.sage.sage_inf import SAGE
 from core.modules.base import Metrics, Stage
 from core.privacy.algorithms import GNNBasedNoisySGD
-from core.privacy.mechanisms import GaussianMechanism
-from core.privacy.mechanisms import ComposedNoisyMechanism
+from core.privacy.mechanisms import ComposedNoisyMechanism, GaussianMechanism
 
 
 class NodePrivSAGE (SAGE):
@@ -72,7 +73,7 @@ class NodePrivSAGE (SAGE):
         with console.status('calibrating noise to privacy budget'):
             if self.delta == 'auto':
                 delta = 0.0 if np.isinf(self.epsilon) else 1. / (10 ** len(str(self.num_train_nodes)))
-                console.info('delta = %.0e' % delta)
+                console.info(f'delta = {delta:.0e}')
             
             self.noise_scale = composed_mechanism.calibrate(eps=self.epsilon, delta=delta)
             console.info(f'noise scale: {self.noise_scale:.4f}\n')

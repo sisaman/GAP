@@ -1,21 +1,30 @@
 from core import console
+
 with console.status('importing modules'):
-    import torch
-    import numpy as np
+    from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
     from time import time
     from typing import Annotated
+
+    import numpy as np
+    import torch
     from rich import box
     from rich.table import Table
-    from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+    from torch_geometric.data import Data
+
     from core import globals
-    from core.datasets import DatasetLoader
-    from core.args.utils import print_args, strip_kwargs, create_arguments, remove_prefix, ArgInfo
-    from core.loggers import Logger
-    from core.methods.node import supported_methods, NodeClassification
+    from core.args.utils import (
+        ArgInfo,
+        create_arguments,
+        print_args,
+        remove_prefix,
+        strip_kwargs,
+    )
     from core.attacks import supported_attacks
     from core.attacks.base import AttackBase
-    from core.utils import seed_everything, confidence_interval
-    from torch_geometric.data import Data
+    from core.datasets import DatasetLoader
+    from core.loggers import Logger
+    from core.methods.node import NodeClassification, supported_methods
+    from core.utils import confidence_interval, seed_everything
 
 
 def run(seed:    Annotated[int,   ArgInfo(help='initial random seed')] = 12345,

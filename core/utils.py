@@ -1,15 +1,16 @@
 import math
 import random
-from typing import Callable, Iterable, TypeVar, Optional
+from collections.abc import Iterable
+from itertools import tee
+from typing import Callable, Optional, TypeVar
+
 import numpy as np
 import torch
-from itertools import tee
 from numpy.typing import ArrayLike, NDArray
-from rich.table import Table
-from rich.highlighter import ReprHighlighter
 from rich import box
+from rich.highlighter import ReprHighlighter
+from rich.table import Table
 from tabulate import tabulate
-
 
 RT = TypeVar('RT')
 

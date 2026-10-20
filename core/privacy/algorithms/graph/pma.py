@@ -1,5 +1,10 @@
 import torch
-from core.privacy.mechanisms.commons import GaussianMechanism, InfMechanism, ZeroMechanism
+
+from core.privacy.mechanisms.commons import (
+    GaussianMechanism,
+    InfMechanism,
+    ZeroMechanism,
+)
 from core.privacy.mechanisms.composed import ComposedGaussianMechanism
 from core.privacy.mechanisms.noisy import NoisyMechanism
 

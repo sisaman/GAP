@@ -1,7 +1,8 @@
-from typing_extensions import Self
-from scipy.optimize import minimize_scalar, OptimizeResult
-from autodp.mechanism_zoo import Mechanism
 import numpy as np
+from autodp.mechanism_zoo import Mechanism
+from scipy.optimize import OptimizeResult, minimize_scalar
+from typing_extensions import Self
+
 from core import console
 
 

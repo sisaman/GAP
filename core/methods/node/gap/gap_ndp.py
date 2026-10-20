@@ -1,17 +1,19 @@
+from typing import Annotated, Literal, Union
+
 import numpy as np
 import torch
-from typing import Annotated, Literal, Union
+from opacus.optimizers import DPOptimizer
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor, matmul
-from opacus.optimizers import DPOptimizer
+
 from core import console
 from core.args.utils import ArgInfo
 from core.data.loader import NodeDataLoader
-from core.methods.node import GAP
-from core.privacy.mechanisms import ComposedNoisyMechanism
-from core.privacy.algorithms import PMA, NoisySGD
 from core.data.transforms import BoundOutDegree
+from core.methods.node.gap.gap_inf import GAP
 from core.modules.base import Metrics, Stage
+from core.privacy.algorithms import PMA, NoisySGD
+from core.privacy.mechanisms import ComposedNoisyMechanism
 
 
 class NodePrivGAP (GAP):
@@ -71,7 +73,7 @@ class NodePrivGAP (GAP):
         with console.status('calibrating noise to privacy budget'):
             if self.delta == 'auto':
                 delta = 0.0 if np.isinf(self.epsilon) else 1. / (10 ** len(str(self.num_train_nodes)))
-                console.info('delta = %.0e' % delta)
+                console.info(f'delta = {delta:.0e}')
             
             self.noise_scale = composed_mechanism.calibrate(eps=self.epsilon, delta=delta)
             console.info(f'noise scale: {self.noise_scale:.4f}\n')

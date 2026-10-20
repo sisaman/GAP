@@ -1,7 +1,9 @@
 import logging
 import warnings
-from rich.traceback import install
+
 from rich.logging import RichHandler
+from rich.traceback import install
+
 from core.console.console import Console
 
 globals = {

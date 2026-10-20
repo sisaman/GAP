@@ -1,6 +1,6 @@
-from typing import Annotated
-from core import console
-from core import globals
+from typing import Annotated, ClassVar
+
+from core import console, globals
 from core.args.utils import ArgInfo
 from core.loggers.base import LoggerBase
 from core.loggers.csv import CSVLogger
@@ -8,7 +8,7 @@ from core.loggers.wandb import WandbLogger
 
 
 class Logger:
-    supported_loggers = {
+    supported_loggers: ClassVar[dict] = {
         'csv': CSVLogger,
         'wandb': WandbLogger,
     }

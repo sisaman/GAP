@@ -1,8 +1,9 @@
 import os
-import wandb
-import pandas as pd
-import numpy as np
 from itertools import product
+
+import numpy as np
+import pandas as pd
+import wandb
 
 
 class WandBJobRegistry:
@@ -48,7 +49,7 @@ class WandBJobRegistry:
             list[str]: List of jobs to run.
         """
         for key, value in params.items():
-            if not (isinstance(value, list) or isinstance(value, tuple)):
+            if not isinstance(value, (list, tuple)):
                 params[key] = (value,)
         
         jobs = []

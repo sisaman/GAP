@@ -1,21 +1,24 @@
-import os
 import logging
-from rich.console import Console as RichConsole
-from rich.logging import RichHandler
+import os
 from typing import Optional, Union
+
+from rich.console import Console as RichConsole
 from rich.console import JustifyMethod, NewLine
+from rich.logging import RichHandler
 from rich.scope import render_scope
 from rich.segment import Segment
-from rich.styled import Styled
 from rich.style import Style
+from rich.styled import Styled
+
 from core.console.status import LogStatus
+
 
 class Console(RichConsole):
     CRITICAL = logging.CRITICAL
     FATAL = logging.FATAL
     ERROR = logging.ERROR
     WARNING = logging.WARNING
-    WARN = logging.WARN
+    WARN = logging.WARNING
     INFO = logging.INFO
     DEBUG = logging.DEBUG
     NOTSET = logging.NOTSET
