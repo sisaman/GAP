@@ -21,11 +21,11 @@ dependencies = [
     "scikit-learn",
     "scipy==1.9.1",
     "tabulate==0.8.10",
-    "torch==1.13.1",
+    "torch==2.0.1",
     "torch-geometric==2.1.0.post1",
     # imported by torch-sparse without being declared in its metadata
     "torch-scatter",
-    "torch-sparse==0.6.16",
+    "torch-sparse==0.6.18",
     "torchmetrics==0.9.3",
     "typing-extensions",
     "wandb==0.12.9",
@@ -50,14 +50,20 @@ constraint-dependencies = [
 ]
 environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
 
-# prebuilt PyG extension wheels matching torch 1.13 + CUDA 11.7 (the PyPI torch default)
+[[tool.uv.index]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
+
+# prebuilt PyG extension wheels matching torch 2.0 + CUDA 11.8
 [[tool.uv.index]]
 name = "pyg"
-url = "https://data.pyg.org/whl/torch-1.13.0+cu117.html"
+url = "https://data.pyg.org/whl/torch-2.0.0+cu118.html"
 format = "flat"
 explicit = true
 
 [tool.uv.sources]
+torch = { index = "pytorch-cu118" }
 torch-scatter = { index = "pyg" }
 torch-sparse = { index = "pyg" }
 
